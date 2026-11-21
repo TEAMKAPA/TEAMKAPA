@@ -54,6 +54,16 @@ class Settings(BaseSettings):
     accuracy_mode: Literal["max", "balanced"] = "max"
     render_dpi: int = Field(default=200, ge=72, le=600)
 
+    # --- progi pewności pól (kolory w UI); do kalibracji na zbiorze testowym ---
+    confidence_high: float = Field(default=0.85, ge=0.0, le=1.0)
+    confidence_low: float = Field(default=0.5, ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def _thresholds_ordered(self) -> Settings:
+        if self.confidence_low > self.confidence_high:
+            raise ValueError("CONFIDENCE_LOW nie może być większy niż CONFIDENCE_HIGH")
+        return self
+
     @property
     def max_file_size_bytes(self) -> int:
         return self.max_file_size_mb * 1024 * 1024
