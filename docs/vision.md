@@ -301,6 +301,12 @@ uruchamiają się w CI bez dostępu do `dane/`:
 - `test_render_consistency.py`: **spójność bbox z rendererem (wymaganie #12)**: 4 DPI (72, 150, 200,
   300) × 4 obroty × 4 układy MediaBox/CropBox. Bbox zmierzony z pikseli zgadza się z
   `pdf_rect_to_norm` w tolerancji 1,5 px (zmierzony maksymalny błąd krawędzi: 1,0 px na 192 prostokątach),
+- `synth_forms.py` (#12, B.5): syntetyczne strony formularza A4 z elementami wszystkich 9 kategorii
+  i etykietami w formacie `teamkapa.vision.labels/1` (bez czcionek; tekst to szare paski) oraz
+  deterministyczne degradacje: obrót (z przeliczeniem etykiet), rozmycie, szum ze stałym ziarnem,
+  JPEG, słabszy kontrast, niższe DPI. Testy (`test_synth_forms.py`) sprawdzają determinizm, ciasność
+  ramek (krawędź na linii), to, że każdy piksel tuszu należy do elementu albo „tekstu”, oraz zgodność
+  etykiet z tuszem po obrocie (±1,5 px). Detektory z Etapu C używają tego generatora,
 - `test_coords.py`: przeliczenia z wartościami wyliczonymi ręcznie,
 - `test_render_pdf.py`, `test_render_image.py`, `test_render_document.py`,
   `test_isolation.py`, `test_detect.py`: determinizm (identyczny hash pikseli), błędy, limity,

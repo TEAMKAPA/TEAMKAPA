@@ -265,6 +265,9 @@ Szacunek przeliczam po `holdout`. Zmęczenie pogarsza dokładność ramek, więc
 - **Baza:** `--write-baseline <plik>` (tylko przy pełnym pokryciu części), `--baseline <plik>` porównuje
   mikro-P/R/F1 i F1 per kategoria z tolerancją (domyślnie 0,02) i zwraca kod 1 przy regresji.
 - **Raport:** `dane/robocze/eval/<split>-<system>.{json,md}` z sekcją „Znane ograniczenia”.
+- **Testy CI** działają na danych syntetycznych: `tests/vision/test_eval_*.py` (konwerter, dopasowanie,
+  metryki, `run.py` z ochroną `holdout`) i `tests/vision/synth_forms.py` (strony formularza z etykietami
+  i degradacjami: obrót, rozmycie, szum, JPEG, kontrast, niższe DPI).
 - **Kontrola miernika** (`selfcheck`, tylko `dev`) na 2 stronach pilota (8 stron oceny): etykiety
   bez zmian i przesunięte o 1 lub 2 px w obu osiach dają P = R = F1 = 1; przesunięte o pół szerokości
   elementu: 0; bez co 10. elementu: P = 1, R = 0,92.
