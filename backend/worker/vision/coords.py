@@ -151,15 +151,13 @@ def pdf_rect_to_norm(rect_pt: PdfBox, geometry: PageGeometry) -> NormTuple:
     return rotate_norm(unrotated, geometry.rotation)
 
 
-def part_to_original(raw: NormTuple, origin: PageOrigin, part_height_px: int) -> NormTuple:
+def part_to_original(raw: NormTuple, origin: PageOrigin) -> NormTuple:
     """Bbox strony wyciętej ze zszytego obrazu → ułamki oryginalnego obrazu."""
     _check_finite(raw)
-    if part_height_px < 1 or origin.offset_y_px + part_height_px > origin.image_height_px:
-        raise CoordinateError("wysokość części niezgodna z oryginałem")
     x0, y0, x1, y1 = raw
     h = origin.image_height_px
 
     def oy(v: float) -> float:
-        return (origin.offset_y_px + v * part_height_px) / h
+        return (origin.offset_y_px + v * origin.part_height_px) / h
 
     return _ordered((x0, oy(y0), x1, oy(y1)))

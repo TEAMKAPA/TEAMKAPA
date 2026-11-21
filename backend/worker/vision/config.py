@@ -29,6 +29,9 @@ class _RenderLimits(BaseModel):
     soffice_path: str = "soffice"
     split_seam_margin_px: int = Field(default=20, ge=0, le=500)
     split_height_tolerance_px: int = Field(default=2, ge=0, le=50)
+    split_ink_threshold: int = Field(default=200, ge=1, le=255)
+    tall_image_ratio: float = Field(default=1.6, gt=1.0, le=100.0)
+    a4_ratio_tolerance: float = Field(default=0.01, ge=0.0, le=0.2)
 
 
 class RenderConfig(_RenderLimits):

@@ -1,14 +1,20 @@
 """Syntetyczne dane testowe kanału wizualnego, generowane w kodzie (bez materiałów COI).
 
 A.3: minimalne kontenery OLE2 (CFB) i ZIP (OOXML/ODF) do testów rozpoznawania formatu.
-A.4: ręczny generator PDF (niezależny od testowanego renderera). Obrazy: A.5.
+A.4: ręczny generator PDF (niezależny od testowanego renderera).
+A.5: obrazy (zszyte strony A4, orientacja EXIF, tryby, nagłówki deklarujące rozmiar).
 """
 
 import hashlib
 import io
 import struct
 import zipfile
+import zlib
 from dataclasses import dataclass
+
+import numpy as np
+import numpy.typing as npt
+from PIL import Image as PILImage
 
 _ENDOFCHAIN = 0xFFFFFFFE
 _FREESECT = 0xFFFFFFFF
@@ -204,3 +210,92 @@ def _rc4_encrypt_dict(user_password: str, file_id: bytes) -> bytes:
         f"<< /Filter /Standard /V 1 /R 2 /Length 40 /P {perms}"
         f" /O <{owner.hex()}> /U <{user.hex()}> >>"
     ).encode("ascii")
+
+
+# --- obrazy (A.5) ------------------------------------------------------------------------------
+
+PixelRect = tuple[int, int, int, int]
+"""Prostokąt w pikselach: (x0, y0, x1, y1), krawędzie pikseli (x1, y1 wyłącznie)."""
+
+
+def white(width: int, height: int) -> npt.NDArray[np.uint8]:
+    return np.full((height, width, 3), 255, dtype=np.uint8)
+
+
+def fill(image: npt.NDArray[np.uint8], rect: PixelRect, color: Color) -> None:
+    x0, y0, x1, y1 = rect
+    image[y0:y1, x0:x1] = color
+
+
+def a4_height(width: int) -> int:
+    return round(width * 2**0.5)
+
+
+def stacked_pages(
+    width: int, parts: int, *, extra_rows: int = 0
+) -> tuple[npt.NDArray[np.uint8], list[PixelRect]]:
+    """Zszyte w pionie strony A4 (białe), na każdej jeden prostokąt w innym miejscu i kolorze.
+
+    Zwraca obraz i prostokąty we współrzędnych całego obrazu. ``extra_rows`` dokleja białe wiersze.
+    """
+    page_h = a4_height(width)
+    image = white(width, page_h * parts + extra_rows)
+    rects = []
+    for i in range(parts):
+        top = i * page_h
+        x0 = 10 + (i * 7) % (width // 2)
+        rect = (x0, top + page_h // 4, x0 + width // 4, top + page_h // 4 + page_h // 8)
+        fill(image, rect, ((40 * i) % 200, 255 - (30 * i) % 200, 60))
+        rects.append(rect)
+    return image, rects
+
+
+def encode(
+    image: npt.NDArray[np.uint8] | PILImage.Image,
+    fmt: str = "PNG",
+    *,
+    dpi: tuple[float, float] | None = None,
+    exif_orientation: int | None = None,
+    **options: object,
+) -> bytes:
+    pil = image if isinstance(image, PILImage.Image) else PILImage.fromarray(image)
+    kwargs: dict[str, object] = dict(options)
+    if dpi is not None:
+        kwargs["dpi"] = dpi
+    if exif_orientation is not None:
+        exif = PILImage.Exif()
+        exif[0x0112] = exif_orientation
+        kwargs["exif"] = exif
+    buf = io.BytesIO()
+    pil.save(buf, format=fmt, **kwargs)
+    return buf.getvalue()
+
+
+# Obraz zapisany tak, by po zastosowaniu orientacji EXIF N wyglądał jak ``upright``
+# (EXIF 2.32, tabela Orientation: przekształcenie potrzebne do wyświetlenia, odwrócone).
+_STORED_FOR_ORIENTATION: dict[int, PILImage.Transpose | None] = {
+    1: None,
+    2: PILImage.Transpose.FLIP_LEFT_RIGHT,
+    3: PILImage.Transpose.ROTATE_180,
+    4: PILImage.Transpose.FLIP_TOP_BOTTOM,
+    5: PILImage.Transpose.TRANSPOSE,
+    6: PILImage.Transpose.ROTATE_90,  # wyświetlenie wymaga obrotu o 90° w prawo
+    7: PILImage.Transpose.TRANSVERSE,
+    8: PILImage.Transpose.ROTATE_270,  # wyświetlenie wymaga obrotu o 90° w lewo
+}
+
+
+def stored_for_orientation(upright: npt.NDArray[np.uint8], orientation: int) -> PILImage.Image:
+    pil = PILImage.fromarray(upright)
+    op = _STORED_FOR_ORIENTATION[orientation]
+    return pil if op is None else pil.transpose(op)
+
+
+def png_claiming_size(width: int, height: int) -> bytes:
+    """Mały PNG, którego nagłówek IHDR deklaruje podany rozmiar (test bomby dekompresyjnej)."""
+    data = bytearray(encode(white(1, 1)))
+    ihdr = data.index(b"IHDR")
+    data[ihdr + 4 : ihdr + 12] = struct.pack(">II", width, height)
+    crc = zlib.crc32(bytes(data[ihdr : ihdr + 17]))
+    data[ihdr + 17 : ihdr + 21] = struct.pack(">I", crc)
+    return bytes(data)

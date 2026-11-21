@@ -111,11 +111,16 @@ class PageGeometry(VisionModel):
 
 
 class PageOrigin(VisionModel):
-    """Położenie strony w oryginalnym obrazie (dla stron wyciętych ze zszytego obrazu)."""
+    """Położenie strony w oryginalnym obrazie (dla stron wyciętych ze zszytego obrazu).
+
+    Wartości w pikselach oryginału (po orientacji EXIF), niezależne od ewentualnego zmniejszenia
+    strony (``DPI_REDUCED``): bbox w ułamkach strony nie zależy od rozdzielczości.
+    """
 
     image_width_px: Annotated[int, Field(ge=1)]
     image_height_px: Annotated[int, Field(ge=1)]
     offset_y_px: Annotated[int, Field(ge=0)]
+    part_height_px: Annotated[int, Field(ge=1)]
     part: Annotated[int, Field(ge=1)]
     parts: Annotated[int, Field(ge=1)]
 
@@ -123,8 +128,8 @@ class PageOrigin(VisionModel):
     def _consistent(self) -> PageOrigin:
         if self.part > self.parts:
             raise ValueError("part > parts")
-        if self.offset_y_px >= self.image_height_px:
-            raise ValueError("offset_y_px poza obrazem")
+        if self.offset_y_px + self.part_height_px > self.image_height_px:
+            raise ValueError("część wychodzi poza oryginalny obraz")
         return self
 
 
@@ -139,6 +144,7 @@ class PageMeta(VisionModel):
     dpi_estimate: Annotated[float, Field(gt=0)] | None = None
     dpi_estimate_source: DpiEstimateSource | None = None
     rotation: Rotation = 0
+    exif_orientation: Annotated[int, Field(ge=1, le=8)] | None = None
     source: PageSource
     geometry: PageGeometry | None = None
     origin: PageOrigin | None = None
@@ -152,8 +158,10 @@ class PageMeta(VisionModel):
             raise ValueError("dpi_estimate i dpi_estimate_source występują razem")
         if self.source is PageSource.IMAGE and self.geometry is not None:
             raise ValueError("strona z obrazu nie ma geometrii PDF")
-        if self.source is not PageSource.IMAGE and self.origin is not None:
-            raise ValueError("origin dotyczy tylko stron z obrazu")
+        if self.source is not PageSource.IMAGE and (
+            self.origin is not None or self.exif_orientation is not None
+        ):
+            raise ValueError("origin i exif_orientation dotyczą tylko stron z obrazu")
         return self
 
 

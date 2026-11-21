@@ -201,22 +201,45 @@ def test_invalid_geometry_raises(boxes: tuple[tuple[float, ...], tuple[float, ..
 
 def test_part_to_original() -> None:
     origin = PageOrigin(
-        image_width_px=1654, image_height_px=4678, offset_y_px=2339, part=2, parts=2
+        image_width_px=1654,
+        image_height_px=4678,
+        offset_y_px=2339,
+        part_height_px=2339,
+        part=2,
+        parts=2,
     )
-    assert part_to_original((0.1, 0.0, 0.2, 0.5), origin, 2339) == approx((0.1, 0.5, 0.2, 0.75))
+    assert part_to_original((0.1, 0.0, 0.2, 0.5), origin) == approx((0.1, 0.5, 0.2, 0.75))
 
 
-def test_part_to_original_rejects_inconsistent_height() -> None:
-    origin = PageOrigin(image_width_px=100, image_height_px=200, offset_y_px=150, part=2, parts=2)
-    with pytest.raises(CoordinateError):
-        part_to_original((0.0, 0.0, 1.0, 1.0), origin, 100)
+def test_part_to_original_uneven_parts() -> None:
+    # część 2 z 2 w obrazie o wysokości 201: wiersze 100..200 (101 px)
+    origin = PageOrigin(
+        image_width_px=100,
+        image_height_px=201,
+        offset_y_px=100,
+        part_height_px=101,
+        part=2,
+        parts=2,
+    )
+    assert part_to_original((0.0, 0.0, 1.0, 1.0), origin) == approx((0.0, 100 / 201, 1.0, 1.0))
 
 
 def test_page_origin_validation() -> None:
+    def make(offset: int, height: int, part: int, parts: int) -> PageOrigin:
+        return PageOrigin(
+            image_width_px=10,
+            image_height_px=10,
+            offset_y_px=offset,
+            part_height_px=height,
+            part=part,
+            parts=parts,
+        )
+
+    make(5, 5, 2, 2)
     with pytest.raises(ValidationError):
-        PageOrigin(image_width_px=10, image_height_px=10, offset_y_px=0, part=3, parts=2)
+        make(0, 5, 3, 2)  # part > parts
     with pytest.raises(ValidationError):
-        PageOrigin(image_width_px=10, image_height_px=10, offset_y_px=10, part=1, parts=1)
+        make(6, 5, 2, 2)  # część poza obrazem
 
 
 # --- modele stron i dokumentu -------------------------------------------------------------------
