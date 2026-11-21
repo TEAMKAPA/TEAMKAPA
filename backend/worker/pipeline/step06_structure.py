@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 import re
-from typing import Any
 import unicodedata
 import uuid
+from copy import deepcopy
+from typing import Any
 
 from backend.worker.clients.llm_client import LLMClient
 
@@ -163,12 +163,10 @@ def _detect_supports_proxy(text: str, template: dict[str, Any] | None) -> bool:
     if template and template.get("supports_proxy"):
         return True
     norm = slugify_tech_name(text)
-    return any(
-        token in norm for token in ("pelnomocni", "w_imieniu", "podmiot", "reprezentan")
-    )
+    return any(token in norm for token in ("pelnomocni", "w_imieniu", "podmiot", "reprezentan"))
 
 
-def _default_finish_info_question(tab_seed: str, has_signature: bool = True) -> dict:
+def _default_finish_info_question(tab_seed: str, has_signature: bool = True) -> dict[str, Any]:
     preview_text = (
         "Zanim przejdziesz do wyboru sposobu podpisu, sprawdź dane na podglądzie. "
         "Jeśli zobaczysz błędy, wróć do edycji."
@@ -204,14 +202,11 @@ def _build_mock_structure(
         raw_text = " ".join(str(el.get("text", "")) for el in document["elements"])
 
     raw_title = str(
-        document.get("title")
-        or (template["title"] if template else "Wniosek urzędowy")
+        document.get("title") or (template["title"] if template else "Wniosek urzędowy")
     )
     title = normalize_form_title(raw_title)
 
-    is_organ = any(
-        kw in slugify_tech_name(raw_text) for kw in ("wojt", "burmistrz", "prezydent")
-    )
+    is_organ = any(kw in slugify_tech_name(raw_text) for kw in ("wojt", "burmistrz", "prezydent"))
     authority_title = (
         "Organ, do którego jest składany wniosek"
         if is_organ
@@ -262,12 +257,8 @@ def _build_mock_structure(
             ]
         )
 
-    subject_title = (
-        template["subject_section_title"] if template else "Szczegóły sprawy"
-    )
-    subject_type = (
-        "REPEATING_SECTION" if _needs_repeating_subject(raw_text) else "SECTION"
-    )
+    subject_title = template["subject_section_title"] if template else "Szczegóły sprawy"
+    subject_type = "REPEATING_SECTION" if _needs_repeating_subject(raw_text) else "SECTION"
     tab2_sections = [
         {
             "title": subject_title,
@@ -403,10 +394,7 @@ def _to_coi_tabs(raw_structure: dict[str, Any]) -> dict[str, Any]:
         sec_tech = slugify_tech_name(str(sec.get("techName") or sec_title))
         desc = str(
             sec.get("description")
-            or (
-                "Zanim przejdziesz do wyboru sposobu podpisu, sprawdź dane "
-                "na podglądzie."
-            )
+            or ("Zanim przejdziesz do wyboru sposobu podpisu, sprawdź dane na podglądzie.")
         )
         finish_questions.append(
             {
@@ -475,9 +463,7 @@ def validate_coi_structure(form_data: dict[str, Any]) -> list[str]:
             for q in questions:
                 ftype = q.get("field", {}).get("type")
                 if ftype != "INFO_SECTION":
-                    errors.append(
-                        f"FINISH tab may only contain INFO_SECTION, found '{ftype}'."
-                    )
+                    errors.append(f"FINISH tab may only contain INFO_SECTION, found '{ftype}'.")
         else:
             for q in questions:
                 field = q.get("field", {})

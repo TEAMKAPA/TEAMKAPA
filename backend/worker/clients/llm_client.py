@@ -5,12 +5,13 @@ Supports PLLuM and Bielik model configurations and an offline mock mode for test
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
 import json
 import os
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 from urllib import error as urllib_error
+from urllib import parse as urllib_parse
 from urllib import request as urllib_request
 
 MODEL_PRESETS: dict[str, dict[str, str]] = {
@@ -78,9 +79,7 @@ def _check_type(value: Any, expected: str) -> bool:
     return True
 
 
-def validate_json_schema(
-    data: Any, schema: dict[str, Any], path: str = "$"
-) -> list[str]:
+def validate_json_schema(data: Any, schema: dict[str, Any], path: str = "$") -> list[str]:
     """Validate JSON data against a lightweight JSON Schema subset.
 
     Returns a list of human-readable validation errors (empty if valid).
@@ -89,13 +88,9 @@ def validate_json_schema(
 
     expected_type = schema.get("type")
     if expected_type is not None:
-        allowed_types = (
-            expected_type if isinstance(expected_type, list) else [expected_type]
-        )
+        allowed_types = expected_type if isinstance(expected_type, list) else [expected_type]
         if not any(_check_type(data, t) for t in allowed_types):
-            errors.append(
-                f"{path}: expected type {expected_type}, got {type(data).__name__}"
-            )
+            errors.append(f"{path}: expected type {expected_type}, got {type(data).__name__}")
             return errors
 
     if "enum" in schema and data not in schema["enum"]:
@@ -121,9 +116,7 @@ def validate_json_schema(
         properties = schema.get("properties", {})
         for key, prop_schema in properties.items():
             if key in data:
-                errors.extend(
-                    validate_json_schema(data[key], prop_schema, f"{path}.{key}")
-                )
+                errors.extend(validate_json_schema(data[key], prop_schema, f"{path}.{key}"))
 
     if isinstance(data, list):
         min_items = schema.get("minItems")
@@ -132,9 +125,7 @@ def validate_json_schema(
         item_schema = schema.get("items")
         if isinstance(item_schema, dict) and item_schema:
             for idx, item in enumerate(data):
-                errors.extend(
-                    validate_json_schema(item, item_schema, f"{path}[{idx}]")
-                )
+                errors.extend(validate_json_schema(item, item_schema, f"{path}[{idx}]"))
 
     return errors
 
@@ -195,15 +186,21 @@ class LLMClient:
                 ],
             }
 
+        parsed_url = urllib_parse.urlparse(url)
+        if parsed_url.scheme not in {"http", "https"}:
+            raise StructuredOutputError(
+                f"Unsupported LLM URL scheme: {parsed_url.scheme!r} (only http/https allowed)"
+            )
+
         body = json.dumps(payload).encode("utf-8")
-        req = urllib_request.Request(
+        req = urllib_request.Request(  # noqa: S310
             url,
             data=body,
             headers={"Content-Type": "application/json"},
             method="POST",
         )
         try:
-            with urllib_request.urlopen(
+            with urllib_request.urlopen(  # noqa: S310
                 req, timeout=self.config.timeout_seconds
             ) as resp:
                 data = json.loads(resp.read().decode("utf-8"))

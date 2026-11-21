@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 import re
-from typing import Any
 import unicodedata
+from copy import deepcopy
+from typing import Any
 
 from backend.worker.clients.llm_client import LLMClient
 from backend.worker.pipeline.step06_structure import (
@@ -66,12 +66,8 @@ _CONSENT_RE = re.compile(
 )
 _FILE_RE = re.compile(r"\b(?:zalacznik\w*|plik\w*|fotografi\w*|skan\w*|dokument\w*)\b")
 _DATE_RE = re.compile(r"\b(?:dat[ayie]|termin\w*)\b")
-_TEXTAREA_RE = re.compile(
-    r"\b(?:uzasadnieni\w*|opis\w*|uwag\w*|przyczyn\w*|wyjasnieni\w*)\b"
-)
-_NUMBER_RE = re.compile(
-    r"\b(?:liczba|ilosc|obwod|powierzchni\w*|kwot\w*|wysokosc|wiek)\b"
-)
+_TEXTAREA_RE = re.compile(r"\b(?:uzasadnieni\w*|opis\w*|uwag\w*|przyczyn\w*|wyjasnieni\w*)\b")
+_NUMBER_RE = re.compile(r"\b(?:liczba|ilosc|obwod|powierzchni\w*|kwot\w*|wysokosc|wiek)\b")
 
 
 def _norm(text: str) -> str:
@@ -193,8 +189,7 @@ def _extract_elements(document: dict[str, Any]) -> list[dict[str, Any]]:
     text = str(document.get("text", "")).strip()
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     return [
-        {"element_id": f"line_{idx + 1}", "page": 1, "text": line}
-        for idx, line in enumerate(lines)
+        {"element_id": f"line_{idx + 1}", "page": 1, "text": line} for idx, line in enumerate(lines)
     ]
 
 
@@ -535,9 +530,7 @@ def _build_mock_fields(
                 source_hint=el_text,
             )
     else:
-        default_consent = (
-            "Oświadczam, że podane we wniosku dane są zgodne z prawdą."
-        )
+        default_consent = "Oświadczam, że podane we wniosku dane są zgodne z prawdą."
         add_field(
             "zgody_i_oswiadczenia",
             "oswiadczenie_prawdziwosci",
@@ -650,9 +643,7 @@ def run_step07(
     llm_output = client.generate_structured(
         prompt,
         FIELDS_SCHEMA,
-        mock_response_fn=lambda family: _build_mock_fields(
-            document, template, form, family
-        ),
+        mock_response_fn=lambda family: _build_mock_fields(document, template, form, family),
     )
 
     for raw_field in llm_output["fields"]:
@@ -667,11 +658,7 @@ def run_step07(
     for tab in form.get("tabs", []):
         if tab.get("type") != "MAIN":
             continue
-        non_empty = [
-            q
-            for q in tab.get("questions", [])
-            if q["field"].get("repetingSectionGrid")
-        ]
+        non_empty = [q for q in tab.get("questions", []) if q["field"].get("repetingSectionGrid")]
         if non_empty:
             for idx, q in enumerate(non_empty):
                 q["y"] = idx

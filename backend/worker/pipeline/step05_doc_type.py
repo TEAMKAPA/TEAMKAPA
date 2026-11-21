@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from copy import deepcopy
 from difflib import SequenceMatcher
-import re
 from typing import Any
-import unicodedata
 
 # Local registry of approved official Polish administrative form templates.
 TEMPLATE_REGISTRY: list[dict[str, Any]] = [
@@ -198,9 +198,7 @@ def _score_template(text: str, template: dict[str, Any]) -> tuple[float, list[st
     union = tokens | ref_tokens
     jaccard = len(tokens & ref_tokens) / len(union) if union else 0.0
 
-    title_sim = SequenceMatcher(
-        None, norm_text[:300], _normalize(template["title"])
-    ).ratio()
+    title_sim = SequenceMatcher(None, norm_text[:300], _normalize(template["title"])).ratio()
     text_sim = 0.6 * jaccard + 0.4 * title_sim
 
     total = min(1.0, 0.40 * code_score + 0.45 * kw_score + 0.15 * text_sim)
@@ -255,9 +253,7 @@ def run_step05(
     raw_text = str(document.get("text", "")).strip()
     if not raw_text and isinstance(document.get("elements"), list):
         raw_text = "\n".join(
-            str(el.get("text", "")).strip()
-            for el in document["elements"]
-            if el.get("text")
+            str(el.get("text", "")).strip() for el in document["elements"] if el.get("text")
         )
     if document.get("title"):
         raw_text = f"{document['title']}\n{raw_text}".strip()

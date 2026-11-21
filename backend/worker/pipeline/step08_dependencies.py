@@ -61,14 +61,14 @@ def build_jsonata_query(
 
     if in_repeating_section:
         expr = (
-            f'"{safe_val}" in tabs[\'{safe_tab}\' in title]'
+            f"\"{safe_val}\" in tabs['{safe_tab}' in title]"
             f".questions['{section_tech_name}' in field.techName]"
             f".field.__userAnswer[$repeatingSectionIndex]"
             f"['{field_tech_name}' in fieldTechName].answers"
         )
     else:
         expr = (
-            f'"{safe_val}" in tabs[\'{safe_tab}\' in title]'
+            f"\"{safe_val}\" in tabs['{safe_tab}' in title]"
             f".questions['{section_tech_name}' in field.techName]"
             f".field.repeatingSectionGrid['{field_tech_name}' in field.techName]"
             ".field.__userAnswer"
@@ -217,40 +217,27 @@ def validate_form_definition(form: dict[str, Any]) -> list[str]:
                         f"type '{st.get('type')}'."
                     )
                 if not st.get("query"):
-                    errors.append(
-                        f"Section '{sec.get('techName')}' state is missing query."
-                    )
+                    errors.append(f"Section '{sec.get('techName')}' state is missing query.")
 
             grid = sec.get("repetingSectionGrid", [])
             if not grid:
-                errors.append(
-                    f"Section '{sec.get('techName')}' must contain at least 1 field."
-                )
+                errors.append(f"Section '{sec.get('techName')}' must contain at least 1 field.")
             for child in grid:
                 f = child.get("field", {})
                 ftype = f.get("type")
                 if ftype not in COI_COMPONENT_TYPES or ftype in COI_SECTION_TYPES:
-                    errors.append(
-                        f"Invalid field type '{ftype}' in '{f.get('techName')}'."
-                    )
+                    errors.append(f"Invalid field type '{ftype}' in '{f.get('techName')}'.")
                 for val in f.get("validation", []):
                     if val not in COI_VALIDATORS:
-                        errors.append(
-                            f"Unknown COI validator '{val}' on '{f.get('techName')}'."
-                        )
+                        errors.append(f"Unknown COI validator '{val}' on '{f.get('techName')}'.")
                 if ftype == "CONSENT_SECTION" and not f.get("consentSectionConfig"):
                     errors.append(
-                        f"CONSENT_SECTION '{f.get('techName')}' missing "
-                        "consentSectionConfig."
+                        f"CONSENT_SECTION '{f.get('techName')}' missing consentSectionConfig."
                     )
                 if not f.get("source_text") or not isinstance(f.get("page"), int):
-                    errors.append(
-                        f"Field '{f.get('techName')}' missing source_text or page."
-                    )
+                    errors.append(f"Field '{f.get('techName')}' missing source_text or page.")
                 if "element_id" not in f:
-                    errors.append(
-                        f"Field '{f.get('techName')}' missing element_id key."
-                    )
+                    errors.append(f"Field '{f.get('techName')}' missing element_id key.")
                 for st in f.get("states", []):
                     if st.get("type") not in STATE_TYPES_FIELD:
                         errors.append(
@@ -258,17 +245,14 @@ def validate_form_definition(form: dict[str, Any]) -> list[str]:
                             f"type '{st.get('type')}'."
                         )
                     if not st.get("query"):
-                        errors.append(
-                            f"Field '{f.get('techName')}' state is missing query."
-                        )
+                        errors.append(f"Field '{f.get('techName')}' state is missing query.")
 
     # Check flow.links connects all tabs.
     links = form.get("flow", {}).get("links", [])
     expected_links = max(0, len(tabs) - 1)
     if len(links) < expected_links:
         errors.append(
-            f"flow.links must connect all tabs (expected >= {expected_links}, "
-            f"got {len(links)})."
+            f"flow.links must connect all tabs (expected >= {expected_links}, got {len(links)})."
         )
     tab_ids = {t.get("id") for t in tabs}
     for link in links:

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -37,7 +37,6 @@ from backend.worker.pipeline.step08_dependencies import (  # noqa: E402
     validate_form_definition,
 )
 from eval.compare_models import compare_models  # noqa: E402
-
 
 SAMPLE_DOC: dict[str, Any] = {
     "title": "Wniosek o wpis do CEIDG (CEIDG-1)",
@@ -354,13 +353,9 @@ class TestStep07FieldsAndStep08Dependencies:
             assert link["target"] == tabs[idx + 1]["id"]
 
         # Verify JSONata states on Polish address & proxy sections.
-        tab1_sections = {
-            q["field"]["techName"]: q["field"] for q in tabs[0]["questions"]
-        }
+        tab1_sections = {q["field"]["techName"]: q["field"] for q in tabs[0]["questions"]}
         assert tab1_sections["dane_podmiotu"]["states"][0]["type"] == "SHOW"
-        assert (
-            "w_czyim_imieniu" in tab1_sections["dane_podmiotu"]["states"][0]["query"]
-        )
+        assert "w_czyim_imieniu" in tab1_sections["dane_podmiotu"]["states"][0]["query"]
 
         addr_fields = {
             c["field"]["techName"]: c["field"]
@@ -372,9 +367,7 @@ class TestStep07FieldsAndStep08Dependencies:
         assert "repeatingSectionGrid['kraj' in field.techName]" in woj_state["query"]
 
     def test_build_jsonata_repeating_and_negated_queries(self) -> None:
-        neg = build_jsonata_query(
-            "Dane", "adres_zamieszkania", "kraj", "Polska", negated=True
-        )
+        neg = build_jsonata_query("Dane", "adres_zamieszkania", "kraj", "Polska", negated=True)
         assert neg.startswith('not ("Polska" in tabs[')
 
         rep = build_jsonata_query(

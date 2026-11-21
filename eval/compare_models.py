@@ -6,10 +6,10 @@ Runs offline in mock mode by default so it works in CI without GPU or API keys.
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict, dataclass
 import json
-from pathlib import Path
 import sys
+from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -269,9 +269,7 @@ def evaluate_model(
         fields_with_meta += sum(
             1
             for f in extracted
-            if f.get("source_text")
-            and isinstance(f.get("page"), int)
-            and "element_id" in f
+            if f.get("source_text") and isinstance(f.get("page"), int) and "element_id" in f
         )
 
         expected_pairs: set[tuple[str, str]] = case["expected_fields"]
@@ -306,9 +304,7 @@ def evaluate_model(
         f1=round(sum(f1s) / n, 4),
         schema_compliance=round(schema_ok / n, 4),
         doc_type_top1_acc=round(doc_type_ok / n, 4),
-        source_metadata_rate=(
-            round(fields_with_meta / total_fields, 4) if total_fields else 0.0
-        ),
+        source_metadata_rate=(round(fields_with_meta / total_fields, 4) if total_fields else 0.0),
     )
 
 
@@ -320,9 +316,7 @@ def compare_models(
 ) -> list[dict[str, Any]]:
     """Evaluate both PLLuM and Bielik with identical metrics."""
     results = [
-        evaluate_model(
-            name, offline=offline, base_url=base_url, api_format=api_format
-        )
+        evaluate_model(name, offline=offline, base_url=base_url, api_format=api_format)
         for name in ("pllum", "bielik")
     ]
     return [asdict(r) for r in results]
