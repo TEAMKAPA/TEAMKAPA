@@ -16,7 +16,7 @@ from urllib import parse as urllib_parse
 from urllib import request as urllib_request
 
 DEFAULT_EDENAI_BASE_URL = "https://api.edenai.run/v3"
-DEFAULT_LLM_MODEL = "openai/gpt-4o-mini"
+DEFAULT_LLM_MODEL = "deepinfra/Qwen/Qwen3-VL-30B-A3B-Instruct"  # model z otwartymi wagami
 
 
 class StructuredOutputError(ValueError):

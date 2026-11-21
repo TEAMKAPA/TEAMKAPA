@@ -2,11 +2,12 @@
 
 Usługa REST, która z blankietu urzędowego (PDF, DOC/DOCX, ODS, XLSX, JPG/PNG) generuje JSON
 konfiguracji e-formularza zgodny ze schematem COI. Każde pole ma źródło w dokumencie i ocenę
-pewności — urzędnik sprawdza tylko pola niepewne. Wszystkie modele AI działają lokalnie.
+pewności — urzędnik sprawdza tylko pola niepewne. Modele językowe to wyłącznie modele
+z otwartymi wagami, wołane przez API Eden AI (patrz [Modele językowe](#modele-językowe)).
 
-> Stan: infrastruktura (#14), modele COI (#17), REST API (#13), kolejka z bazą (#15) i integracja
-> pipeline'u (#16) gotowe; etapy 05–09 (#6, #8) podłączone. Do czasu scalenia ekstrakcji tekstu
-> (#7) analiza pliku kończy się błędem 501 `PIPELINE_NOT_IMPLEMENTED`.
+> Stan: infrastruktura (#14), modele COI (#17), REST API (#13), kolejka z bazą (#15), ekstrakcja
+> tekstu (#7) i integracja pipeline'u (#16) z etapami 05–09 (#6, #8) gotowe. Kanał wizualny
+> (#10/#11) w trakcie — do tego czasu pola mają pewność najwyżej MEDIUM.
 
 ## Architektura uruchomieniowa
 
@@ -17,8 +18,7 @@ pewności — urzędnik sprawdza tylko pola niepewne. Wszystkie modele AI dział
 | `worker` | `python:3.14.10-slim-trixie` | pipeline przetwarzania (arq) | — |
 | `postgres` | `pgvector/pgvector:0.8.7-pg18-trixie` | zadania, wyniki, zatwierdzone formularze | — |
 | `valkey` | `valkey/valkey:9.0.8-alpine3.24` | kolejka zadań batch | — |
-| `llm` *(profil `gpu`)* | `vllm/vllm-openai:v0.19.1` + użytkownik bez roota | lokalny LLM tekstowy | — |
-| `vlm` *(profil `gpu`)* | `vllm/vllm-openai:v0.19.1` + użytkownik bez roota | lokalny model wizyjny | — |
+| `llm-gateway` | `nginxinc/nginx-unprivileged:1.31.7-alpine3.24` | jedyne wyjście do internetu: zapytania do Eden AI, dokłada klucz API | — |
 | `frontend` *(profil `frontend`)* | `node:24.22.3-alpine3.24` → `nginxinc/nginx-unprivileged:1.31.7-alpine3.24` | interfejs urzędnika | `8080` |
 
 **Dlaczego Alpine dla API, a slim dla workera:** API ma tylko lekkie zależności z gotowymi kołami
@@ -27,38 +27,37 @@ które publikują koła wyłącznie dla glibc (manylinux) — na Alpine wymagał
 
 **Bezpieczeństwo kontenerów:**
 - wszystkie obrazy mają przypięte wersje (bez `latest`) i działają jako użytkownik bez roota
-  (`api`/`worker`/`llm`/`vlm`: UID 10001, `postgres`, `valkey`, `nginx`: użytkownicy obrazu),
+  (`api`/`worker`: UID 10001, `postgres`, `valkey`, `nginx`: użytkownicy obrazu),
 - system plików kontenerów jest tylko do odczytu (`read_only`), pliki tymczasowe trafiają do `tmpfs`,
   odebrane są wszystkie capabilities i włączone `no-new-privileges`,
-- `worker`, `postgres` i `valkey` są tylko w sieci wewnętrznej bez dostępu do internetu —
-  przetwarzanie fizycznie nie może wołać zewnętrznych API; `llm`/`vlm` mają wyjście wyłącznie
-  do jednorazowego pobrania wag,
+- `worker`, `postgres` i `valkey` są tylko w sieci wewnętrznej bez dostępu do internetu;
+  jedynym wyjściem jest `llm-gateway`, który przepuszcza wyłącznie `GET /v3/models`
+  i `POST /v3/chat/completions` do `api.edenai.run` (z weryfikacją TLS) — przetwarzanie nie
+  może wysłać danych nigdzie indziej, a worker nie zna klucza API,
 - sekrety podawane są wyłącznie w runtime (`.env` lub Docker secrets w `/run/secrets`),
   nigdy w obrazach ani repozytorium (`.dockerignore`, `.gitignore`, Gitleaks w CI).
 
 ## Wymagania
 
-- Docker z Compose v2
-- do profilu `gpu`: GPU NVIDIA + NVIDIA Container Toolkit (szacunkowo 48 GB VRAM albo 2×24 GB
-  dla obu modeli w FP8; przy 24 GB — kwantyzacja 4-bit)
+- Docker z Compose v2 (x86-64; GPU nie jest potrzebne)
+- klucz API Eden AI (`EDENAI_API_KEY`) i dostęp do internetu z hosta — albo `LLM_DEMO_MODE=true`
 - do pracy lokalnej bez Dockera: Python 3.14
 
 ## Budowanie obrazów
 
 ```bash
-docker compose build                                  # api, worker
-docker compose --profile gpu --profile frontend build # wszystkie obrazy
+docker compose build                        # api, worker
+docker compose --profile frontend build     # + frontend
 ```
 
 ## Uruchomienie
 
 ```bash
 cp .env.example .env
-# ustaw JWT_SECRET_KEY (min. 32 znaki) i POSTGRES_PASSWORD:
+# ustaw JWT_SECRET_KEY (min. 32 znaki), POSTGRES_PASSWORD i EDENAI_API_KEY:
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 
-docker compose up -d                       # api, worker, postgres, valkey
-docker compose --profile gpu up -d         # + lokalne LLM i VLM (vLLM)
+docker compose up -d                       # api, worker, postgres, valkey, llm-gateway
 docker compose --profile frontend up -d    # + frontend na http://localhost:8080
 
 curl http://localhost:8000/health          # {"status":"ok","version":"0.4.0"}
@@ -69,7 +68,8 @@ curl -H "Authorization: Bearer $TOKEN" -F "file=@wniosek.pdf"      http://localh
 ```
 
 Wywołania LLM korzystają z Eden AI API (`EDENAI_API_KEY`, `EDENAI_BASE_URL`, `LLM_MODEL`).
-Bez klucza API można uruchomić tryb demonstracyjny (`LLM_DEMO_MODE=true`).
+Bez klucza API można uruchomić tryb demonstracyjny (`LLM_DEMO_MODE=true`) — wynik jest jawnie
+oznaczony w raporcie (`demo_mode`) i ma pewność LOW.
 Porównanie otwartych modeli w Eden AI (Qwen3, Llama 3.3, Gemma 3, Mistral Small) realizuje skrypt
 `python eval/compare_models.py` (domyślnie offline w trybie mock; `--live` z ustawionym
 `EDENAI_API_KEY`).
@@ -96,7 +96,7 @@ Sekret można też podać jako Docker secret — plik `/run/secrets/<nazwa_zmien
 | `JOB_QUEUE_TTL_SECONDS` | `3600` | Jak długo plik czeka w pamięci kolejki na workera (łącznie z ponowieniami). |
 | `JOB_RESULT_TTL_SECONDS` | `3600` | Jak długo arq trzyma status w Valkey (źródłem prawdy jest PostgreSQL). |
 | `JOB_TIMEOUT_SECONDS` | `1800` | Maksymalny czas analizy jednego pliku (potem `PIPELINE_TIMEOUT`, bez ponowienia). |
-| `WORKER_MAX_JOBS` | `1` | Liczba równoległych analiz w jednym workerze (ograniczona przez GPU). |
+| `WORKER_MAX_JOBS` | `1` | Liczba równoległych analiz w jednym workerze. |
 | `MAX_JOB_TRIES` | `3` | Łączna liczba prób analizy pliku (błędy przejściowe, awarie workera). |
 | `RETRY_BACKOFF_SECONDS` | `30` | Opóźnienie pierwszego ponowienia; kolejne ×2 (30 s, 60 s, …). |
 | `RESULT_RETENTION_DAYS` | `30` | Po ilu dniach usuwane są zadania i wygenerowane wyniki; zatwierdzone formularze zostają. |
@@ -104,14 +104,14 @@ Sekret można też podać jako Docker secret — plik `/run/secrets/<nazwa_zmien
 | `DB_POOL_MAX_SIZE` | `5` | Maksymalna liczba połączeń z bazą na proces. |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | — (wymagane) | Dane bazy; z nich compose składa `DATABASE_URL`. |
 | `VALKEY_URL` | `redis://valkey:6379/0` | Adres kolejki. |
-| `EDENAI_API_KEY` | — (wymagany poza demo) | Klucz API Eden AI. |
-| `EDENAI_BASE_URL` | `https://api.edenai.run/v3` | Bazowy adres Eden AI API (chat completions). |
-| `LLM_MODEL` | — | Identyfikator modelu w Eden AI (`provider/model`, np. `openai/gpt-4o-mini`). |
-| `VLM_BASE_URL` / `VLM_MODEL` | `http://vlm:8001/v1` / — | Serwer i nazwa modelu wizyjnego. |
-| `VLM_GPU_MEMORY_UTILIZATION` | `0.45` | Ułamek pamięci GPU na model VLM. |
+| `EDENAI_API_KEY` | — | Klucz API Eden AI. W compose zna go wyłącznie `llm-gateway`; bezpośrednio do `api.edenai.run` jest wymagany. |
+| `EDENAI_BASE_URL` | `https://api.edenai.run/v3` | Adres Eden AI API. W compose worker używa bramki `http://llm-gateway:8080/v3` (ustawia ją `docker-compose.yml`). |
+| `LLM_MODEL` / `VLM_MODEL` | `deepinfra/Qwen/Qwen3-VL-30B-A3B-Instruct` | Model `dostawca/model` z katalogu Eden AI — **musi mieć otwarte wagi** (np. `openai/gpt-4o-mini` jest blokowany). |
+| `VLM_BASE_URL` | `http://llm-gateway:8080/v3` | Adres API modelu wizyjnego (kanał wizualny, #11). |
+| `LLM_MAX_TOKENS` | `8192` | Limit długości odpowiedzi modelu. |
+| `LLM_ZERO_DATA_RETENTION` | `true` | Tylko dostawcy, którzy nie zapisują zapytań ani odpowiedzi. |
 | `LLM_TIMEOUT_SECONDS` | `300` | Limit czasu jednego wywołania modelu (generowanie JSON-a). |
 | `LLM_DEMO_MODE` | `false` | Tryb demonstracyjny bez modelu: deterministyczne odpowiedzi etapów 06–08; raport ma `demo_mode: true`, wszystkie pola pewność LOW — nie do importu. |
-| `HF_TOKEN` | puste | Tylko gdy model na Hugging Face wymaga akceptacji licencji. |
 | `ACCURACY_MODE` | `max` | `max` — podwójny odczyt każdej strony; `balanced` — tylko stron o niskiej pewności. |
 | `RENDER_DPI` | `200` | Rozdzielczość renderowania stron (72–600). |
 | `CONFIDENCE_HIGH` / `CONFIDENCE_LOW` | `0.85` / `0.5` | Progi pewności pola: zielone / żółte / czerwone (do kalibracji). |
@@ -184,6 +184,28 @@ po retencji zadań (katalog wzorców).
 | 501 | `PIPELINE_NOT_IMPLEMENTED` |
 | 503 | `QUEUE_UNAVAILABLE`, `DATABASE_UNAVAILABLE`, `PIPELINE_UNAVAILABLE` |
 | 504 | `PIPELINE_TIMEOUT` |
+
+## Modele językowe
+
+Zgodnie z doprecyzowaniem regulaminu przez mentorów używamy **wyłącznie modeli z otwartymi
+wagami**, możliwych do postawienia na własnej infrastrukturze, wołanych przez API Eden AI
+(`/v3/chat/completions`, zgodne z OpenAI). Zasady wymuszane w kodzie
+(`backend/worker/clients/model_api.py`):
+
+- przed analizą model jest sprawdzany w publicznym katalogu `/v3/models` — bez
+  `open_weights: true` analiza kończy się błędem `PIPELINE_STAGE_FAILED` (np. GPT, Claude
+  są blokowane),
+- zapytanie wskazuje konkretny model `dostawca/model` i nie zawiera `fallbacks` — Eden AI
+  nie przełączy go na inny model,
+- `zero_data_retention` — tylko dostawcy, którzy nie zapisują zapytań i odpowiedzi,
+- do modelu trafia wyłącznie treść **pustego blankietu** (bez danych obywateli),
+- raport jakości zawiera zużycie (`usage`: wywołania, tokeny, koszt w USD) — koszt analizy
+  jednego formularza.
+
+Domyślny model: `deepinfra/Qwen/Qwen3-VL-30B-A3B-Instruct` (wagi
+[`Qwen/Qwen3-VL-30B-A3B-Instruct`](https://huggingface.co/Qwen/Qwen3-VL-30B-A3B-Instruct),
+Apache 2.0; tekst i obraz, tryb JSON). Wybór modelu ostatecznie rozstrzyga skrypt ewaluacji
+(#8, #11).
 
 ## Pipeline analizy
 

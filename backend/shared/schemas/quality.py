@@ -158,6 +158,10 @@ class QualityReport(ReportModel):
         default=False,
         description="Wynik z trybu demonstracyjnego (bez modelu językowego) — nie do importu",
     )
+    usage: dict[str, float] = Field(
+        default_factory=dict,
+        description="Zużycie modelu: llm_calls, prompt_tokens, completion_tokens, cost_usd",
+    )
 
     @property
     def needs_review(self) -> int:

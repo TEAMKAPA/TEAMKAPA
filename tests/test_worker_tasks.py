@@ -108,8 +108,10 @@ async def test_missing_text_extractor_reported_as_not_implemented(
     from backend.worker.pipeline.stages import PipelineStages
 
     monkeypatch.setattr(
-        orchestrator, "default_stages", lambda _: PipelineStages(None, None, lambda: None)
-    )  # type: ignore[arg-type, return-value]
+        orchestrator,
+        "default_stages",
+        lambda _: PipelineStages(None, None, lambda: None),  # type: ignore[arg-type, return-value]
+    )
     env = Env()
     raw = await env.run(await env.add_job())
     assert raw["status"] == "failed"

@@ -6,11 +6,14 @@ from typing import Any
 
 import jsonschema
 import pytest
+from pydantic import SecretStr
 
 from backend.shared.jobs import JobProgress
 from backend.shared.schemas.quality import ConfidenceLevel, Severity, StageStatus
 from backend.shared.validators.form_rules import has_errors, validate_form_rules
 from backend.worker.clients.llm_client import LLMClient, LLMConfig
+from backend.worker.clients.model_api import ModelApiClient, ModelInfo, Usage
+from backend.worker.pipeline import llm as llm_module
 from backend.worker.pipeline import orchestrator
 from backend.worker.pipeline.contracts import ExtractedDocument
 from backend.worker.pipeline.errors import (
@@ -19,6 +22,7 @@ from backend.worker.pipeline.errors import (
     PipelineStageError,
     PipelineTemporarilyUnavailableError,
 )
+from backend.worker.pipeline.llm import LLMSession
 from backend.worker.pipeline.orchestrator import STEPS, run_pipeline
 from backend.worker.pipeline.stages import PipelineStages, default_stages
 from backend.worker.progress import ProgressReporter
@@ -33,6 +37,9 @@ from tests.pipeline_helpers import (
 )
 
 pytestmark = pytest.mark.anyio
+
+# W compose worker łączy się z Eden AI przez bramkę, która dokłada klucz.
+GATEWAY_URL = "http://llm-gateway:8080/v3"
 
 
 async def _run(tmp_path: Path, pipeline_stages: PipelineStages, **overrides: Any) -> Any:
@@ -123,7 +130,7 @@ async def test_demo_mode_is_marked_and_all_low(tmp_path: Path) -> None:
 
 
 async def test_missing_text_extractor_is_not_implemented(tmp_path: Path) -> None:
-    without_extractor = PipelineStages(None, None, default_stages(settings()).llm_client_factory)
+    without_extractor = PipelineStages(None, None, default_stages(settings()).llm_session_factory)
     with pytest.raises(PipelineNotImplementedError, match="ekstrakcji tekstu"):
         await _run(tmp_path, without_extractor)
 
@@ -162,41 +169,133 @@ async def test_text_failure_cancels_visual_channel(tmp_path: Path) -> None:
     assert visual.cancelled
 
 
-async def test_llm_server_down_is_transient(tmp_path: Path) -> None:
-    def unreachable() -> LLMClient:  # zamknięty port — odmowa połączenia
-        return LLMClient(
-            LLMConfig(
-                offline=False,
-                api_key="test-key",
-                base_url="http://127.0.0.1:9",
-                timeout_seconds=2,
-            )
-        )
+async def test_llm_service_down_is_transient(tmp_path: Path) -> None:
+    def unreachable() -> LLMSession:  # zamknięty port — odmowa połączenia
+        api = ModelApiClient(base_url="http://127.0.0.1:9/v3", model="x/y", timeout_seconds=2)
+        return LLMSession(LLMClient(LLMConfig(offline=False), transport=api.llm_transport))
 
     with pytest.raises(PipelineTemporarilyUnavailableError, match="Struktura"):
         await _run(tmp_path, stages(llm_factory=unreachable))
 
 
 async def test_llm_invalid_output_is_stage_error(tmp_path: Path) -> None:
-    def garbage() -> LLMClient:
-        return LLMClient(LLMConfig(offline=False), transport=lambda *_: "to nie jest JSON")
+    def garbage() -> LLMSession:
+        client = LLMClient(LLMConfig(offline=False), transport=lambda *_: "to nie jest JSON")
+        return LLMSession(client)
 
     with pytest.raises(PipelineStageError, match="Struktura stron i sekcji"):
         await _run(tmp_path, stages(llm_factory=garbage))
 
 
-async def test_llm_model_not_configured(tmp_path: Path) -> None:
-    real_factory = default_stages(settings(llm_model=None)).llm_client_factory
-    with pytest.raises(PipelineStageError, match="LLM_MODEL"):
+def _catalog(entries: dict[str, Any]) -> Any:
+    def fake(_url: str, _key: str | None, _timeout: float) -> dict[str, Any]:
+        return entries
+
+    return fake
+
+
+@pytest.mark.parametrize(
+    ("model", "entries", "message"),
+    [
+        ("openai/gpt-4o", {"openai/gpt-4o": {"open_weights": None}}, "otwartych wag"),
+        ("deepinfra/x", {}, "nie występuje w katalogu"),
+        ("qwen3-32b", {}, "dostawca/model"),
+    ],
+)
+async def test_closed_or_unknown_model_is_refused(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    model: str,
+    entries: dict[str, Any],
+    message: str,
+) -> None:
+    from backend.worker.clients import model_api
+
+    monkeypatch.setattr(model_api, "_model_catalog", _catalog(entries))
+    monkeypatch.setattr(
+        llm_module,
+        "ensure_open_weights",
+        lambda url, model_id, **kw: model_api.ensure_open_weights(
+            url, model_id, catalog=_catalog(entries), **kw
+        ),
+    )
+    real_factory = default_stages(
+        settings(llm_model=model, edenai_base_url=GATEWAY_URL)
+    ).llm_session_factory
+    with pytest.raises(PipelineStageError, match=message):
         await _run(tmp_path, stages(llm_factory=real_factory))
 
 
-async def test_edenai_api_key_not_configured(tmp_path: Path) -> None:
-    real_factory = default_stages(
-        settings(llm_model="openai/gpt-4o-mini", edenai_api_key=None)
-    ).llm_client_factory
+async def test_model_catalog_unreachable_is_transient(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from backend.worker.clients.model_api import ModelServiceUnavailableError
+
+    def down(*_: object, **__: object) -> Any:
+        raise ModelServiceUnavailableError("brak połączenia")
+
+    monkeypatch.setattr(llm_module, "ensure_open_weights", down)
+    real_factory = default_stages(settings(edenai_base_url=GATEWAY_URL)).llm_session_factory
+    with pytest.raises(PipelineTemporarilyUnavailableError, match="katalog modeli"):
+        await _run(tmp_path, stages(llm_factory=real_factory))
+
+
+async def test_usage_and_model_weights_in_report(tmp_path: Path) -> None:
+    usage = Usage()
+    usage.add(1200, 300, ModelInfo("deepinfra/Qwen/Qwen3-VL-30B-A3B-Instruct",
+                                   "Qwen/Qwen3-VL-30B-A3B-Instruct", 1.5e-7, 6e-7))  # fmt: skip
+
+    def session() -> LLMSession:
+        return LLMSession(
+            LLMClient(LLMConfig(offline=True)),
+            usage=usage,
+            model=ModelInfo("m/x", "Qwen/Qwen3-VL-30B-A3B-Instruct", 0.0, 0.0),
+        )
+
+    result, _ = await _run(tmp_path, stages(llm_factory=session))
+    report = result.report
+    assert report.usage == {
+        "llm_calls": 1,
+        "prompt_tokens": 1200,
+        "completion_tokens": 300,
+        "cost_usd": 0.00036,
+    }
+    assert report.models["llm_weights"] == "Qwen/Qwen3-VL-30B-A3B-Instruct"
+
+
+async def test_edenai_api_key_required_for_direct_access(tmp_path: Path) -> None:
+    # Bezpośrednio do api.edenai.run (bez bramki) klucz jest wymagany.
+    real_factory = default_stages(settings(edenai_api_key=None)).llm_session_factory
     with pytest.raises(PipelineStageError, match="EDENAI_API_KEY"):
         await _run(tmp_path, stages(llm_factory=real_factory))
+
+
+async def test_placeholder_api_key_is_refused(tmp_path: Path) -> None:
+    real_factory = default_stages(
+        settings(edenai_api_key=SecretStr("change-me-in-runtime"))
+    ).llm_session_factory
+    with pytest.raises(PipelineStageError, match="wartość przykładową"):
+        await _run(tmp_path, stages(llm_factory=real_factory))
+
+
+async def test_gateway_needs_no_api_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """W compose klucz dokłada bramka — worker łączy się z nią bez klucza."""
+    seen: dict[str, Any] = {}
+
+    def fake_catalog(url: str, model: str, *, api_key: str | None = None) -> ModelInfo:
+        seen.update(url=url, model=model, api_key=api_key)
+        return ModelInfo(model, "Qwen/Qwen3-VL-30B-A3B-Instruct", 0.0, 0.0)
+
+    monkeypatch.setattr(llm_module, "ensure_open_weights", fake_catalog)
+    session = default_stages(
+        settings(edenai_base_url=GATEWAY_URL, edenai_api_key=None)
+    ).llm_session_factory()
+    assert seen == {
+        "url": GATEWAY_URL,
+        "model": "deepinfra/Qwen/Qwen3-VL-30B-A3B-Instruct",
+        "api_key": None,
+    }
+    assert session.model is not None
 
 
 async def test_unexpected_step_error_names_the_stage(
