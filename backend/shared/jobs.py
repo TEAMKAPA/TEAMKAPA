@@ -86,6 +86,7 @@ class JobErrorCode(StrEnum):
     PIPELINE_NOT_IMPLEMENTED = "PIPELINE_NOT_IMPLEMENTED"
     PIPELINE_UNAVAILABLE = "PIPELINE_UNAVAILABLE"  # błąd przejściowy po wyczerpaniu prób
     PIPELINE_TIMEOUT = "PIPELINE_TIMEOUT"  # przekroczony JOB_TIMEOUT_SECONDS
+    PIPELINE_STAGE_FAILED = "PIPELINE_STAGE_FAILED"  # etap zawiódł (nazwa etapu w komunikacie)
     PIPELINE_ERROR = "PIPELINE_ERROR"  # nieoczekiwany błąd analizy
     JOB_FAILED = "JOB_FAILED"  # kolejka przerwała zadanie (np. limit prób po awariach workera)
     JOB_LOST = "JOB_LOST"  # zadanie zniknęło z kolejki (np. restart Valkey)

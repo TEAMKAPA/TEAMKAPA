@@ -17,7 +17,7 @@ from backend.shared.db.repository import JobStore, PgJobStore
 
 logger = logging.getLogger(__name__)
 
-API_VERSION = "0.3.0"
+API_VERSION = "0.4.0"
 
 QueueFactory = Callable[[ApiSettings], Awaitable[JobQueue]]
 StoreFactory = Callable[[ApiSettings], Awaitable[JobStore]]

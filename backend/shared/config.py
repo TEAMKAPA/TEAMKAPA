@@ -95,6 +95,17 @@ class Settings(BaseSettings):
     # --- lokalne modele (endpointy zgodne z OpenAI API: vLLM / Ollama / llama.cpp) ---
     llm_base_url: str = "http://llm:8000/v1"
     llm_model: str | None = None
+    llm_api_format: Literal["openai", "ollama"] = Field(
+        default="openai", description="openai: vLLM / llama.cpp; ollama: natywne API Ollamy"
+    )
+    llm_timeout_seconds: int = Field(
+        default=300, ge=5, le=3600, description="Limit czasu jednego wywołania modelu"
+    )
+    llm_demo_mode: bool = Field(
+        default=False,
+        description="Tryb demonstracyjny bez modelu (deterministyczny mock etapów 06–08). "
+        "Wynik jest jawnie oznaczony w raporcie i ma pewność LOW — nie do importu.",
+    )
     vlm_base_url: str = "http://vlm:8001/v1"
     vlm_model: str | None = None
 

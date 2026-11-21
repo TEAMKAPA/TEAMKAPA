@@ -142,6 +142,9 @@ async def _analyze(
         return JobOutcome.failed(JobErrorCode.PIPELINE_NOT_IMPLEMENTED, str(exc))
     except pipeline.DocumentUnreadableError as exc:
         return JobOutcome.failed(JobErrorCode.DOCUMENT_UNREADABLE, str(exc))
+    except pipeline.PipelineStageError as exc:
+        logger.warning("Zadanie %s: %s", ref.job_id, exc)
+        return JobOutcome.failed(JobErrorCode.PIPELINE_STAGE_FAILED, str(exc))
     except pipeline.PipelineTemporarilyUnavailableError:
         raise
     except Exception:

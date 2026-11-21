@@ -1,38 +1,42 @@
 """Pipeline analizy dokumentu (etapy 1–10).
 
-Punkt wejścia wywoływany przez zadanie ``analyze_document``. Integracja etapów to zadanie #16;
-do tego czasu funkcja zgłasza ``PipelineNotImplementedError``, a API zwraca 501 z czytelnym
-komunikatem zamiast udawać wynik.
+Punkt wejścia ``run_pipeline`` wywołuje zadanie ``analyze_document``. Implementacja:
+``orchestrator`` (przebieg etapów), ``contracts`` (wejście/wyjście etapów), ``stages``
+(rejestr implementacji), ``normalize`` (wynik → plik COI), ``scoring`` (pewność pól).
+
+Kontrakt błędów dla etapów (decyduje o statusie zadania):
+- ``DocumentUnreadableError`` — dokument nieczytelny (błąd ostateczny),
+- ``PipelineTemporarilyUnavailableError`` — zależność chwilowo niedostępna (serwer
+  LLM/VLM, timeout połączenia) → ponowienie do ``MAX_JOB_TRIES``,
+- ``PipelineStageError`` — etap zawiódł (komunikat z nazwą etapu trafia do użytkownika),
+- ``PipelineNotImplementedError`` — brak wymaganego etapu (501).
 """
 
 from backend.shared.config import Settings
 from backend.shared.schemas.quality import AnalysisResult
 from backend.worker.document import IncomingDocument
+from backend.worker.pipeline.errors import (
+    DocumentUnreadableError,
+    PipelineNotImplementedError,
+    PipelineStageError,
+    PipelineTemporarilyUnavailableError,
+)
 from backend.worker.progress import ProgressReporter
 
-
-class PipelineNotImplementedError(RuntimeError):
-    """Pipeline nie jest jeszcze zintegrowany (#16)."""
-
-
-class DocumentUnreadableError(RuntimeError):
-    """Treści dokumentu nie da się odczytać (uszkodzony plik, chroniony hasłem itp.)."""
-
-
-class PipelineTemporarilyUnavailableError(RuntimeError):
-    """Błąd przejściowy (np. lokalny serwer modelu niedostępny) — zadanie zostanie ponowione."""
+__all__ = [
+    "DocumentUnreadableError",
+    "PipelineNotImplementedError",
+    "PipelineStageError",
+    "PipelineTemporarilyUnavailableError",
+    "run_pipeline",
+]
 
 
 async def run_pipeline(
     document: IncomingDocument, progress: ProgressReporter, settings: Settings
 ) -> AnalysisResult:
-    """Analizuje dokument i zwraca plik importu COI z raportem jakości.
+    """Analizuje dokument i zwraca plik importu COI z raportem jakości."""
+    # Import leniwy: orkiestrator importuje etapy, a te — moduły tego pakietu.
+    from backend.worker.pipeline.orchestrator import run_pipeline as run
 
-    Kontrakt dla #16: postęp raportuj przez ``progress.update(...)``; dokument nieczytelny
-    sygnalizuj ``DocumentUnreadableError``; chwilową niedostępność zależności (serwer LLM/VLM,
-    timeout połączenia) — ``PipelineTemporarilyUnavailableError`` (ponowienie do
-    ``MAX_JOB_TRIES``); każdy inny wyjątek kończy zadanie błędem ``PIPELINE_ERROR``.
-    """
-    raise PipelineNotImplementedError(
-        "Pipeline analizy nie jest jeszcze zintegrowany (zadanie #16)"
-    )
+    return await run(document, progress, settings)
