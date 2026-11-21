@@ -1,12 +1,14 @@
 """Syntetyczne dane testowe kanału wizualnego, generowane w kodzie (bez materiałów COI).
 
 A.3: minimalne kontenery OLE2 (CFB) i ZIP (OOXML/ODF) do testów rozpoznawania formatu.
-Generator PDF i obrazów dochodzi w A.4/A.5.
+A.4: ręczny generator PDF (niezależny od testowanego renderera). Obrazy: A.5.
 """
 
+import hashlib
 import io
 import struct
 import zipfile
+from dataclasses import dataclass
 
 _ENDOFCHAIN = 0xFFFFFFFE
 _FREESECT = 0xFFFFFFFF
@@ -90,3 +92,115 @@ DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.docu
 XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"
 DOCM_TYPE = "application/vnd.ms-word.document.macroEnabled.main+xml"
 XLSM_TYPE = "application/vnd.ms-excel.sheet.macroEnabled.main+xml"
+
+
+# --- PDF (A.4) ---------------------------------------------------------------------------------
+
+Color = tuple[int, int, int]
+PdfRect = tuple[float, float, float, float, Color]
+"""Wypełniony prostokąt w punktach PDF: (x0, y0, x1, y1, (r, g, b)), lewy dolny róg."""
+
+
+@dataclass(frozen=True)
+class SynthPage:
+    mediabox: tuple[float, float, float, float] = (0.0, 0.0, 595.0, 842.0)
+    cropbox: tuple[float, float, float, float] | None = None
+    rotate: int = 0
+    rects: tuple[PdfRect, ...] = ()
+
+
+def _content(rects: tuple[PdfRect, ...]) -> bytes:
+    ops = []
+    for x0, y0, x1, y1, (r, g, b) in rects:
+        ops.append(f"{r / 255:.4f} {g / 255:.4f} {b / 255:.4f} rg")
+        ops.append(f"{x0:.4f} {y0:.4f} {x1 - x0:.4f} {y1 - y0:.4f} re f")
+    return "\n".join(ops).encode("ascii")
+
+
+def _num(box: tuple[float, ...]) -> str:
+    return "[" + " ".join(f"{v:g}" for v in box) + "]"
+
+
+def make_pdf(pages: list[SynthPage], *, user_password: str | None = None) -> bytes:
+    """Minimalny, poprawny PDF 1.4 (nieskompresowane strumienie, tablica xref).
+
+    ``user_password`` dodaje słownik /Encrypt (Standard, R2, RC4 40 bit), więc otwarcie bez hasła
+    musi się nie udać. Treść strumieni nie jest szyfrowana: test sprawdza tylko odmowę otwarcia.
+    """
+    objects: list[bytes] = []
+
+    def add(body: bytes) -> int:
+        objects.append(body)
+        return len(objects)
+
+    catalog = add(b"")  # uzupełniany niżej
+    pages_obj = add(b"")
+    page_ids = []
+    for p in pages:
+        stream = _content(p.rects)
+        content_id = add(b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"\nendstream")
+        extra = f" /CropBox {_num(p.cropbox)}" if p.cropbox is not None else ""
+        extra += f" /Rotate {p.rotate}" if p.rotate else ""
+        page_ids.append(
+            add(
+                f"<< /Type /Page /Parent {pages_obj} 0 R /MediaBox {_num(p.mediabox)}{extra}"
+                f" /Resources << >> /Contents {content_id} 0 R >>".encode("ascii")
+            )
+        )
+    kids = " ".join(f"{i} 0 R" for i in page_ids)
+    objects[catalog - 1] = f"<< /Type /Catalog /Pages {pages_obj} 0 R >>".encode("ascii")
+    objects[pages_obj - 1] = f"<< /Type /Pages /Kids [{kids}] /Count {len(page_ids)} >>".encode(
+        "ascii"
+    )
+
+    file_id = hashlib.md5(b"synthetic-pdf").digest()  # noqa: S324 - identyfikator, nie kryptografia
+    trailer_extra = ""
+    if user_password is not None:
+        enc_id = add(_rc4_encrypt_dict(user_password, file_id))
+        trailer_extra = f" /Encrypt {enc_id} 0 R"
+
+    out = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    offsets = []
+    for i, body in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += f"{i} 0 obj\n".encode("ascii") + body + b"\nendobj\n"
+    xref = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode("ascii")
+    out += b"".join(f"{o:010d} 00000 n \n".encode("ascii") for o in offsets)
+    out += (
+        f"trailer\n<< /Size {len(objects) + 1} /Root {catalog} 0 R{trailer_extra}"
+        f" /ID [<{file_id.hex()}> <{file_id.hex()}>] >>\nstartxref\n{xref}\n%%EOF\n"
+    ).encode("ascii")
+    return bytes(out)
+
+
+_PAD = bytes.fromhex("28BF4E5E4E758A4164004E56FFFA01082E2E00B6D0683E802F0CA9FE6453697A")
+
+
+def _rc4(key: bytes, data: bytes) -> bytes:
+    s = list(range(256))
+    j = 0
+    for i in range(256):
+        j = (j + s[i] + key[i % len(key)]) % 256
+        s[i], s[j] = s[j], s[i]
+    i = j = 0
+    out = bytearray()
+    for byte in data:
+        i = (i + 1) % 256
+        j = (j + s[i]) % 256
+        s[i], s[j] = s[j], s[i]
+        out.append(byte ^ s[(s[i] + s[j]) % 256])
+    return bytes(out)
+
+
+def _rc4_encrypt_dict(user_password: str, file_id: bytes) -> bytes:
+    """Słownik /Encrypt (ISO 32000-1, alg. 3.2-3.4, R2); hasło właściciela = hasło użytkownika."""
+    pw = (user_password.encode("latin-1") + _PAD)[:32]
+    owner = _rc4(hashlib.md5(pw).digest()[:5], pw)  # noqa: S324 - wymagane przez format PDF
+    perms = -4
+    key = hashlib.md5(pw + owner + struct.pack("<i", perms) + file_id).digest()[:5]  # noqa: S324
+    user = _rc4(key, _PAD)
+    return (
+        f"<< /Filter /Standard /V 1 /R 2 /Length 40 /P {perms}"
+        f" /O <{owner.hex()}> /U <{user.hex()}> >>"
+    ).encode("ascii")

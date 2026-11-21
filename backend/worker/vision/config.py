@@ -22,6 +22,7 @@ class _RenderLimits(BaseModel):
     max_page_pixels: int = Field(default=40_000_000, ge=1_000_000, le=500_000_000)
     max_image_pixels: int = Field(default=100_000_000, ge=1_000_000, le=1_000_000_000)
     page_timeout_s: PositiveSeconds = 30.0
+    worker_startup_timeout_s: PositiveSeconds = 60.0
     render_forms: bool = True
     office_enabled: bool = False
     office_timeout_s: PositiveSeconds = 120.0
