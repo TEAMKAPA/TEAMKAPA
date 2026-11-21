@@ -1,4 +1,4 @@
-"""Tymczasowe modele wyjścia renderera.
+"""Tymczasowe modele kanału wizualnego: wyjście renderera i elementy wizualne kroku 3.
 
 TODO(#17): do uzgodnienia i przeniesienia do ``backend/shared/schemas``.
 ``BoundingBox`` i ``Severity`` pochodzą już z #17 (``backend.shared.schemas.quality``)
@@ -10,6 +10,7 @@ Konwencje (opis w ``docs/vision.md``):
 - obraz strony (tablica numpy) nie jest częścią serializowanych metadanych.
 """
 
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Annotated, Literal
@@ -18,7 +19,7 @@ import numpy as np
 import numpy.typing as npt
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from backend.shared.schemas.quality import Severity
+from backend.shared.schemas.quality import BoundingBox, Fraction, Severity
 from backend.worker.vision.errors import IssueCode
 
 Rotation = Literal[0, 90, 180, 270]
@@ -202,3 +203,111 @@ class RenderedDocument:
         numbers = [p.meta.page for p in self.pages]
         if numbers != list(range(1, len(numbers) + 1)):
             raise ValueError("strony muszą być numerowane kolejno od 1")
+
+
+# --- Elementy wizualne strony: kontrakt wyjścia kroku 3 (tymczasowy, TODO(#17)) ---
+
+
+class ElementKind(StrEnum):
+    """Kategoria elementu wizualnego (opis i przypadki graniczne: ``eval/visual/LABELING.md``)."""
+
+    CHAR_BOXES = "char_boxes"  # ciąg przylegających kratek na znaki (liczba kratek w ``cells``)
+    CHECKBOX = "checkbox"  # pojedyncze pole wyboru
+    CHECKBOX_GROUP = "checkbox_group"  # grupa powiązanych pól wyboru
+    TEXT_LINE = "text_line"  # linia ciągła do wpisywania
+    DOTTED_LINE = "dotted_line"  # ciąg kropek do wpisywania
+    TABLE_CELL = "table_cell"  # zamknięty prostokąt na tekst (komórka tabeli lub ramka pola)
+    SECTION_FRAME = "section_frame"  # duża ramka obejmująca sekcję lub tabelę
+    SIGNATURE = "signature"  # miejsce na podpis
+    OFFICE_ONLY = "office_only"  # miejsce wypełniane przez urząd
+
+
+class ElementRole(StrEnum):
+    """Rola elementu w formularzu."""
+
+    INPUT = "input"  # miejsce na wartość wpisywaną przez wnioskodawcę
+    CHOICE = "choice"  # wybór (pole wyboru lub grupa)
+    SKIP = "skip"  # nie jest polem wnioskodawcy (etykieta, nagłówek, część urzędu, kontener)
+    E_SIGNATURE = "e_signature"  # podpis
+    SECTION = "section"  # ramka sekcji
+    UNKNOWN = "unknown"  # rola nieustalona (tylko wynik detekcji; w etykietach niedozwolona)
+
+
+class ElementSource(StrEnum):
+    OPENCV = "opencv"
+    VLM = "vlm"
+    BOTH = "both"
+
+
+ELEMENT_ID_PATTERN = r"^(cv|vlm)-p([1-9][0-9]*)-([0-9]{3,})$"
+"""ID elementu: ``cv-p{strona}-{nnn}`` (OpenCV, także po potwierdzeniu przez VLM)
+lub ``vlm-p{strona}-{nnn}`` (element dodany przez VLM)."""
+
+ReasonCode = Annotated[str, Field(pattern=r"^[A-Z][A-Z0-9_]*$", max_length=64)]
+ElementId = Annotated[str, Field(pattern=ELEMENT_ID_PATTERN)]
+
+
+def has_area(bbox: BoundingBox) -> bool:
+    """Czy prostokąt ma dodatnią szerokość i wysokość (element zajmuje co najmniej 1 piksel)."""
+    return bbox.x1 > bbox.x0 and bbox.y1 > bbox.y0
+
+
+def check_kind_attributes(
+    kind: ElementKind,
+    cells: int | None,
+    options: tuple[str, ...],
+    multi: bool | None,
+    element_id: str,
+) -> None:
+    """Reguły atrybutów zależnych od kategorii, wspólne dla wyników detekcji i etykiet #12.
+
+    ``cells`` jest wymagane dla ``char_boxes`` i niedozwolone dla innych kategorii;
+    ``options`` i ``multi`` dotyczą tylko ``checkbox_group``.
+    """
+    if (kind is ElementKind.CHAR_BOXES) != (cells is not None):
+        raise ValueError("cells jest wymagane dla char_boxes i niedozwolone dla innych kategorii")
+    if kind is not ElementKind.CHECKBOX_GROUP and (options or multi is not None):
+        raise ValueError("options i multi dotyczą tylko checkbox_group")
+    if len(set(options)) != len(options):
+        raise ValueError("options zawierają powtórzenia")
+    if element_id in options:
+        raise ValueError("grupa nie może zawierać samej siebie")
+
+
+class VisualElement(VisionModel):
+    """Element wizualny strony (brief 7.5).
+
+    ``options`` grupy wyboru to ID należących do niej elementów ``checkbox`` w kolejności czytania;
+    etykieta opcji to ``label_block_id`` danego checkboxa.
+    """
+
+    id: ElementId
+    page: Annotated[int, Field(ge=1)]
+    kind: ElementKind
+    bbox: BoundingBox
+    cells: Annotated[int, Field(ge=1)] | None = None
+    label_block_id: Annotated[str, Field(min_length=1, max_length=64)] | None = None
+    role: ElementRole = ElementRole.UNKNOWN
+    options: tuple[ElementId, ...] = ()
+    multi: bool | None = None
+    source: ElementSource
+    confidence: Fraction
+    confidence_reasons: tuple[ReasonCode, ...] = ()
+
+    @model_validator(mode="after")
+    def _consistent(self) -> VisualElement:
+        match = re.match(ELEMENT_ID_PATTERN, self.id)
+        if match is None:  # pragma: no cover - wzorzec sprawdzony przez pole
+            raise ValueError("niepoprawne id elementu")
+        if int(match.group(2)) != self.page:
+            raise ValueError("numer strony w id różni się od pola page")
+        if (match.group(1) == "vlm") != (self.source is ElementSource.VLM):
+            raise ValueError("id vlm-* wtedy i tylko wtedy, gdy source=vlm")
+        if not has_area(self.bbox):
+            raise ValueError("bbox musi mieć dodatnią szerokość i wysokość")
+        check_kind_attributes(self.kind, self.cells, self.options, self.multi, self.id)
+        for option in self.options:
+            option_match = re.match(ELEMENT_ID_PATTERN, option)
+            if option_match is None or int(option_match.group(2)) != self.page:
+                raise ValueError("options muszą wskazywać elementy tej samej strony")
+        return self
