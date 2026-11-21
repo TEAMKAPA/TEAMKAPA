@@ -197,9 +197,8 @@ def _build_mock_fields(
     document: dict[str, Any],
     template: dict[str, Any] | None,
     structure: dict[str, Any],
-    model_family: str,
 ) -> dict[str, Any]:
-    """Deterministic offline extraction emulating PLLuM vs Bielik output."""
+    """Deterministic offline extraction for tests and demo mode."""
     elements = _extract_elements(document)
     section_names = {
         q["field"]["techName"]
@@ -472,10 +471,6 @@ def _build_mock_fields(
         ftype, vals, dict_name = _infer_coi_type_and_validators(
             el_label, options=opts, required=req, requested_type=el.get("type")
         )
-        # Simulate realistic minor model difference in offline comparison mode:
-        # Bielik maps optional long-text fields to TEXT_FIELD instead of TEXTAREA.
-        if model_family == "bielik" and ftype == "TEXTAREA" and not req:
-            ftype = "TEXT_FIELD"
 
         add_field(
             "przedmiot_wniosku",
@@ -643,7 +638,7 @@ def run_step07(
     llm_output = client.generate_structured(
         prompt,
         FIELDS_SCHEMA,
-        mock_response_fn=lambda family: _build_mock_fields(document, template, form, family),
+        mock_response_fn=lambda _model: _build_mock_fields(document, template, form),
     )
 
     for raw_field in llm_output["fields"]:
