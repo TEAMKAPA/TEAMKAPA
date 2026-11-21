@@ -9,6 +9,7 @@ from copy import deepcopy
 from typing import Any
 
 from backend.worker.clients.llm_client import LLMClient
+from backend.worker.pipeline.prompts import SYSTEM_PROMPT, structure_prompt
 
 COI_SECTION_TYPES: frozenset[str] = frozenset({"SECTION", "REPEATING_SECTION"})
 
@@ -52,18 +53,25 @@ COI_TITLE_PREFIXES: tuple[str, ...] = (
 )
 
 # Canonical logical COI ordering priority for sections.
+#: Kolejność sekcji jak na stronie „Dane” w plikach COI. Dopasowanie po pierwszym pasującym
+#: fragmencie techName w kolejności słownika — bardziej szczegółowe klucze muszą być wcześniej.
 _SECTION_PRIORITY: dict[str, int] = {
+    "adres_zamieszkania_osoby": 47,
+    "adres_siedziby": 43,
+    "oplata_skarbowa": 56,
+    "potwierdzenie_ze_jestes_reprezentantem": 44,
     "urzad": 10,
     "organ": 10,
     "podmiot_wniosku": 20,
     "twoje_dane": 30,
+    "dane_wnioskodawcy": 30,
     "adres": 40,
+    "dane_podmiotu": 42,
     "dane_innej_osoby": 45,
-    "dane_podmiotu": 50,
     "pelnomocnictwo": 55,
     "przedmiot_wniosku": 60,
     "dane_do_kontaktu": 70,
-    "zgody": 80,
+    "zgod": 80,
     "oswiadczenie": 80,
 }
 
@@ -488,16 +496,12 @@ def run_step06(
 ) -> dict[str, Any]:
     """Extract COI-compliant tabs and sections from document and template context."""
     client = llm_client or LLMClient()
-    tpl_title = template["title"] if template else "brak wzorca"
-    raw_text = str(document.get("text", ""))[:1500]
-    prompt = (
-        "Wyekstrahuj strukturę stron (MAIN + FINISH) oraz sekcji formularza "
-        f"zgodnie ze standardem COI.\nWzorzec: {tpl_title}\nTreść:\n{raw_text}"
-    )
+    prompt = structure_prompt(document, template["title"] if template else None, STRUCTURE_SCHEMA)
 
     llm_output = client.generate_structured(
         prompt,
         STRUCTURE_SCHEMA,
+        system_prompt=SYSTEM_PROMPT,
         mock_response_fn=lambda _model: _build_mock_structure(document, template),
     )
 

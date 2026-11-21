@@ -222,8 +222,9 @@ async def run_pipeline(
         )  # fmt: skip
     async with run.stage("dependencies"):
         with_dependencies = await llm.run_llm_stage(
-            _STEP_LABEL["dependencies"], run_step08, with_fields, llm_client=client
-        )
+            _STEP_LABEL["dependencies"], run_step08, with_fields,
+            llm_client=client, document=payload,
+        )  # fmt: skip
     async with run.stage("rules"):
         raw_form = _sync(run_step09, with_dependencies)
 

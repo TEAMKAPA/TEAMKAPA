@@ -6,6 +6,7 @@ from copy import deepcopy
 from typing import Any
 
 from backend.worker.clients.llm_client import LLMClient
+from backend.worker.pipeline.prompts import SYSTEM_PROMPT, dependencies_prompt
 from backend.worker.pipeline.step06_structure import (
     COI_COMPONENT_TYPES,
     COI_SECTION_TYPES,
@@ -266,6 +267,7 @@ def run_step08(
     form_with_fields: dict[str, Any],
     *,
     llm_client: LLMClient | None = None,
+    document: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Attach JSONata conditional states and sequential flow.links to a form."""
     client = llm_client or LLMClient()
@@ -279,13 +281,11 @@ def run_step08(
             if cf.get("techName"):
                 fields_by_tech[cf["techName"]] = cf
 
-    prompt = (
-        "Wyekstrahuj zależności warunkowe (SHOW / READ_ONLY) między sekcjami "
-        f"i polami formularza '{form.get('title', '')}'."
-    )
+    prompt = dependencies_prompt(document, form, DEPENDENCIES_SCHEMA)
     llm_output = client.generate_structured(
         prompt,
         DEPENDENCIES_SCHEMA,
+        system_prompt=SYSTEM_PROMPT,
         mock_response_fn=lambda _model: _build_mock_dependencies(form),
     )
 

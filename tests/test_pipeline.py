@@ -527,7 +527,7 @@ class TestModelComparison:
             requested_models.append(body["model"])
             prompt = str(body["messages"][1]["content"])
 
-            if "strukturę stron" in prompt:
+            if "Zaprojektuj strony i sekcje" in prompt:
                 payload: dict[str, Any] = {
                     "title": "Wniosek testowy",
                     "tabs": [
@@ -556,7 +556,7 @@ class TestModelComparison:
                         },
                     ],
                 }
-            elif "Wyekstrahuj pola" in prompt:
+            elif "Wyodrębnij pola" in prompt:
                 payload = {
                     "fields": [
                         {
@@ -594,3 +594,20 @@ class TestModelComparison:
             assert row["schema_compliance"] == 1.0
             assert row["doc_type_top1_acc"] == 1.0
             assert row["source_metadata_rate"] == 1.0
+
+
+class TestStep05TemplateThreshold:
+    def test_document_outside_catalog_gets_no_template(self) -> None:
+        """Cudzy wzorzec w zapytaniu prowadzi model do zmyślania pól — lepiej brak wzorca."""
+        result = run_step05(
+            {"text": "Wniosek o ustalenie numeru porządkowego nieruchomości\nPESEL"}
+        )
+        assert result["doc_type"] == "unknown"
+        assert result["selected_template"] is None
+        assert result["top_candidates"]  # kandydaci zostają w wyniku do wglądu
+
+    def test_inflected_title_line_matches_template(self) -> None:
+        text = "Urząd Miasta\nWniosek o wydanie dowodu osobistego\nImię\nNazwisko"
+        result = run_step05({"text": text})
+        assert result["doc_type"] == "wniosek_dowod_osobisty"
+        assert "title" in result["top_candidates"][0]["matched_signals"]

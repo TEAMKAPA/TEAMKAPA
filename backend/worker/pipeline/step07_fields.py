@@ -8,6 +8,7 @@ from copy import deepcopy
 from typing import Any
 
 from backend.worker.clients.llm_client import LLMClient
+from backend.worker.pipeline.prompts import SYSTEM_PROMPT, fields_prompt
 from backend.worker.pipeline.step06_structure import (
     COI_COMPONENT_TYPES,
     COI_SECTION_TYPES,
@@ -32,6 +33,7 @@ FIELDS_SCHEMA: dict[str, Any] = {
                     "type",
                     "source_text",
                     "page",
+                    "element_id",
                 ],
                 "properties": {
                     "section_tech_name": {"type": "string", "minLength": 1},
@@ -628,16 +630,12 @@ def run_step07(
                 if first_main_section is None:
                     first_main_section = sec_field
 
-    tpl_context = template["title"] if template else "brak"
-    prompt = (
-        "Wyekstrahuj pola formularza zgodnie z komponentami i walidatorami COI "
-        f"(wzorzec: {tpl_context}). Zgody zawsze jako CONSENT_SECTION. "
-        "Każde pole musi zawierać source_text, page i element_id."
-    )
+    prompt = fields_prompt(document, form, template["title"] if template else None, FIELDS_SCHEMA)
 
     llm_output = client.generate_structured(
         prompt,
         FIELDS_SCHEMA,
+        system_prompt=SYSTEM_PROMPT,
         mock_response_fn=lambda _model: _build_mock_fields(document, template, form),
     )
 
