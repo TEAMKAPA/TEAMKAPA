@@ -21,6 +21,7 @@ from backend.worker.pipeline.contracts import (
     VisualElement,
 )
 from backend.worker.pipeline.errors import PipelineTemporarilyUnavailableError
+from backend.worker.pipeline.llm import LLMSession
 from backend.worker.pipeline.stages import PipelineStages
 
 #: Reprezentatywny wniosek: dane wnioskodawcy, adres, kontakt, podmiot, zgody, pola urzędu.
@@ -106,9 +107,9 @@ class FakeVisualAnalyzer:
         )  # fmt: skip
 
 
-def offline_llm() -> LLMClient:
+def offline_llm() -> LLMSession:
     """Deterministyczne odpowiedzi etapów #8 (jak tryb demo, ale bez flagi demo)."""
-    return LLMClient(LLMConfig(offline=True))
+    return LLMSession(LLMClient(LLMConfig(offline=True)))
 
 
 def stages(
@@ -119,7 +120,7 @@ def stages(
     return PipelineStages(
         text_extractor=extractor if extractor is not None else FakeTextExtractor(),
         visual_analyzer=visual,
-        llm_client_factory=llm_factory,
+        llm_session_factory=llm_factory,
     )
 
 

@@ -1,10 +1,11 @@
 # COI Cyfryzacja formularzy — środowisko uruchomieniowe.
 #
-#   docker compose up -d --build                    # api, worker, postgres, valkey (+ migrate)
-#   docker compose --profile gpu up -d --build      # + llm i vlm (vLLM, wymaga GPU NVIDIA)
+#   docker compose up -d --build                    # api, worker, postgres, valkey, llm-gateway
 #   docker compose --profile frontend up -d --build # + frontend
 #
 # Na zewnątrz wystawione są tylko porty API i frontendu. Sekrety pochodzą z .env w runtime.
+# Modele językowe: Eden AI (otwarte modele przez API) — jedynym wyjściem do internetu
+# jest bramka llm-gateway, która zna klucz EDENAI_API_KEY.
 
 name: teamkapa
 
@@ -18,25 +19,7 @@ x-app-env: &app-env
   env_file: .env
   environment:
     DATABASE_URL: postgresql://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}
-
-x-vllm: &vllm
-  build:
-    context: docker/vllm
-  image: teamkapa/vllm:v0.19.1
-  profiles: [gpu]
-  restart: unless-stopped
-  security_opt: ["no-new-privileges:true"]
-  ipc: host # współdzielona pamięć dla PyTorch (zalecenie vLLM)
-  volumes:
-    - model-cache:/models
-  networks: [internal, egress]
-  deploy:
-    resources:
-      reservations:
-        devices:
-          - driver: nvidia
-            count: all
-            capabilities: [gpu]
+    EDENAI_API_KEY: "" # klucz zna wyłącznie bramka llm-gateway
 
 services:
   # Jednorazowo stosuje migracje schematu (db/migrations) przed startem api i workera.
@@ -77,8 +60,9 @@ services:
       migrate: { condition: service_completed_successfully }
       postgres: { condition: service_healthy }
       valkey: { condition: service_healthy }
-    # Tylko sieć wewnętrzna: worker fizycznie nie ma dostępu do internetu
-    # (gwarancja zakazu zewnętrznych API/SaaS).
+      llm-gateway: { condition: service_started }
+    # Tylko sieć wewnętrzna: worker nie ma internetu ani klucza API — do modelu łączy się
+    # wyłącznie przez llm-gateway (gwarancja, że dane nie trafią nigdzie poza Eden AI).
     networks: [internal]
 
   postgres:
@@ -115,27 +99,26 @@ services:
       retries: 10
     networks: [internal]
 
-  llm:
-    <<: *vllm
-    command:
-      - --model=${LLM_MODEL:-}
-      - --served-model-name=${LLM_MODEL:-}
-      - --port=8000
-      - --gpu-memory-utilization=${LLM_GPU_MEMORY_UTILIZATION:-0.45}
-      - --max-model-len=${LLM_MAX_MODEL_LEN:-16384}
+  # Jedyne wyjście do internetu: przepuszcza wyłącznie zapytania do api.edenai.run (patrz
+  # docker/llm-gateway/default.conf.template) i dokłada klucz API.
+  llm-gateway:
+    <<: *hardening
+    image: nginxinc/nginx-unprivileged:1.31.7-alpine3.24
     environment:
-      HF_TOKEN: ${HF_TOKEN:-}
-
-  vlm:
-    <<: *vllm
-    command:
-      - --model=${VLM_MODEL:-}
-      - --served-model-name=${VLM_MODEL:-}
-      - --port=8001
-      - --gpu-memory-utilization=${VLM_GPU_MEMORY_UTILIZATION:-0.45}
-      - --max-model-len=${VLM_MAX_MODEL_LEN:-16384}
-    environment:
-      HF_TOKEN: ${HF_TOKEN:-}
+      EDENAI_API_KEY: ${EDENAI_API_KEY:-}
+      NGINX_ENVSUBST_FILTER: EDENAI_
+    volumes:
+      - ./docker/llm-gateway/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+    tmpfs:
+      - /tmp
+      # konfiguracja z kluczem powstaje w pamięci (nie w obrazie); właściciel: nginx (UID 101)
+      - /etc/nginx/conf.d:uid=101,gid=101,mode=0700
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [internal, egress]
 
   frontend:
     <<: *hardening
@@ -155,8 +138,7 @@ networks:
   internal:
     internal: true # brak wyjścia do internetu
   edge: {} # porty publikowane na hosta (api, frontend)
-  egress: {} # tylko llm/vlm: jednorazowe pobranie wag z Hugging Face
+  egress: {} # tylko llm-gateway: zapytania do api.edenai.run
 
 volumes:
   pgdata:
-  model-cache:

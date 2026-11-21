@@ -209,7 +209,9 @@ async def run_pipeline(
     template = doc_type.get("selected_template")
 
     async with run.stage("structure"):
-        client = stages.llm_client_factory()
+        # Budowa sesji sprawdza w katalogu Eden AI, czy model ma otwarte wagi (wywołanie HTTP).
+        session = await asyncio.to_thread(stages.llm_session_factory)
+        client = session.client
         structure = await llm.run_llm_stage(
             _STEP_LABEL["structure"], run_step06, payload, template=template, llm_client=client
         )
@@ -256,11 +258,17 @@ async def run_pipeline(
         issues=[*run.issues, *form_issues],
         models={
             "llm": llm.model_name(settings),
+            **(
+                {"llm_weights": session.model.hugging_face_id}
+                if session.model and session.model.hugging_face_id
+                else {}
+            ),
             "text_extractor": stages.text_extractor.name if stages.text_extractor else "brak",
             "visual": stages.visual_analyzer.name if stages.visual_analyzer else "brak",
         },
         stages=run.stages,
         dictionary_proposals=normalized.proposals,
         demo_mode=settings.llm_demo_mode,
+        usage=session.usage.as_dict() if session.usage else {},
     )
     return AnalysisResult(form=normalized.form, report=report)

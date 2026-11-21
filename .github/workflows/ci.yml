@@ -106,7 +106,19 @@ jobs:
         run: |
           cp .env.example .env
           docker compose config --quiet
-          docker compose --profile gpu --profile frontend config --quiet
+          docker compose --profile frontend config --quiet
+
+      - name: LLM gateway generates Eden AI config (non-root, read-only)
+        env:
+          EDENAI_API_KEY: ci-placeholder-key
+        run: |
+          config=$(docker compose run --rm --no-deps -T llm-gateway nginx -T)
+          if ! echo "$config" | grep -q "location = /v3/chat/completions"; then
+            echo "::error::llm-gateway nie wygenerował konfiguracji Eden AI"; exit 1
+          fi
+          if ! echo "$config" | grep -q "proxy_ssl_verify on"; then
+            echo "::error::llm-gateway bez weryfikacji TLS"; exit 1
+          fi
 
       - name: Build API and worker images
         run: docker compose build api worker
