@@ -1,5 +1,6 @@
-"""Compare Eden AI LLM extraction metrics across COI benchmark forms.
+"""Compare Eden AI open-weight LLM extraction metrics across COI benchmark forms.
 
+Evaluates Qwen3, Llama 3.3, Gemma 3, and Mistral Small via the Eden AI API client.
 Runs offline in mock mode by default so it works in CI without API keys.
 """
 
@@ -30,7 +31,12 @@ from backend.worker.pipeline.step08_dependencies import (  # noqa: E402
     validate_form_definition,
 )
 
-DEFAULT_MODELS: tuple[str, ...] = ("openai/gpt-4o-mini", "anthropic/claude-3-5-haiku")
+DEFAULT_MODELS: tuple[str, ...] = (
+    "scaleway/qwen3-235b-a22b-instruct-2507",
+    "scaleway/llama-3.3-70b-instruct",
+    "scaleway/gemma-3-27b-it",
+    "mistral/mistral-small-latest",
+)
 
 BENCHMARK_FORMS: list[dict[str, Any]] = [
     {
@@ -328,20 +334,26 @@ def compare_models(
 
 def format_comparison_table(results: list[dict[str, Any]]) -> str:
     """Format model metrics as a readable CLI table."""
+    model_col = max(32, max((len(str(row["model"])) for row in results), default=0) + 2)
+    width = model_col + 50
+    header = (
+        f"{'Model':<{model_col}}"
+        f"{'Prec':>8}{'Rec':>8}{'F1':>8}{'Schema':>9}{'DocTop1':>9}{'Meta':>8}"
+    )
     lines = [
         "=== Eden AI LLM Comparison (Steps 05-08, COI Standard) ===",
         "",
-        f"{'Model':<32}{'Prec':>8}{'Rec':>8}{'F1':>8}{'Schema':>9}{'DocTop1':>9}{'Meta':>8}",
-        "-" * 82,
+        header,
+        "-" * width,
     ]
     for row in results:
         lines.append(
-            f"{row['model']:<32}"
+            f"{row['model']:<{model_col}}"
             f"{row['precision']:>8.4f}{row['recall']:>8.4f}{row['f1']:>8.4f}"
             f"{row['schema_compliance']:>9.4f}{row['doc_type_top1_acc']:>9.4f}"
             f"{row['source_metadata_rate']:>8.4f}"
         )
-    lines.append("-" * 82)
+    lines.append("-" * width)
     return "\n".join(lines)
 
 

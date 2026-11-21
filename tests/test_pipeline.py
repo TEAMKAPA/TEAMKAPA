@@ -39,7 +39,11 @@ from backend.worker.pipeline.step08_dependencies import (  # noqa: E402
     run_step08,
     validate_form_definition,
 )
-from eval.compare_models import DEFAULT_MODELS, compare_models  # noqa: E402
+from eval.compare_models import (  # noqa: E402
+    DEFAULT_MODELS,
+    compare_models,
+    format_comparison_table,
+)
 
 SAMPLE_DOC: dict[str, Any] = {
     "title": "Wniosek o wpis do CEIDG (CEIDG-1)",
@@ -118,11 +122,12 @@ class TestLLMClientStructuredOutput:
                 return json.dumps(body).encode("utf-8")
 
         def fake_urlopen(req: urllib_request.Request, timeout: float) -> FakeHTTPResponse:
+            assert isinstance(req.data, bytes)
             captured["url"] = req.full_url
             captured["method"] = req.get_method()
             captured["auth"] = req.get_header("Authorization")
             captured["content_type"] = req.get_header("Content-type")
-            captured["body"] = json.loads((req.data or b"").decode("utf-8"))
+            captured["body"] = json.loads(req.data.decode("utf-8"))
             captured["timeout"] = timeout
             return FakeHTTPResponse()
 
@@ -459,6 +464,12 @@ class TestStep07FieldsAndStep08Dependencies:
 
 class TestModelComparison:
     def test_compare_models_offline(self) -> None:
+        assert DEFAULT_MODELS == (
+            "scaleway/qwen3-235b-a22b-instruct-2507",
+            "scaleway/llama-3.3-70b-instruct",
+            "scaleway/gemma-3-27b-it",
+            "mistral/mistral-small-latest",
+        )
         results = compare_models(offline=True)
         assert len(results) == len(DEFAULT_MODELS)
         by_model = {r["model"]: r for r in results}
@@ -468,6 +479,117 @@ class TestModelComparison:
             assert 0.0 < row["precision"] <= 1.0
             assert 0.0 < row["recall"] <= 1.0
             assert 0.0 < row["f1"] <= 1.0
+            assert row["schema_compliance"] == 1.0
+            assert row["doc_type_top1_acc"] == 1.0
+            assert row["source_metadata_rate"] == 1.0
+
+        table = format_comparison_table(results)
+        for model_name in DEFAULT_MODELS:
+            assert model_name in table
+
+    def test_compare_models_live_uses_edenai_client_mocked(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        requested_models: list[str] = []
+        requested_urls: set[str] = set()
+        requested_auth: set[str | None] = set()
+
+        class FakeHTTPResponse:
+            def __init__(self, payload: dict[str, Any]) -> None:
+                self._payload = payload
+
+            def __enter__(self) -> FakeHTTPResponse:
+                return self
+
+            def __exit__(self, *_args: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                body = {
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                "content": json.dumps(self._payload, ensure_ascii=False),
+                            }
+                        }
+                    ]
+                }
+                return json.dumps(body).encode("utf-8")
+
+        def fake_urlopen(req: urllib_request.Request, timeout: float) -> FakeHTTPResponse:
+            assert timeout > 0
+            assert isinstance(req.data, bytes)
+            requested_urls.add(req.full_url)
+            requested_auth.add(req.get_header("Authorization"))
+            body = json.loads(req.data.decode("utf-8"))
+            requested_models.append(body["model"])
+            prompt = str(body["messages"][1]["content"])
+
+            if "strukturę stron" in prompt:
+                payload: dict[str, Any] = {
+                    "title": "Wniosek testowy",
+                    "tabs": [
+                        {
+                            "title": "Dane wnioskodawcy",
+                            "type": "MAIN",
+                            "sections": [
+                                {
+                                    "title": "Twoje dane",
+                                    "techName": "twoje_dane",
+                                    "type": "SECTION",
+                                }
+                            ],
+                        },
+                        {
+                            "title": "Podsumowanie i podgląd",
+                            "type": "FINISH",
+                            "sections": [
+                                {
+                                    "title": "Podgląd",
+                                    "techName": "podsumowanie_i_podglad",
+                                    "type": "INFO_SECTION",
+                                    "description": "Sprawdź dane na podglądzie.",
+                                }
+                            ],
+                        },
+                    ],
+                }
+            elif "Wyekstrahuj pola" in prompt:
+                payload = {
+                    "fields": [
+                        {
+                            "section_tech_name": "twoje_dane",
+                            "techName": "imie",
+                            "title": "Imię",
+                            "type": "TEXT_FIELD",
+                            "validation": ["REQUIRED"],
+                            "source_text": "Imię",
+                            "page": 1,
+                            "element_id": "e1",
+                        }
+                    ]
+                }
+            else:
+                payload = {"dependencies": []}
+            return FakeHTTPResponse(payload)
+
+        monkeypatch.setattr(urllib_request, "urlopen", fake_urlopen)
+
+        results = compare_models(
+            models=DEFAULT_MODELS,
+            offline=False,
+            api_key="fake-edenai-key",
+            base_url=DEFAULT_EDENAI_BASE_URL,
+        )
+
+        assert requested_urls == {f"{DEFAULT_EDENAI_BASE_URL}/chat/completions"}
+        assert requested_auth == {"Bearer fake-edenai-key"}
+        assert set(requested_models) == set(DEFAULT_MODELS)
+        assert [row["model"] for row in results] == list(DEFAULT_MODELS)
+        for row in results:
+            assert row["precision"] == 1.0
+            assert 0.0 < row["recall"] <= 1.0
             assert row["schema_compliance"] == 1.0
             assert row["doc_type_top1_acc"] == 1.0
             assert row["source_metadata_rate"] == 1.0
