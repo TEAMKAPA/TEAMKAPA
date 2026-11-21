@@ -1,0 +1,114 @@
+{
+  "form_id": "01_wniosek_dowod",
+  "title": "Wniosek o wydanie dowodu osobistego",
+  "fields": [
+    {
+      "id": "imie",
+      "label": "Imię",
+      "type": "text",
+      "validator": null,
+      "max_length": 30,
+      "dictionary": null
+    },
+    {
+      "id": "nazwisko",
+      "label": "Nazwisko",
+      "type": "text",
+      "validator": null,
+      "max_length": 40,
+      "dictionary": null
+    },
+    {
+      "id": "pesel",
+      "label": "Numer PESEL",
+      "type": "text",
+      "validator": "pesel",
+      "max_length": 11,
+      "dictionary": null
+    },
+    {
+      "id": "data_urodzenia",
+      "label": "Data urodzenia",
+      "type": "date",
+      "validator": "date",
+      "max_length": 10,
+      "dictionary": null
+    },
+    {
+      "id": "kraj_urodzenia",
+      "label": "Kraj urodzenia",
+      "type": "dropdown",
+      "validator": null,
+      "dictionary": "Kraje"
+    },
+    {
+      "id": "wojewodztwo",
+      "label": "Województwo",
+      "type": "dropdown",
+      "validator": null,
+      "dictionary": "Województwo"
+    },
+    {
+      "id": "powiat",
+      "label": "Powiat",
+      "type": "dropdown",
+      "validator": null,
+      "dictionary": "Powiat"
+    },
+    {
+      "id": "gmina",
+      "label": "Gmina",
+      "type": "dropdown",
+      "validator": null,
+      "dictionary": "Gmina"
+    },
+    {
+      "id": "miejscowosc",
+      "label": "Miejscowość",
+      "type": "dropdown",
+      "validator": null,
+      "dictionary": "Miejscowość"
+    },
+    {
+      "id": "kod_pocztowy",
+      "label": "Kod pocztowy",
+      "type": "text",
+      "validator": "postal_code",
+      "max_length": 6,
+      "dictionary": null
+    },
+    {
+      "id": "numer_kierunkowy",
+      "label": "Numer kierunkowy",
+      "type": "dropdown",
+      "validator": null,
+      "dictionary": "Numery kierunkowe"
+    },
+    {
+      "id": "telefon",
+      "label": "Telefon kontaktowy",
+      "type": "phone",
+      "validator": "phone",
+      "max_length": 15,
+      "dictionary": null
+    },
+    {
+      "id": "email",
+      "label": "Adres e-mail",
+      "type": "email",
+      "validator": "email",
+      "max_length": 254,
+      "dictionary": null
+    },
+    {
+      "id": "powod_wniosku",
+      "label": "Powód złożenia wniosku",
+      "type": "radio",
+      "validator": null,
+      "dictionary": null
+    }
+  ],
+  "expected_dictionary_proposals": [
+    "Powód złożenia wniosku"
+  ]
+}

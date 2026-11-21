@@ -1,0 +1,69 @@
+{
+  "form_id": "03_karta_duzej_rodziny",
+  "title": "Wniosek o przyznanie Karty Dużej Rodziny",
+  "fields": [
+    {
+      "id": "wnioskodawca",
+      "label": "Imię i nazwisko wnioskodawcy",
+      "type": "text"
+    },
+    {
+      "id": "identyfikator_osobowy",
+      "label": "Numer identyfikacyjny",
+      "type": "text",
+      "box_count": 11
+    },
+    {
+      "id": "obywatelstwo",
+      "label": "Obywatelstwo",
+      "type": "text"
+    },
+    {
+      "id": "kraj_zamieszkania",
+      "label": "Kraj zamieszkania",
+      "type": "radio"
+    },
+    {
+      "id": "wojewodztwo",
+      "label": "Województwo",
+      "type": "dropdown"
+    },
+    {
+      "id": "miejscowosc",
+      "label": "Miejscowość",
+      "type": "dropdown"
+    },
+    {
+      "id": "kod_pocztowy",
+      "label": "Kod",
+      "type": "text",
+      "box_count": 5
+    },
+    {
+      "id": "prefiks_tel",
+      "label": "Numer kierunkowy telefonu",
+      "type": "radio"
+    },
+    {
+      "id": "telefon",
+      "label": "Telefon",
+      "type": "text"
+    },
+    {
+      "id": "email",
+      "label": "Poczta elektroniczna",
+      "type": "text"
+    },
+    {
+      "id": "stan_cywilny",
+      "label": "Stan cywilny",
+      "type": "dropdown",
+      "options": [
+        "Kawaler / Panna",
+        "Żonaty / Zamężna",
+        "Rozwiedziony / Rozwiedziona",
+        "Wdowiec / Wdowa"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "form_id": "03_karta_duzej_rodziny",
+  "title": "Wniosek o przyznanie Karty Dużej Rodziny",
+  "fields": [
+    {
+      "id": "wnioskodawca",
+      "label": "Imię i nazwisko wnioskodawcy",
+      "type": "text",
+      "validator": null,
+      "dictionary": null
+    },
+    {
+      "id": "identyfikator_osobowy",
+      "label": "Numer identyfikacyjny",
+      "type": "text",
+      "validator": "pesel",
+      "max_length": 11,
+      "dictionary": null
+    },
+    {
+      "id": "obywatelstwo",
+      "label": "Obywatelstwo",
+      "type": "dropdown",
+      "validator": null,
+      "dictionary": "Kraje"
+    },
+    {
+      "id": "kraj_zamieszkania",
+      "label": "Kraj zamieszkania",
+      "type": "dropdown",
+      "validator": null,
+      "dictionary": "Kraje"
+    },
+    {
+      "id": "wojewodztwo",
+      "label": "Województwo",
+      "type": "dropdown",
+      "validator": null,
+      "dictionary": "Województwo"
+    },
+    {
+      "id": "miejscowosc",
+      "label": "Miejscowość",
+      "type": "dropdown",
+      "validator": null,
+      "dictionary": "Miejscowość"
+    },
+    {
+      "id": "kod_pocztowy",
+      "label": "Kod",
+      "type": "text",
+      "validator": "postal_code",
+      "max_length": 6,
+      "dictionary": null
+    },
+    {
+      "id": "prefiks_tel",
+      "label": "Numer kierunkowy telefonu",
+      "type": "radio",
+      "validator": null,
+      "dictionary": "Numery kierunkowe"
+    },
+    {
+      "id": "telefon",
+      "label": "Telefon",
+      "type": "phone",
+      "validator": "phone",
+      "max_length": 15,
+      "dictionary": null
+    },
+    {
+      "id": "email",
+      "label": "Poczta elektroniczna",
+      "type": "email",
+      "validator": "email",
+      "max_length": 254,
+      "dictionary": null
+    },
+    {
+      "id": "stan_cywilny",
+      "label": "Stan cywilny",
+      "type": "dropdown",
+      "validator": null,
+      "dictionary": null
+    }
+  ],
+  "expected_dictionary_proposals": [
+    "Stan cywilny"
+  ]
+}

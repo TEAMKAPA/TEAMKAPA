@@ -1,0 +1,92 @@
+{
+  "form_id": "02_ceidg_firma",
+  "title": "Wniosek o wpis do CEIDG",
+  "fields": [
+    {
+      "id": "nazwa_firmy",
+      "label": "Nazwa firmy",
+      "type": "text",
+      "validator": null,
+      "dictionary": null
+    },
+    {
+      "id": "nip",
+      "label": "NIP",
+      "type": "text",
+      "validator": "nip",
+      "max_length": 10,
+      "dictionary": null
+    },
+    {
+      "id": "regon",
+      "label": "Numer REGON",
+      "type": "text",
+      "validator": "regon",
+      "max_length": 9,
+      "dictionary": null
+    },
+    {
+      "id": "data_rozpoczecia",
+      "label": "Data rozpoczęcia działalności",
+      "type": "date",
+      "validator": "date",
+      "max_length": 10,
+      "dictionary": null
+    },
+    {
+      "id": "wojewodztwo",
+      "label": "Województwo siedziby",
+      "type": "dropdown",
+      "validator": null,
+      "dictionary": "Województwo"
+    },
+    {
+      "id": "gmina",
+      "label": "Gmina siedziby",
+      "type": "dropdown",
+      "validator": null,
+      "dictionary": "Gmina"
+    },
+    {
+      "id": "miasto",
+      "label": "Miasto",
+      "type": "dropdown",
+      "validator": null,
+      "dictionary": "Miejscowość"
+    },
+    {
+      "id": "kod_pocztowy",
+      "label": "Kod pocztowy siedziby",
+      "type": "text",
+      "validator": "postal_code",
+      "max_length": 6,
+      "dictionary": null
+    },
+    {
+      "id": "telefon_sluzbowy",
+      "label": "Telefon służbowy",
+      "type": "phone",
+      "validator": "phone",
+      "max_length": 15,
+      "dictionary": null
+    },
+    {
+      "id": "email_firmowy",
+      "label": "E-mail firmowy",
+      "type": "email",
+      "validator": "email",
+      "max_length": 254,
+      "dictionary": null
+    },
+    {
+      "id": "forma_opodatkowania",
+      "label": "Forma opodatkowania",
+      "type": "dropdown",
+      "validator": null,
+      "dictionary": null
+    }
+  ],
+  "expected_dictionary_proposals": [
+    "Forma opodatkowania"
+  ]
+}
