@@ -1,3 +1,11 @@
+# Secrets & credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -20,7 +28,6 @@ eggs/
 htmlcov/
 .tox/
 .nox/
-*.log
 
 # Virtual environments
 .venv/
@@ -28,31 +35,21 @@ venv/
 env/
 ENV/
 
-# Environment files
-.env
-.env.*
-!.env.example
-
-# IDE & OS
-.vscode/
-.idea/
-*.iml
-*.swp
-*.swo
-*~
-.DS_Store
-Thumbs.db
+# Frontend / Node
+node_modules/
+frontend/dist/
+.vite/
 
 # Local model weights & caches
 models/
 weights/
 checkpoints/
+*.gguf
+*.safetensors
+*.bin
 *.pt
 *.pth
 *.onnx
-*.bin
-*.safetensors
-*.gguf
 *.ckpt
 *.h5
 *.keras
@@ -61,7 +58,17 @@ checkpoints/
 .cache/
 huggingface/
 
-# Frontend / Node
-node_modules/
-frontend/dist/
-.vite/
+# Temporary files, logs, IDE & OS
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+tmp/
+.vscode/
+.idea/
+*.iml
+.DS_Store
+Thumbs.db

@@ -1,19 +1,33 @@
-.git
+# VCS & secrets
+.git/
 .gitignore
 .dockerignore
-.venv
-venv
-__pycache__
-*.py[cod]
-.pytest_cache
-.mypy_cache
-.ruff_cache
-docs/
-tests/
 .env
 .env.*
+*.pem
+*.key
+secrets/
+
+# Local environments & caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+node_modules/
+dist/
+frontend/dist/
+
+# Non-runtime project directories
+docs/
+tests/
+eval/
+output_jsons/
+
+# Local IDE & OS files
 .vscode/
 .idea/
 .DS_Store
-node_modules/
-frontend/dist/
+Thumbs.db

@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  secrets-scan:
+    name: Secret Scan (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Gitleaks
+        run: |
+          GITLEAKS_VERSION="8.21.2"
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Run Gitleaks scan
+        run: gitleaks detect --source . --redact --verbose
+
+  lint:
+    name: Lint (Ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ruff
+        run: python -m pip install --upgrade pip ruff
+
+      - name: Run Ruff check
+        run: ruff check .
+
+      - name: Run Ruff format check
+        run: ruff format --check .
+
+  license-check:
+    name: License Compliance (pip-licenses)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check Python dependency licenses
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          REQ_FILES=()
+          for req in backend/api/requirements.txt backend/worker/requirements.txt; do
+            if [ -f "$req" ] && grep -qE '^[[:space:]]*[^#[:space:]]' "$req"; then
+              REQ_FILES+=("$req")
+            fi
+          done
+
+          if [ "${#REQ_FILES[@]}" -eq 0 ]; then
+            echo "All requirements.txt files are empty — skipping license check."
+            exit 0
+          fi
+
+          python -m pip install --upgrade pip pip-licenses
+
+          python -m venv /tmp/license-audit-venv
+          /tmp/license-audit-venv/bin/python -m pip install --upgrade pip
+          for req in "${REQ_FILES[@]}"; do
+            echo "Installing dependencies from $req..."
+            /tmp/license-audit-venv/bin/pip install -r "$req"
+          done
+
+          pip-licenses \
+            --python=/tmp/license-audit-venv/bin/python \
+            --from=mixed \
+            --ignore-packages pip setuptools wheel \
+            --format=markdown
+
+          pip-licenses \
+            --python=/tmp/license-audit-venv/bin/python \
+            --from=mixed \
+            --ignore-packages pip setuptools wheel \
+            --format=json \
+            --output-file=/tmp/licenses.json
+
+          python - <<'PY'
+          import json
+          import re
+          import sys
+
+          FORBIDDEN_RE = re.compile(r"(agpl|lgpl|gpl)", re.IGNORECASE)
+
+          with open("/tmp/licenses.json", encoding="utf-8") as fh:
+              packages = json.load(fh)
+
+          violations = [
+              pkg for pkg in packages
+              if FORBIDDEN_RE.search(pkg.get("License", "") or "")
+          ]
+
+          if violations:
+              print("::error::Forbidden copyleft licenses (GPL/AGPL/LGPL) detected:")
+              for pkg in violations:
+                  print(f" - {pkg['Name']}=={pkg['Version']}: {pkg['License']}")
+              sys.exit(1)
+
+          print("License check passed: no GPL/AGPL/LGPL dependencies detected.")
+          PY
