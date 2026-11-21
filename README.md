@@ -70,6 +70,9 @@ curl -H "Authorization: Bearer $TOKEN" -F "file=@wniosek.pdf"      http://localh
 Wywołania LLM korzystają z Eden AI API (`EDENAI_API_KEY`, `EDENAI_BASE_URL`, `LLM_MODEL`).
 Bez klucza API można uruchomić tryb demonstracyjny (`LLM_DEMO_MODE=true`) — wynik jest jawnie
 oznaczony w raporcie (`demo_mode`) i ma pewność LOW.
+Porównanie otwartych modeli w Eden AI (Qwen3, Llama 3.3, Gemma 3, Mistral Small) realizuje skrypt
+`python eval/compare_models.py` (domyślnie offline w trybie mock; `--live` z ustawionym
+`EDENAI_API_KEY`).
 
 API przy starcie waliduje konfigurację i kończy działanie z czytelnym błędem, jeśli np.
 `JWT_SECRET_KEY` jest pusty, krótszy niż 32 znaki lub ma wartość przykładową z `.env.example`.
