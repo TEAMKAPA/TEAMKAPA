@@ -6,8 +6,12 @@ pewności — urzędnik sprawdza tylko pola niepewne. Modele językowe to wyłą
 z otwartymi wagami, wołane przez API Eden AI (patrz [Modele językowe](#modele-językowe)).
 
 > Stan: infrastruktura (#14), modele COI (#17), REST API (#13), kolejka z bazą (#15), ekstrakcja
-> tekstu (#7) i integracja pipeline'u (#16) z etapami 05–09 (#6, #8) gotowe. Kanał wizualny
-> (#10/#11) w trakcie — do tego czasu pola mają pewność najwyżej MEDIUM.
+> tekstu (#7), integracja pipeline'u (#16) z etapami 05–09 (#6, #8), frontend urzędnika (#2, #3)
+> oraz dokumentacja demonstracyjna (#4) gotowe. Kanał wizualny (#10/#11) w trakcie — do tego czasu
+> pola mają pewność najwyżej MEDIUM.
+>
+> Pełny opis architektury, wyników ewaluacji, ograniczeń i scenariusz prezentacji:
+> [`docs/architektura-i-demonstracja.md`](docs/architektura-i-demonstracja.md).
 
 ## Architektura uruchomieniowa
 
@@ -230,6 +234,27 @@ niedostępny serwer modelu → ponowienie; awaria kanału wizualnego → analiza
 
 **Podłączenie nowego etapu** (#7, #10/#11): zaimplementuj protokół z `contracts.py`
 i zwróć implementację w `stages.default_stages()`.
+
+## Frontend (Panel urzędnika)
+
+Interfejs React + TypeScript + Vite (`frontend/`) umożliwia przesyłanie pojedynczych blankietów
+i paczek batch, śledzenie postępu analizy, podgląd strony z nakładką `bbox`, filtrowanie i edycję
+niepewnych pól, podgląd raportu jakości, interaktywne testowanie formularza (JSONata + Zod) oraz
+zatwierdzanie i pobieranie czystego JSON COI.
+
+- **Przez Docker Compose** (nginx z proxy `/api/` na `api:8000`):
+  `docker compose --profile frontend up -d --build` → `http://localhost:8080`
+- **Lokalnie (development, Node 24+):**
+  ```bash
+  cd frontend
+  npm install
+  npm run dev        # http://localhost:5173 (proxy /api -> http://localhost:8000)
+  npm run typecheck  # tsc --noEmit
+  npm test           # Vitest + Testing Library
+  npm run build      # produkcyjny build do frontend/dist
+  ```
+- **Tryb Demo (offline):** przycisk „Załaduj przykład demo” działa także bez uruchomionego backendu
+  i prezentuje pełny 2-stronicowy blankiet z nakładką `bbox`, raportem jakości i zatwierdzaniem.
 
 ## Development
 
