@@ -33,4 +33,5 @@ USER 10001:10001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
     CMD ["arq", "backend.worker.worker.WorkerSettings", "--check"]
 
-CMD ["arq", "backend.worker.worker.WorkerSettings"]
+# Własna konfiguracja logów: arq nie loguje argumentów zadań (nazwy plików, użytkownik).
+CMD ["arq", "backend.worker.worker.WorkerSettings", "--custom-log-dict", "backend.worker.logging_config.LOG_CONFIG"]

@@ -35,9 +35,40 @@ jobs:
   lint:
     name: Lint, types & tests
     runs-on: ubuntu-latest
+    services:
+      valkey:
+        image: valkey/valkey:9.0.8-alpine3.24
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 15
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg18-trixie
+        env:
+          POSTGRES_USER: coi
+          POSTGRES_PASSWORD: test-only-password
+          POSTGRES_DB: coi_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U coi -d coi_test"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 30
+    env:
+      # W CI testy z libmagic, Valkey i PostgreSQL są wymagane, a nie pomijane.
+      REQUIRE_LIBMAGIC: "1"
+      VALKEY_TEST_URL: redis://localhost:6379/15
+      POSTGRES_TEST_URL: postgresql://coi:test-only-password@localhost:5432/coi_test
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Install libmagic
+        run: sudo apt-get update && sudo apt-get install -y libmagic1
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -82,7 +113,7 @@ jobs:
 
       - name: Images run as non-root user
         run: |
-          for image in teamkapa/api:0.1.0 teamkapa/worker:0.1.0; do
+          for image in teamkapa/api:0.3.0 teamkapa/worker:0.3.0; do
             uid=$(docker run --rm --entrypoint id "$image" -u)
             echo "$image runs as UID $uid"
             if [ "$uid" = "0" ]; then echo "::error::$image runs as root"; exit 1; fi
@@ -90,7 +121,7 @@ jobs:
 
       - name: Images contain no secrets or .env
         run: |
-          for image in teamkapa/api:0.1.0 teamkapa/worker:0.1.0; do
+          for image in teamkapa/api:0.3.0 teamkapa/worker:0.3.0; do
             if docker run --rm --entrypoint sh "$image" -c 'find / -xdev -name ".env" 2>/dev/null | grep -q .'; then
               echo "::error::$image contains a .env file"; exit 1
             fi

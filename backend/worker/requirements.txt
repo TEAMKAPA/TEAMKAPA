@@ -1,8 +1,10 @@
 # Zależności runtime obrazu workera. Wersje przypięte; licencje sprawdza CI (pip-licenses).
 # Wyłącznie licencje permisywne (MIT / Apache-2.0 / BSD / MIT-CMU), zero copyleftu i zero LibreOffice.
 arq==0.28.0                        # MIT
+msgpack==1.2.4                     # Apache-2.0 — serializacja zadań zamiast pickle
 pydantic==2.14.4                   # MIT
 pydantic-settings==2.16.3          # MIT
+asyncpg==0.32.0                    # Apache-2.0 — PostgreSQL (psycopg odpada: LGPL)
 
 # Ekstrakcja dokumentów i przetwarzanie obrazów.
 # Dla ODF użyto odfdo (Apache-2.0) zamiast odfpy (odfpy 1.4.1 zawiera kod LGPL-2.1+/GPL-2.0+ i blokuje CI).

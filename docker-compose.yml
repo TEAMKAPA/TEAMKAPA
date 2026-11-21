@@ -1,6 +1,6 @@
 # COI Cyfryzacja formularzy — środowisko uruchomieniowe.
 #
-#   docker compose up -d --build                    # api, worker, postgres, valkey
+#   docker compose up -d --build                    # api, worker, postgres, valkey (+ migrate)
 #   docker compose --profile gpu up -d --build      # + llm i vlm (vLLM, wymaga GPU NVIDIA)
 #   docker compose --profile frontend up -d --build # + frontend
 #
@@ -39,17 +39,28 @@ x-vllm: &vllm
             capabilities: [gpu]
 
 services:
+  # Jednorazowo stosuje migracje schematu (db/migrations) przed startem api i workera.
+  migrate:
+    <<: [*hardening, *app-env]
+    image: teamkapa/api:0.3.0
+    command: ["python", "-m", "backend.shared.db.migrate"]
+    restart: "no"
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [internal]
+
   api:
     <<: [*hardening, *app-env]
     build:
       context: .
       dockerfile: backend/api/Dockerfile
-    image: teamkapa/api:0.1.0
+    image: teamkapa/api:0.3.0
     ports:
       - "${API_PORT:-8000}:8000"
     tmpfs:
       - /tmp:size=${TMPFS_SIZE:-512m},mode=1777
     depends_on:
+      migrate: { condition: service_completed_successfully }
       postgres: { condition: service_healthy }
       valkey: { condition: service_healthy }
     networks: [internal, edge]
@@ -59,10 +70,11 @@ services:
     build:
       context: .
       dockerfile: backend/worker/Dockerfile
-    image: teamkapa/worker:0.1.0
+    image: teamkapa/worker:0.3.0
     tmpfs:
       - /tmp:size=${TMPFS_SIZE:-512m},mode=1777
     depends_on:
+      migrate: { condition: service_completed_successfully }
       postgres: { condition: service_healthy }
       valkey: { condition: service_healthy }
     # Tylko sieć wewnętrzna: worker fizycznie nie ma dostępu do internetu

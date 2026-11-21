@@ -33,11 +33,14 @@ packages = ["backend"]
 [[tool.mypy.overrides]]
 module = [
     "arq.*",
+    "asyncpg.*",
     "cv2",
     "cv2.*",
     "docling",
     "docling.*",
     "docling_core.*",
+    "magic.*",
+    "msgpack.*",
     "odfdo",
     "odfdo.*",
     "olefile",
@@ -53,3 +56,7 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-ra --strict-markers"
+filterwarnings = [
+    # arq wewnętrznie woła przestarzałe redis.close() przy zamykaniu workera
+    "ignore:Call to deprecated close:DeprecationWarning",
+]

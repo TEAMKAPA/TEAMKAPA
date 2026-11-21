@@ -1,0 +1,86 @@
+{
+  "form_id": "01_wniosek_dowod",
+  "title": "Wniosek o wydanie dowodu osobistego",
+  "fields": [
+    {
+      "id": "imie",
+      "label": "Imię",
+      "type": "text",
+      "box_count": 30
+    },
+    {
+      "id": "nazwisko",
+      "label": "Nazwisko",
+      "type": "text",
+      "box_count": 40
+    },
+    {
+      "id": "pesel",
+      "label": "Numer PESEL",
+      "type": "number",
+      "box_count": 11
+    },
+    {
+      "id": "data_urodzenia",
+      "label": "Data urodzenia",
+      "type": "text"
+    },
+    {
+      "id": "kraj_urodzenia",
+      "label": "Kraj urodzenia",
+      "type": "text"
+    },
+    {
+      "id": "wojewodztwo",
+      "label": "Województwo",
+      "type": "radio"
+    },
+    {
+      "id": "powiat",
+      "label": "Powiat",
+      "type": "text"
+    },
+    {
+      "id": "gmina",
+      "label": "Gmina",
+      "type": "dropdown"
+    },
+    {
+      "id": "miejscowosc",
+      "label": "Miejscowość",
+      "type": "text"
+    },
+    {
+      "id": "kod_pocztowy",
+      "label": "Kod pocztowy",
+      "type": "number",
+      "box_count": 5
+    },
+    {
+      "id": "numer_kierunkowy",
+      "label": "Numer kierunkowy",
+      "type": "text"
+    },
+    {
+      "id": "telefon",
+      "label": "Telefon kontaktowy",
+      "type": "text"
+    },
+    {
+      "id": "email",
+      "label": "Adres e-mail",
+      "type": "text"
+    },
+    {
+      "id": "powod_wniosku",
+      "label": "Powód złożenia wniosku",
+      "type": "radio",
+      "options": [
+        "Pierwszy dowód",
+        "Zmiana danych",
+        "Upływ terminu ważności",
+        "Utrata lub uszkodzenie"
+      ]
+    }
+  ]
+}
