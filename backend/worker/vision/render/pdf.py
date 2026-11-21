@@ -13,7 +13,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 
 import numpy as np
-import pypdfium2 as pdfium  # type: ignore[import-untyped]
+import pypdfium2 as pdfium
 
 from backend.shared.schemas.quality import Severity
 from backend.worker.vision.config import RenderConfig
