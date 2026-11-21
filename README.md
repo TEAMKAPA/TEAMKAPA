@@ -68,8 +68,8 @@ TOKEN=$(docker compose exec -T api python -m backend.api.token_cli --sub urzedni
 curl -H "Authorization: Bearer $TOKEN" -F "file=@wniosek.pdf"      http://localhost:8000/api/v1/forms/analyze
 ```
 
-Bez GPU można wskazać dowolny lokalny serwer zgodny z API OpenAI (np. Ollama, llama.cpp)
-przez `LLM_BASE_URL` / `VLM_BASE_URL` — kontrakt klienta jest ten sam.
+Wywołania LLM korzystają z Eden AI API (`EDENAI_API_KEY`, `EDENAI_BASE_URL`, `LLM_MODEL`).
+Bez klucza API można uruchomić tryb demonstracyjny (`LLM_DEMO_MODE=true`).
 
 API przy starcie waliduje konfigurację i kończy działanie z czytelnym błędem, jeśli np.
 `JWT_SECRET_KEY` jest pusty, krótszy niż 32 znaki lub ma wartość przykładową z `.env.example`.
@@ -101,10 +101,11 @@ Sekret można też podać jako Docker secret — plik `/run/secrets/<nazwa_zmien
 | `DB_POOL_MAX_SIZE` | `5` | Maksymalna liczba połączeń z bazą na proces. |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | — (wymagane) | Dane bazy; z nich compose składa `DATABASE_URL`. |
 | `VALKEY_URL` | `redis://valkey:6379/0` | Adres kolejki. |
-| `LLM_BASE_URL` / `LLM_MODEL` | `http://llm:8000/v1` / — | Serwer i nazwa lokalnego LLM tekstowego. |
-| `VLM_BASE_URL` / `VLM_MODEL` | `http://vlm:8001/v1` / — | Serwer i nazwa lokalnego modelu wizyjnego. |
-| `LLM_GPU_MEMORY_UTILIZATION` / `VLM_GPU_MEMORY_UTILIZATION` | `0.45` | Ułamek pamięci GPU na model (suma < 1 na jednej karcie). |
-| `LLM_API_FORMAT` | `openai` | `openai` (vLLM, llama.cpp) albo `ollama`. |
+| `EDENAI_API_KEY` | — (wymagany poza demo) | Klucz API Eden AI. |
+| `EDENAI_BASE_URL` | `https://api.edenai.run/v3` | Bazowy adres Eden AI API (chat completions). |
+| `LLM_MODEL` | — | Identyfikator modelu w Eden AI (`provider/model`, np. `openai/gpt-4o-mini`). |
+| `VLM_BASE_URL` / `VLM_MODEL` | `http://vlm:8001/v1` / — | Serwer i nazwa modelu wizyjnego. |
+| `VLM_GPU_MEMORY_UTILIZATION` | `0.45` | Ułamek pamięci GPU na model VLM. |
 | `LLM_TIMEOUT_SECONDS` | `300` | Limit czasu jednego wywołania modelu (generowanie JSON-a). |
 | `LLM_DEMO_MODE` | `false` | Tryb demonstracyjny bez modelu: deterministyczne odpowiedzi etapów 06–08; raport ma `demo_mode: true`, wszystkie pola pewność LOW — nie do importu. |
 | `HF_TOKEN` | puste | Tylko gdy model na Hugging Face wymaga akceptacji licencji. |

@@ -10,6 +10,16 @@ def test_defaults_match_documentation() -> None:
     assert settings.max_file_size_bytes == 20 * 1024 * 1024
     assert settings.accuracy_mode == "max"
     assert settings.render_dpi == 200
+    assert settings.edenai_base_url == "https://api.edenai.run/v3"
+    assert settings.edenai_api_key is None
+
+
+def test_edenai_api_key_is_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("EDENAI_API_KEY", "fake-edenai-token")
+    settings = Settings()
+    assert settings.edenai_api_key is not None
+    assert settings.edenai_api_key.get_secret_value() == "fake-edenai-token"
+    assert "fake-edenai-token" not in repr(settings)
 
 
 def test_valid_api_settings() -> None:

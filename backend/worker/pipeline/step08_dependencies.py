@@ -286,7 +286,7 @@ def run_step08(
     llm_output = client.generate_structured(
         prompt,
         DEPENDENCIES_SCHEMA,
-        mock_response_fn=lambda _family: _build_mock_dependencies(form),
+        mock_response_fn=lambda _model: _build_mock_dependencies(form),
     )
 
     for dep in llm_output["dependencies"]:
