@@ -86,14 +86,14 @@ class TestLLMClientStructuredOutput:
     def test_edenai_defaults_and_env_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("EDENAI_API_KEY", "test-edenai-secret")
         monkeypatch.setenv("EDENAI_BASE_URL", "https://api.eu.edenai.run/v3")
-        monkeypatch.setenv("LLM_MODEL", "anthropic/claude-3-5-haiku")
+        monkeypatch.setenv("LLM_MODEL", "scaleway/llama-3.3-70b-instruct")
         monkeypatch.setenv("LLM_TIMEOUT_SECONDS", "45")
         monkeypatch.setenv("LLM_DEMO_MODE", "false")
 
         client = LLMClient()
         assert client.config.api_key == "test-edenai-secret"
         assert client.config.base_url == "https://api.eu.edenai.run/v3"
-        assert client.config.model == "anthropic/claude-3-5-haiku"
+        assert client.config.model == "scaleway/llama-3.3-70b-instruct"
         assert client.config.timeout_seconds == 45.0
         assert client.config.offline is False
         assert "test-edenai-secret" not in repr(client.config)
@@ -186,7 +186,11 @@ class TestLLMClientStructuredOutput:
             return responses[attempt]
 
         client = LLMClient(
-            LLMConfig(model="openai/gpt-4o-mini", max_retries=2, offline=False),
+            LLMConfig(
+                model="scaleway/qwen3-235b-a22b-instruct-2507",
+                max_retries=2,
+                offline=False,
+            ),
             transport=fake_transport,
         )
         result = client.generate_structured("Podaj dane", schema)
@@ -207,7 +211,7 @@ class TestLLMClientStructuredOutput:
             return json.dumps({"status": "WRONG"})
 
         client = LLMClient(
-            LLMConfig(model="anthropic/claude-3-5-haiku", max_retries=1, offline=False),
+            LLMConfig(model="mistral/mistral-small-latest", max_retries=1, offline=False),
             transport=bad_transport,
         )
         with pytest.raises(StructuredOutputError, match="failed schema validation"):
