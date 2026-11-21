@@ -21,7 +21,8 @@ Dokument nie zawiera treści formularzy COI. Liczby dotyczące materiałów są 
 10. [Konfiguracja i limity](#konfiguracja-i-limity)
 11. [Bezpieczeństwo](#bezpieczeństwo)
 12. [Testy](#testy)
-13. [Znane ograniczenia](#znane-ograniczenia)
+13. [Zbiór oznaczeń i ewaluacja (#12)](#zbiór-oznaczeń-i-ewaluacja-12)
+14. [Znane ograniczenia](#znane-ograniczenia)
 
 ## Punkt wejścia
 
@@ -352,6 +353,25 @@ a kreski tekstu mają 1–3 px), nie z różnic geometrii.
 | PDF | 11 | 65 | 7,7 s | 1,1 s |
 | PNG | 9 | 33 | 7,8 s | 2,1 s |
 | JPEG | 18 | 66 | 15,8 s | 2,2 s |
+
+## Zbiór oznaczeń i ewaluacja (#12)
+
+Narzędzia i zasady: `eval/visual/README.md` (pochodzenie zbioru, podział, metryki, ochrona
+`holdout`) i `eval/visual/LABELING.md` (konwencje oznaczania). Materiały COI, obrazy stron, etykiety
+i pełne raporty są wyłącznie w `dane/`.
+
+**Stan na 2026-11-22:**
+
+- Podział po dokumentach zarejestrowany przed Etapem C: `dev` = f02, f05, f07, f09; `holdout` = f01,
+  f03, f04, f06, f08. Nie jest zamrożony; manifest pozostaje roboczy.
+- **Oznaczone są 2 strony `dev` z pilota** (`f02-p01`, `f07-p01`): 65 elementów, 8 stron oceny
+  razem z wariantami PNG, JPG i JPEG. Pozostałe 34 zestawy etykiet są odłożone (prawdopodobny powrót
+  z pre-etykietami z warstwy wektorowej PDF). `holdout` jest nietknięty.
+- Bazy (`baseline.json`) nie ma, bo wymaga pełnego pokrycia części. **Wyniki na tym zbiorze są
+  wyłącznie wstępnym pomiarem**, bez skanów i z dwóch rodzajów wniosku.
+- Kontrola miernika na stronach pilota: etykiety podane jako predykcje dają P = R = 1, także po
+  przesunięciu o 1–2 px; przesunięcie o pół szerokości elementu daje 0, a usunięcie co 10. elementu
+  R = 0,92. Ciasność ramek pilota: 95% krawędzi ramek najwyżej 1 px od linii w obrazie.
 
 ## Znane ograniczenia
 

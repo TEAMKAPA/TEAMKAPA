@@ -31,13 +31,16 @@ from eval.visual.models import (
     ManifestPage,
     ManifestVariant,
     PageLabels,
+    PagePredictions,
     RoleOrigin,
     Split,
     SplitDefinition,
+    System,
     coi_doc_id,
     dump_json,
     dump_public_manifest,
     label_id_for,
+    predictions_file_name,
     read_json,
     write_text,
 )
@@ -501,3 +504,46 @@ def test_manifest_rejects_shared_files_and_duplicate_documents() -> None:
         _manifest([_document(), other])
     with pytest.raises(ValidationError, match="doc_id"):
         _manifest([_document(), _document()])
+
+
+def _predictions(elements: list[dict[str, Any]], **overrides: Any) -> PagePredictions:
+    data: dict[str, Any] = {
+        "schema_version": "teamkapa.vision.predictions/1",
+        "system": System.OPENCV,
+        "file_id": "f02-pdf",
+        "page": 1,
+        "width_px": 1654,
+        "height_px": 2339,
+        "elements": elements,
+    }
+    data.update(overrides)
+    return PagePredictions.model_validate(data)
+
+
+def _pred_element(id_: str, kind: ElementKind, **overrides: Any) -> dict[str, Any]:
+    page = int(id_.split("-")[1][1:])
+    data: dict[str, Any] = {
+        "id": id_,
+        "page": page,
+        "kind": kind,
+        "bbox": BOX,
+        "source": ElementSource.OPENCV,
+        "confidence": 0.8,
+    }
+    data.update(overrides)
+    return data
+
+
+def test_page_predictions() -> None:
+    group = _pred_element(
+        "cv-p1-003", ElementKind.CHECKBOX_GROUP, options=("cv-p1-001", "cv-p1-002"), multi=None
+    )
+    checks = [_pred_element(f"cv-p1-00{i}", ElementKind.CHECKBOX) for i in (1, 2)]
+    assert len(_predictions([*checks, group]).elements) == 3
+    assert predictions_file_name("f05-png", 1) == "f05-png-p01.json"
+    with pytest.raises(ValidationError, match="powtórzone"):
+        _predictions([checks[0], checks[0]])
+    with pytest.raises(ValidationError, match="innej strony"):
+        _predictions([_pred_element("cv-p2-001", ElementKind.CHECKBOX)])
+    with pytest.raises(ValidationError, match="checkboxy"):
+        _predictions([checks[0], group])

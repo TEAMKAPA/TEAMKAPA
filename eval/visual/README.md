@@ -13,6 +13,8 @@ więc trafiają do niego tylko kod, manifest bez ścieżek i liczby zbiorcze.
 | `geometry.py` | hash pikseli strony, zgodność geometrii wariantów formatu |
 | `ls.py`, `labelstudio/config.xml`, `labelstudio/ls.env` | przypięta wersja Label Studio, konfiguracja oznaczania, ustawienia serwera |
 | `convert_ls.py`, `preview.py` | eksport Label Studio → etykiety stron, kontrola zgodności z `LABELING.md`, nakładki |
+| `match.py`, `metrics.py`, `report.py`, `run.py` | dopasowanie, metryki, raport, ewaluacja z bazą i ochroną `holdout` |
+| `selfcheck.py` | kontrola miernika na oznaczonych stronach `dev` (etykiety jako predykcje z zaburzeniami) |
 | `LABELING.md` | konwencje oznaczania (kategorie, ramki, role, przypadki graniczne) |
 
 ## Pochodzenie zbioru
@@ -208,6 +210,20 @@ Wynik w `dane/robocze/labels/` (poza repozytorium):
    72 s na element, 95% krawędzi ramek najwyżej 1 px od linii. Konwerter wykrył status `empty`
    na oznaczonej stronie, literówkę w `cells` i przypadkowe kliknięcie; reguły dodane do `LABELING.md`.
 
+## Stan oznaczania (decyzja z 2026-11-22)
+
+**Oznaczone są tylko 2 strony `dev` z pilota (`f02-p01`, `f07-p01`; 65 elementów, 8 stron oceny
+z wariantami formatu). Dalsze oznaczanie jest odłożone.** Wrócimy do niego, prawdopodobnie z
+pre-etykietami z warstwy wektorowej PDF (do poprawy przez człowieka), co zmieni zasadę „bez
+pre-anotacji” i wymaga osobnej decyzji. Do tego czasu:
+
+- podział nie jest zamrożony, a manifest (`dane/robocze/b/`) pozostaje roboczy (B.6 odłożony),
+- nie powstaje baza (`baseline.json`): `run.py --write-baseline` wymaga pełnego pokrycia części,
+- `holdout` jest nietknięty: nie ma etykiet, podglądów ani obliczeń,
+- każdy wynik na tym zbiorze jest **wyłącznie wstępnym pomiarem** (raport oznacza niepełne pokrycie).
+
+Kolejność i szacunek poniżej dotyczą wznowienia oznaczania.
+
 ## Kolejność oznaczania i szacunek czasu
 
 Kolejka w `tasks.json`: pilot (`f02-p01`, `f07-p01`), cały `holdout` (od dokumentów z najmniejszą
@@ -221,8 +237,41 @@ Szacunek przed pilotem: około 7,3 h oznaczania (38 s na element). Pilot zmierzy
 (~650–750 elementów po 50–72 s), czyli 7–10 sesji po ≤ 90 min, plus ~1 h kontroli nakładek.
 Szacunek przeliczam po `holdout`. Zmęczenie pogarsza dokładność ramek, więc sesje krótkie.
 
+## Metryki i ewaluacja
+
+```powershell
+.venv\Scripts\python.exe -m eval.visual.run --system opencv --predictions <katalog>
+.venv\Scripts\python.exe -m eval.visual.selfcheck
+```
+
+- **Predykcje:** plik `<file_id>-p<NN>.json` (`teamkapa.vision.predictions/1`: system, strona,
+  rozmiar, lista `VisualElement` z kontraktu 7.5) dla każdej ocenianej strony pliku, czyli każdego
+  włączonego wariantu oznaczonego zestawu. Brak pliku, plik strony spoza manifestu, inny system albo
+  rozmiar to błąd (kod 2), a nie pominięcie. Pliki stron nieocenianych są pomijane i liczone w raporcie.
+- **Dopasowanie** w obrębie kategorii: zachłanne po malejącym IoU, IoU ≥ 0,5 (raport także dla 0,3
+  i 0,7), remis rozstrzygają ID. Cienkie linie (`text_line`, `dotted_line`, poziome `signature`
+  i `office_only`) rozszerzane pionowo do 1% wysokości strony. `checkbox_group` po składzie
+  (Jaccard członków ≥ 0,5), a bez członków po IoU. Etykiety `uncertain` są „trudne”.
+- **Metryki:** P, R, F1 per kategoria, mikro i makro, 95% przedziały Wilsona; przekroje per format
+  (PDF, obraz będący wariantem strony PDF, obraz z własnymi etykietami, czyli skany) i per dokument,
+  makro-F1 po dokumentach; macierz pomyłek kategorii (dopasowanie bez względu na kategorię);
+  liczba kratek (zgodność, MAE), role (trafność, macierz pomyłek), `multi` grup.
+- **Pola i ablacja** (`metrics.ablation`): P/R miejsc pól z wyniku pipeline'u z kanałem wizualnym
+  i bez niego. Polem jest element z rolą `input`, `choice` albo `e_signature`, a grupa wyboru to jedno
+  pole. W Etapie B tylko mechanizm i testy; liczby w Etapach D i E.
+- **Ochrona `holdout`:** domyślnie `--split dev`. `holdout` wymaga `--split holdout --final`, a każde
+  uruchomienie trafia do `dane/robocze/eval/holdout_runs.log` (data, commit, system, katalog). Przy
+  `dev` skrypt nie otwiera etykiet ani predykcji `holdout`.
+- **Baza:** `--write-baseline <plik>` (tylko przy pełnym pokryciu części), `--baseline <plik>` porównuje
+  mikro-P/R/F1 i F1 per kategoria z tolerancją (domyślnie 0,02) i zwraca kod 1 przy regresji.
+- **Raport:** `dane/robocze/eval/<split>-<system>.{json,md}` z sekcją „Znane ograniczenia”.
+- **Kontrola miernika** (`selfcheck`, tylko `dev`) na 2 stronach pilota (8 stron oceny): etykiety
+  bez zmian i przesunięte o 1 lub 2 px w obu osiach dają P = R = F1 = 1; przesunięte o pół szerokości
+  elementu: 0; bez co 10. elementu: P = 1, R = 0,92.
+
 ## Znane ograniczenia zbioru
 
+- **Oznaczone są 2 strony `dev` (pilot)**, z dwóch dokumentów i bez skanów; wyniki to wstępny pomiar.
 - Jeden oznaczający: brak zgodności między oznaczającymi; szum etykiet szacuje powtórne oznaczenie 3 stron.
 - Warianty formatu jednej strony nie są niezależnymi próbkami. Wyniki raportuje się per dokument i per
   format (PDF, obraz cyfrowy, skan).
