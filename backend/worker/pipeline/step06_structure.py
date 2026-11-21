@@ -503,7 +503,7 @@ def run_step06(
     llm_output = client.generate_structured(
         prompt,
         STRUCTURE_SCHEMA,
-        mock_response_fn=lambda _family: _build_mock_structure(document, template),
+        mock_response_fn=lambda _model: _build_mock_structure(document, template),
     )
 
     form = _to_coi_tabs(deepcopy(llm_output))

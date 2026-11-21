@@ -27,16 +27,20 @@ def build_llm_client(settings: Settings) -> LLMClient:
         return LLMClient(LLMConfig(offline=True))
     if not settings.llm_model or settings.llm_model.startswith("change-me"):
         raise PipelineStageError(
-            "konfiguracja modelu", "nie ustawiono LLM_MODEL (nazwa modelu na serwerze vLLM/Ollama)"
+            "konfiguracja modelu",
+            "nie ustawiono LLM_MODEL (identyfikator modelu w Eden AI, np. openai/gpt-4o-mini)",
         )
-    base_url = settings.llm_base_url.rstrip("/")
-    if settings.llm_api_format == "openai" and base_url.endswith("/v1"):
-        base_url = base_url[: -len("/v1")]  # klient #8 sam dokleja /v1/chat/completions
+    api_key = settings.edenai_api_key.get_secret_value().strip() if settings.edenai_api_key else ""
+    if not api_key or api_key.lower().startswith("change-me"):
+        raise PipelineStageError(
+            "konfiguracja modelu",
+            "nie ustawiono EDENAI_API_KEY (klucz API Eden AI)",
+        )
     return LLMClient(
         LLMConfig(
             model=settings.llm_model,
-            base_url=base_url,
-            api_format=settings.llm_api_format,
+            api_key=api_key,
+            base_url=settings.edenai_base_url.rstrip("/"),
             timeout_seconds=float(settings.llm_timeout_seconds),
             offline=False,
         )

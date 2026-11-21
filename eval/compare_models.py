@@ -1,12 +1,14 @@
-"""Compare local PLLuM vs Bielik extraction metrics across COI benchmark forms.
+"""Compare Eden AI open-weight LLM extraction metrics across COI benchmark forms.
 
-Runs offline in mock mode by default so it works in CI without GPU or API keys.
+Evaluates Qwen3, Llama 3.3, Gemma 3, and Mistral Small via the Eden AI API client.
+Runs offline in mock mode by default so it works in CI without API keys.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -16,13 +18,24 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from backend.worker.clients.llm_client import LLMClient, LLMConfig  # noqa: E402
+from backend.worker.clients.llm_client import (  # noqa: E402
+    DEFAULT_EDENAI_BASE_URL,
+    LLMClient,
+    LLMConfig,
+)
 from backend.worker.pipeline.step05_doc_type import run_step05  # noqa: E402
 from backend.worker.pipeline.step06_structure import run_step06  # noqa: E402
 from backend.worker.pipeline.step07_fields import run_step07  # noqa: E402
 from backend.worker.pipeline.step08_dependencies import (  # noqa: E402
     run_step08,
     validate_form_definition,
+)
+
+DEFAULT_MODELS: tuple[str, ...] = (
+    "scaleway/qwen3-235b-a22b-instruct-2507",
+    "scaleway/llama-3.3-70b-instruct",
+    "scaleway/gemma-3-27b-it",
+    "mistral/mistral-small-latest",
 )
 
 BENCHMARK_FORMS: list[dict[str, Any]] = [
@@ -202,10 +215,9 @@ BENCHMARK_FORMS: list[dict[str, Any]] = [
 
 @dataclass
 class ModelSummary:
-    """Aggregated evaluation metrics for a single local LLM model."""
+    """Aggregated evaluation metrics for a single Eden AI LLM model."""
 
     model: str
-    model_id: str
     cases: int
     precision: float
     recall: float
@@ -230,14 +242,14 @@ def evaluate_model(
     model_name: str,
     *,
     offline: bool = True,
-    base_url: str = "http://localhost:11434",
-    api_format: str = "ollama",
+    api_key: str = "",
+    base_url: str = DEFAULT_EDENAI_BASE_URL,
 ) -> ModelSummary:
     """Run steps 05-08 across benchmark forms and compute quality metrics."""
     config = LLMConfig(
         model=model_name,
+        api_key=api_key,
         base_url=base_url,
-        api_format=api_format,
         offline=offline,
     )
     client = LLMClient(config)
@@ -294,10 +306,8 @@ def evaluate_model(
         f1s.append(f1)
 
     n = len(BENCHMARK_FORMS)
-    display_name = "PLLuM" if model_name.lower() == "pllum" else "Bielik"
     return ModelSummary(
-        model=display_name,
-        model_id=config.canonical_model,
+        model=config.model,
         cases=n,
         precision=round(sum(precisions) / n, 4),
         recall=round(sum(recalls) / n, 4),
@@ -309,58 +319,63 @@ def evaluate_model(
 
 
 def compare_models(
+    models: tuple[str, ...] = DEFAULT_MODELS,
     *,
     offline: bool = True,
-    base_url: str = "http://localhost:11434",
-    api_format: str = "ollama",
+    api_key: str = "",
+    base_url: str = DEFAULT_EDENAI_BASE_URL,
 ) -> list[dict[str, Any]]:
-    """Evaluate both PLLuM and Bielik with identical metrics."""
+    """Evaluate Eden AI models with identical metrics."""
     results = [
-        evaluate_model(name, offline=offline, base_url=base_url, api_format=api_format)
-        for name in ("pllum", "bielik")
+        evaluate_model(name, offline=offline, api_key=api_key, base_url=base_url) for name in models
     ]
     return [asdict(r) for r in results]
 
 
 def format_comparison_table(results: list[dict[str, Any]]) -> str:
-    """Format PLLuM vs Bielik metrics as a readable CLI table."""
+    """Format model metrics as a readable CLI table."""
+    model_col = max(32, max((len(str(row["model"])) for row in results), default=0) + 2)
+    width = model_col + 50
+    header = (
+        f"{'Model':<{model_col}}"
+        f"{'Prec':>8}{'Rec':>8}{'F1':>8}{'Schema':>9}{'DocTop1':>9}{'Meta':>8}"
+    )
     lines = [
-        "=== Local LLM Comparison: PLLuM vs Bielik (Steps 05-08, COI Standard) ===",
+        "=== Eden AI LLM Comparison (Steps 05-08, COI Standard) ===",
         "",
-        f"{'Model':<10}{'Model ID':<26}{'Prec':>8}{'Rec':>8}{'F1':>8}"
-        f"{'Schema':>9}{'DocTop1':>9}{'Meta':>8}",
-        "-" * 86,
+        header,
+        "-" * width,
     ]
     for row in results:
         lines.append(
-            f"{row['model']:<10}{row['model_id']:<26}"
+            f"{row['model']:<{model_col}}"
             f"{row['precision']:>8.4f}{row['recall']:>8.4f}{row['f1']:>8.4f}"
             f"{row['schema_compliance']:>9.4f}{row['doc_type_top1_acc']:>9.4f}"
             f"{row['source_metadata_rate']:>8.4f}"
         )
-    lines.append("-" * 86)
+    lines.append("-" * width)
     return "\n".join(lines)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Compare PLLuM and Bielik on local COI form extraction."
+        description="Compare Eden AI LLM models on COI form extraction."
     )
     parser.add_argument(
         "--live",
         action="store_true",
-        help="Call a live local Ollama/vLLM server instead of offline mock mode.",
+        help="Call live Eden AI API instead of offline mock mode (requires EDENAI_API_KEY).",
     )
     parser.add_argument(
         "--base-url",
-        default="http://localhost:11434",
-        help="Local LLM endpoint base URL (used with --live).",
+        default=os.getenv("EDENAI_BASE_URL", DEFAULT_EDENAI_BASE_URL),
+        help="Eden AI endpoint base URL (used with --live).",
     )
     parser.add_argument(
-        "--api-format",
-        choices=("ollama", "openai"),
-        default="ollama",
-        help="HTTP API protocol for --live mode.",
+        "--models",
+        nargs="+",
+        default=list(DEFAULT_MODELS),
+        help="Eden AI model identifiers to compare (provider/model).",
     )
     parser.add_argument(
         "--json",
@@ -370,9 +385,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     results = compare_models(
+        tuple(args.models),
         offline=not args.live,
+        api_key=os.getenv("EDENAI_API_KEY", ""),
         base_url=args.base_url,
-        api_format=args.api_format,
     )
     if args.json:
         print(json.dumps(results, ensure_ascii=False, indent=2))

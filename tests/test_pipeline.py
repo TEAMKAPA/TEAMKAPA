@@ -1,4 +1,4 @@
-"""Unit tests for local LLM client, Steps 05-08, COI rules, and model comparison."""
+"""Unit tests for Eden AI LLM client, Steps 05-08, COI rules, and model comparison."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import json
 import sys
 from pathlib import Path
 from typing import Any
+from urllib import request as urllib_request
 
 import pytest
 
@@ -14,6 +15,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from backend.worker.clients.llm_client import (  # noqa: E402
+    DEFAULT_EDENAI_BASE_URL,
+    DEFAULT_LLM_MODEL,
     LLMClient,
     LLMConfig,
     StructuredOutputError,
@@ -36,7 +39,11 @@ from backend.worker.pipeline.step08_dependencies import (  # noqa: E402
     run_step08,
     validate_form_definition,
 )
-from eval.compare_models import compare_models  # noqa: E402
+from eval.compare_models import (  # noqa: E402
+    DEFAULT_MODELS,
+    compare_models,
+    format_comparison_table,
+)
 
 SAMPLE_DOC: dict[str, Any] = {
     "title": "Wniosek o wpis do CEIDG (CEIDG-1)",
@@ -76,13 +83,87 @@ SAMPLE_DOC: dict[str, Any] = {
 
 
 class TestLLMClientStructuredOutput:
-    def test_pllum_and_bielik_presets(self) -> None:
-        pllum = LLMConfig(model="pllum")
-        bielik = LLMConfig(model="bielik")
-        assert "pllum" in pllum.canonical_model.lower()
-        assert "bielik" in bielik.canonical_model.lower()
-        assert pllum.model_family == "pllum"
-        assert bielik.model_family == "bielik"
+    def test_edenai_defaults_and_env_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("EDENAI_API_KEY", "test-edenai-secret")
+        monkeypatch.setenv("EDENAI_BASE_URL", "https://api.eu.edenai.run/v3")
+        monkeypatch.setenv("LLM_MODEL", "anthropic/claude-3-5-haiku")
+        monkeypatch.setenv("LLM_TIMEOUT_SECONDS", "45")
+        monkeypatch.setenv("LLM_DEMO_MODE", "false")
+
+        client = LLMClient()
+        assert client.config.api_key == "test-edenai-secret"
+        assert client.config.base_url == "https://api.eu.edenai.run/v3"
+        assert client.config.model == "anthropic/claude-3-5-haiku"
+        assert client.config.timeout_seconds == 45.0
+        assert client.config.offline is False
+        assert "test-edenai-secret" not in repr(client.config)
+
+    def test_edenai_http_request_and_response(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: dict[str, Any] = {}
+
+        class FakeHTTPResponse:
+            def __enter__(self) -> FakeHTTPResponse:
+                return self
+
+            def __exit__(self, *_args: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                body = {
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                "content": json.dumps({"status": "OK"}),
+                            }
+                        }
+                    ]
+                }
+                return json.dumps(body).encode("utf-8")
+
+        def fake_urlopen(req: urllib_request.Request, timeout: float) -> FakeHTTPResponse:
+            assert isinstance(req.data, bytes)
+            captured["url"] = req.full_url
+            captured["method"] = req.get_method()
+            captured["auth"] = req.get_header("Authorization")
+            captured["content_type"] = req.get_header("Content-type")
+            captured["body"] = json.loads(req.data.decode("utf-8"))
+            captured["timeout"] = timeout
+            return FakeHTTPResponse()
+
+        monkeypatch.setattr(urllib_request, "urlopen", fake_urlopen)
+
+        client = LLMClient(
+            LLMConfig(
+                model=DEFAULT_LLM_MODEL,
+                api_key="fake-api-key",
+                base_url=DEFAULT_EDENAI_BASE_URL,
+                timeout_seconds=12.0,
+                offline=False,
+            )
+        )
+        schema = {
+            "type": "object",
+            "required": ["status"],
+            "properties": {"status": {"type": "string", "enum": ["OK"]}},
+        }
+
+        result = client.generate_structured("Sprawdź status", schema)
+        assert result == {"status": "OK"}
+        assert captured["url"] == f"{DEFAULT_EDENAI_BASE_URL}/chat/completions"
+        assert captured["method"] == "POST"
+        assert captured["auth"] == "Bearer fake-api-key"
+        assert captured["content_type"] == "application/json"
+        assert captured["timeout"] == 12.0
+        assert captured["body"]["model"] == DEFAULT_LLM_MODEL
+        assert captured["body"]["response_format"] == {"type": "json_object"}
+        assert captured["body"]["messages"][1]["content"] == "Sprawdź status"
+
+    def test_missing_api_key_raises_structured_output_error(self) -> None:
+        schema = {"type": "object", "required": ["status"], "properties": {}}
+        client = LLMClient(LLMConfig(model=DEFAULT_LLM_MODEL, api_key="", offline=False))
+        with pytest.raises(StructuredOutputError, match="EDENAI_API_KEY"):
+            client.generate_structured("Podaj status", schema)
 
     def test_retry_succeeds_after_invalid_json_and_schema_mismatch(self) -> None:
         schema = {
@@ -105,7 +186,7 @@ class TestLLMClientStructuredOutput:
             return responses[attempt]
 
         client = LLMClient(
-            LLMConfig(model="pllum", max_retries=2, offline=False),
+            LLMConfig(model="openai/gpt-4o-mini", max_retries=2, offline=False),
             transport=fake_transport,
         )
         result = client.generate_structured("Podaj dane", schema)
@@ -126,7 +207,7 @@ class TestLLMClientStructuredOutput:
             return json.dumps({"status": "WRONG"})
 
         client = LLMClient(
-            LLMConfig(model="bielik", max_retries=1, offline=False),
+            LLMConfig(model="anthropic/claude-3-5-haiku", max_retries=1, offline=False),
             transport=bad_transport,
         )
         with pytest.raises(StructuredOutputError, match="failed schema validation"):
@@ -320,7 +401,7 @@ class TestStep07FieldsAndStep08Dependencies:
             )
 
         client = LLMClient(
-            LLMConfig(model="pllum", offline=False),
+            LLMConfig(model=DEFAULT_LLM_MODEL, offline=False),
             transport=mock_bad_consent_transport,
         )
         step07 = run_step07(SAMPLE_DOC, step06, llm_client=client)
@@ -382,16 +463,133 @@ class TestStep07FieldsAndStep08Dependencies:
 
 
 class TestModelComparison:
-    def test_compare_pllum_vs_bielik_offline(self) -> None:
+    def test_compare_models_offline(self) -> None:
+        assert DEFAULT_MODELS == (
+            "scaleway/qwen3-235b-a22b-instruct-2507",
+            "scaleway/llama-3.3-70b-instruct",
+            "scaleway/gemma-3-27b-it",
+            "mistral/mistral-small-latest",
+        )
         results = compare_models(offline=True)
-        assert len(results) == 2
+        assert len(results) == len(DEFAULT_MODELS)
         by_model = {r["model"]: r for r in results}
-        assert set(by_model.keys()) == {"PLLuM", "Bielik"}
+        assert set(by_model.keys()) == set(DEFAULT_MODELS)
 
         for row in results:
             assert 0.0 < row["precision"] <= 1.0
             assert 0.0 < row["recall"] <= 1.0
             assert 0.0 < row["f1"] <= 1.0
+            assert row["schema_compliance"] == 1.0
+            assert row["doc_type_top1_acc"] == 1.0
+            assert row["source_metadata_rate"] == 1.0
+
+        table = format_comparison_table(results)
+        for model_name in DEFAULT_MODELS:
+            assert model_name in table
+
+    def test_compare_models_live_uses_edenai_client_mocked(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        requested_models: list[str] = []
+        requested_urls: set[str] = set()
+        requested_auth: set[str | None] = set()
+
+        class FakeHTTPResponse:
+            def __init__(self, payload: dict[str, Any]) -> None:
+                self._payload = payload
+
+            def __enter__(self) -> FakeHTTPResponse:
+                return self
+
+            def __exit__(self, *_args: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                body = {
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                "content": json.dumps(self._payload, ensure_ascii=False),
+                            }
+                        }
+                    ]
+                }
+                return json.dumps(body).encode("utf-8")
+
+        def fake_urlopen(req: urllib_request.Request, timeout: float) -> FakeHTTPResponse:
+            assert timeout > 0
+            assert isinstance(req.data, bytes)
+            requested_urls.add(req.full_url)
+            requested_auth.add(req.get_header("Authorization"))
+            body = json.loads(req.data.decode("utf-8"))
+            requested_models.append(body["model"])
+            prompt = str(body["messages"][1]["content"])
+
+            if "strukturę stron" in prompt:
+                payload: dict[str, Any] = {
+                    "title": "Wniosek testowy",
+                    "tabs": [
+                        {
+                            "title": "Dane wnioskodawcy",
+                            "type": "MAIN",
+                            "sections": [
+                                {
+                                    "title": "Twoje dane",
+                                    "techName": "twoje_dane",
+                                    "type": "SECTION",
+                                }
+                            ],
+                        },
+                        {
+                            "title": "Podsumowanie i podgląd",
+                            "type": "FINISH",
+                            "sections": [
+                                {
+                                    "title": "Podgląd",
+                                    "techName": "podsumowanie_i_podglad",
+                                    "type": "INFO_SECTION",
+                                    "description": "Sprawdź dane na podglądzie.",
+                                }
+                            ],
+                        },
+                    ],
+                }
+            elif "Wyekstrahuj pola" in prompt:
+                payload = {
+                    "fields": [
+                        {
+                            "section_tech_name": "twoje_dane",
+                            "techName": "imie",
+                            "title": "Imię",
+                            "type": "TEXT_FIELD",
+                            "validation": ["REQUIRED"],
+                            "source_text": "Imię",
+                            "page": 1,
+                            "element_id": "e1",
+                        }
+                    ]
+                }
+            else:
+                payload = {"dependencies": []}
+            return FakeHTTPResponse(payload)
+
+        monkeypatch.setattr(urllib_request, "urlopen", fake_urlopen)
+
+        results = compare_models(
+            models=DEFAULT_MODELS,
+            offline=False,
+            api_key="fake-edenai-key",
+            base_url=DEFAULT_EDENAI_BASE_URL,
+        )
+
+        assert requested_urls == {f"{DEFAULT_EDENAI_BASE_URL}/chat/completions"}
+        assert requested_auth == {"Bearer fake-edenai-key"}
+        assert set(requested_models) == set(DEFAULT_MODELS)
+        assert [row["model"] for row in results] == list(DEFAULT_MODELS)
+        for row in results:
+            assert row["precision"] == 1.0
+            assert 0.0 < row["recall"] <= 1.0
             assert row["schema_compliance"] == 1.0
             assert row["doc_type_top1_acc"] == 1.0
             assert row["source_metadata_rate"] == 1.0

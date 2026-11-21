@@ -165,9 +165,13 @@ async def test_text_failure_cancels_visual_channel(tmp_path: Path) -> None:
 async def test_llm_server_down_is_transient(tmp_path: Path) -> None:
     def unreachable() -> LLMClient:  # zamknięty port — odmowa połączenia
         return LLMClient(
-            LLMConfig(offline=False, base_url="http://127.0.0.1:9", api_format="openai",
-                      timeout_seconds=2)
-        )  # fmt: skip
+            LLMConfig(
+                offline=False,
+                api_key="test-key",
+                base_url="http://127.0.0.1:9",
+                timeout_seconds=2,
+            )
+        )
 
     with pytest.raises(PipelineTemporarilyUnavailableError, match="Struktura"):
         await _run(tmp_path, stages(llm_factory=unreachable))
@@ -184,6 +188,14 @@ async def test_llm_invalid_output_is_stage_error(tmp_path: Path) -> None:
 async def test_llm_model_not_configured(tmp_path: Path) -> None:
     real_factory = default_stages(settings(llm_model=None)).llm_client_factory
     with pytest.raises(PipelineStageError, match="LLM_MODEL"):
+        await _run(tmp_path, stages(llm_factory=real_factory))
+
+
+async def test_edenai_api_key_not_configured(tmp_path: Path) -> None:
+    real_factory = default_stages(
+        settings(llm_model="openai/gpt-4o-mini", edenai_api_key=None)
+    ).llm_client_factory
+    with pytest.raises(PipelineStageError, match="EDENAI_API_KEY"):
         await _run(tmp_path, stages(llm_factory=real_factory))
 
 

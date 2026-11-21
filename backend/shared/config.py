@@ -92,11 +92,20 @@ class Settings(BaseSettings):
         description="Po jakim czasie bez śladu w kolejce zadanie uznaje się za utracone.",
     )
 
-    # --- lokalne modele (endpointy zgodne z OpenAI API: vLLM / Ollama / llama.cpp) ---
-    llm_base_url: str = "http://llm:8000/v1"
-    llm_model: str | None = None
-    llm_api_format: Literal["openai", "ollama"] = Field(
-        default="openai", description="openai: vLLM / llama.cpp; ollama: natywne API Ollamy"
+    # --- LLM (Eden AI API) ---
+    edenai_api_key: SecretStr | None = Field(
+        default=None,
+        description="Klucz API Eden AI (wymagany poza trybem LLM_DEMO_MODE).",
+    )
+    edenai_base_url: str = Field(
+        default="https://api.edenai.run/v3",
+        description="Bazowy adres Eden AI API (OpenAI-compatible chat completions).",
+    )
+    llm_model: str | None = Field(
+        default=None,
+        description=(
+            "Identyfikator modelu w Eden AI w formacie provider/model, np. openai/gpt-4o-mini."
+        ),
     )
     llm_timeout_seconds: int = Field(
         default=300, ge=5, le=3600, description="Limit czasu jednego wywołania modelu"
@@ -106,6 +115,7 @@ class Settings(BaseSettings):
         description="Tryb demonstracyjny bez modelu (deterministyczny mock etapów 06–08). "
         "Wynik jest jawnie oznaczony w raporcie i ma pewność LOW — nie do importu.",
     )
+    # --- VLM ---
     vlm_base_url: str = "http://vlm:8001/v1"
     vlm_model: str | None = None
 
