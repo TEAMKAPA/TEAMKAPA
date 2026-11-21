@@ -149,12 +149,14 @@ def _build_word97_doc(
     *,
     pieces: list[tuple[str, str]],
     encrypted: bool = False,
+    extra_flags: int = 0x0000,
+    story_lengths: tuple[int, ...] | None = None,
 ) -> bytes:
     """Tworzy binarny plik .doc (OLE2 + FIB + 1Table PlcPcd) z kawałkami UTF-16LE i cp1250."""
     # FIB o rozmiarze 0x0200 (512 B), z csw=14, cslw=22, cbRgFcLcb=93 -> fcClx na 0x01A2.
     fib = bytearray(0x0200)
     struct.pack_into("<H", fib, 0x00, 0xA5EC)  # wIdent (Word 97+)
-    flags = 0x0200 | (0x0100 if encrypted else 0x0000)  # fWhichTblStm=1Table
+    flags = 0x0200 | (0x0100 if encrypted else 0x0000) | extra_flags  # fWhichTblStm=1Table
     struct.pack_into("<H", fib, 0x0A, flags)
     struct.pack_into("<H", fib, 0x20, 14)  # csw
     struct.pack_into("<H", fib, 0x3E, 22)  # cslw
@@ -177,7 +179,9 @@ def _build_word97_doc(
             fc = offset
         pcds.extend(struct.pack("<HIH", 0, fc, 0))
 
-    struct.pack_into("<I", word_body, 0x4C, cps[-1])  # ccpText
+    # ccpText, ccpFtn, ccpHdd, ccpMcr, ccpAtn, ccpEdn, ccpTxbx, ccpHdrTxbx
+    for index, length in enumerate(story_lengths or (cps[-1],)):
+        struct.pack_into("<I", word_body, 0x4C + 4 * index, length)
 
     pcdt_payload = struct.pack(f"<{len(cps)}I", *cps) + bytes(pcds)
     clx = b"\x02" + struct.pack("<I", len(pcdt_payload)) + pcdt_payload
@@ -749,6 +753,49 @@ def test_extract_doc_reads_utf16le_cp1250_and_tables_via_olefile(tmp_path: Path)
         ["Kod pocztowy", "00-950"],
     ]
     assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("flags", [0x12F0, 0x12F8, 0x1000])
+def test_extract_doc_with_real_word_flags_is_not_encrypted(flags: int) -> None:
+    """Regresja: fExtChar (0x1000) ustawiony w niemal każdym pliku Word 97+ nie oznacza szyfrowania.
+
+    Wartości 0x12F0 / 0x12F8 pochodzą z plików DOC przekazanych przez organizatora.
+    """
+    doc_bytes = _build_word97_doc(
+        pieces=[("Wniosek o wydanie zaświadczenia\r", "utf-16-le")], extra_flags=flags
+    )
+    result = extract_document(doc_bytes, filename="wniosek.doc", mime_type="application/msword")
+    assert "Wniosek o wydanie zaświadczenia" in result.full_text
+
+
+def test_extract_doc_reads_textbox_and_footnote_stories_skips_comments() -> None:
+    """Formularze w ramkach (np. wnioski 2 i 8 od organizatora) mają treść w polach tekstowych."""
+    anchors = "\x08\x08\x08\r"  # historia główna: same zakotwiczenia ramek
+    footnote = "Dane nieobowiązkowe.\r"
+    comment = "Uwaga recenzenta\r"
+    textbox = "Wniosek o zwrot opłaty skarbowej\rImię i nazwisko\r"
+    pieces = [(anchors, "utf-16-le"), (footnote, "cp1250"), (comment, "utf-16-le"),
+              (textbox, "utf-16-le"), ("\r", "utf-16-le")]  # fmt: skip
+    doc_bytes = _build_word97_doc(
+        pieces=pieces,
+        story_lengths=(len(anchors), len(footnote), 0, 0, len(comment), 0, len(textbox), 0),
+    )
+    result = extract_document(doc_bytes, filename="wniosek.doc", mime_type="application/msword")
+    assert [b.text for b in result.pages[0].blocks] == [
+        "Dane nieobowiązkowe.",
+        "Wniosek o zwrot opłaty skarbowej",
+        "Imię i nazwisko",
+    ]
+    assert "Uwaga recenzenta" not in result.full_text
+
+
+@pytest.mark.parametrize("flags", [0x0000, 0x8000])
+def test_extract_doc_encrypted_flag_raises(flags: int) -> None:
+    doc_bytes = _build_word97_doc(
+        pieces=[("Tajne\r", "utf-16-le")], encrypted=True, extra_flags=flags
+    )
+    with pytest.raises(EncryptedFileError, match="fEncrypted"):
+        extract_document(doc_bytes, filename="wniosek.doc", mime_type="application/msword")
 
 
 def test_extract_doc_fallback_stream_decoding_without_table_stream() -> None:
