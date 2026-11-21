@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -271,9 +271,7 @@ class TestStep09RulesAndDicts:
             ("Kraj urodzenia", "Kraje"),
         ],
     )
-    def test_five_coi_dicts_strictly_require_dropdown(
-        self, label: str, expected_dict: str
-    ) -> None:
+    def test_five_coi_dicts_strictly_require_dropdown(self, label: str, expected_dict: str) -> None:
         result = apply_rules_and_dicts([{"id": "f1", "label": label, "type": "radio"}])
         field = result["fields"][0]
         assert field["dictionary"] == expected_dict
@@ -379,9 +377,7 @@ class TestStep09RulesAndDicts:
 
         custom_field = result["fields"][1]
         assert custom_field["dictionary"] is None
-        custom_conflicts = [
-            c for c in result["conflicts"] if c["field_id"] == "custom_field"
-        ]
+        custom_conflicts = [c for c in result["conflicts"] if c["field_id"] == "custom_field"]
         assert len(custom_conflicts) == 1
         assert custom_conflicts[0]["rule"] == "coi_dictionary_whitelist"
 
@@ -510,9 +506,7 @@ class TestStep09RulesAndDicts:
                     ],
                 },
             ],
-            "flow": {
-                "links": [{"id": "l1", "source": "tab-1", "target": "tab-finish"}]
-            },
+            "flow": {"links": [{"id": "l1", "source": "tab-1", "target": "tab-finish"}]},
         }
 
         result = run_step09(coi_form)

@@ -6,10 +6,10 @@ Designed to run offline in CI without external API keys.
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict, dataclass
 import json
-from pathlib import Path
 import sys
+from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -69,9 +69,7 @@ def _field_signature(field: dict[str, Any]) -> tuple[str, Any, Any, Any]:
     )
 
 
-def evaluate_prediction(
-    predicted: dict[str, Any], expected: dict[str, Any]
-) -> dict[str, Any]:
+def evaluate_prediction(predicted: dict[str, Any], expected: dict[str, Any]) -> dict[str, Any]:
     """Compare predicted form output against expected ground truth."""
     pred_fields = predicted.get("fields", [])
     exp_fields = expected.get("fields", [])
@@ -94,8 +92,7 @@ def evaluate_prediction(
     correct_types = sum(
         1
         for field_id, exp_field in exp_by_id.items()
-        if field_id in pred_by_id
-        and pred_by_id[field_id].get("type") == exp_field.get("type")
+        if field_id in pred_by_id and pred_by_id[field_id].get("type") == exp_field.get("type")
     )
     field_type_accuracy = correct_types / len(exp_by_id) if exp_by_id else 0.0
 

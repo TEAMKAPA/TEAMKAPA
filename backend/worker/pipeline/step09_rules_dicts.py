@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from copy import deepcopy
 from dataclasses import dataclass
-import re
 from typing import Any
-import unicodedata
 
 from backend.shared.validators.domain import VALIDATORS
 
@@ -50,9 +50,7 @@ _COI_DICT_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ),
     (
         "Kraje",
-        re.compile(
-            r"\b(?:kraj\w*|panstw\w*|obywatelstw\w*|country|citizenship|nationality)\b"
-        ),
+        re.compile(r"\b(?:kraj\w*|panstw\w*|obywatelstw\w*|country|citizenship|nationality)\b"),
     ),
 ]
 
@@ -93,9 +91,7 @@ _DOMAIN_LABEL_PATTERNS: list[tuple[str, re.Pattern[str], str, str, int]] = [
     ),
     (
         "phone",
-        re.compile(
-            r"\b(?:telefon\w*|nr\.?\s*tel\.?|tel\.?|komorkow\w*|phone|mobile)\b"
-        ),
+        re.compile(r"\b(?:telefon\w*|nr\.?\s*tel\.?|tel\.?|komorkow\w*|phone|mobile)\b"),
         "phone",
         "phone",
         15,
@@ -148,9 +144,7 @@ def match_coi_dictionary(label: str) -> str | None:
     return None
 
 
-def infer_domain_rule(
-    label: str, box_count: int | None = None
-) -> DomainRuleMatch | None:
+def infer_domain_rule(label: str, box_count: int | None = None) -> DomainRuleMatch | None:
     """Infer field type, validator, and max_length from label semantics and boxes."""
     normalized = _normalize_text(label)
 
@@ -233,10 +227,7 @@ def _apply_coi_dictionary(
             attribute="type",
             rule_value="dropdown",
             rule=rule_tag,
-            reason=(
-                f"Słownik COI '{coi_dict}' wymaga typu z zakresu "
-                f"{sorted(allowed_types)}."
-            ),
+            reason=(f"Słownik COI '{coi_dict}' wymaga typu z zakresu {sorted(allowed_types)}."),
         )
 
     _apply_override(
@@ -330,10 +321,7 @@ def apply_rules_and_dicts(fields: list[dict[str, Any]]) -> dict[str, Any]:
                     attribute="validator",
                     rule_value=domain_match.validator,
                     rule=rule_tag,
-                    reason=(
-                        f"Reguła dziedzinowa przypisuje walidator "
-                        f"'{domain_match.validator}'."
-                    ),
+                    reason=(f"Reguła dziedzinowa przypisuje walidator '{domain_match.validator}'."),
                 )
             if domain_match.max_length is not None:
                 _apply_override(
@@ -344,10 +332,7 @@ def apply_rules_and_dicts(fields: list[dict[str, Any]]) -> dict[str, Any]:
                     attribute="max_length",
                     rule_value=domain_match.max_length,
                     rule=rule_tag,
-                    reason=(
-                        f"Reguła dziedzinowa określa max_length="
-                        f"{domain_match.max_length}."
-                    ),
+                    reason=(f"Reguła dziedzinowa określa max_length={domain_match.max_length}."),
                 )
             if llm_dict is not None:
                 _apply_override(
@@ -390,10 +375,7 @@ def apply_rules_and_dicts(fields: list[dict[str, Any]]) -> dict[str, Any]:
                 attribute="dictionary",
                 rule_value=None,
                 rule="coi_dictionary_whitelist",
-                reason=(
-                    f"Słownik '{llm_dict}' nie należy do 6 oficjalnych "
-                    "słowników COI."
-                ),
+                reason=(f"Słownik '{llm_dict}' nie należy do 6 oficjalnych słowników COI."),
             )
 
         # 5. Fallback: infer max_length from box_count if not set.
@@ -412,8 +394,7 @@ def apply_rules_and_dicts(fields: list[dict[str, Any]]) -> dict[str, Any]:
                     rule_value="dropdown",
                     rule="coi_closed_list",
                     reason=(
-                        "Pole z zamkniętą listą wartości wymaga typu "
-                        "dropdown, radio lub checkbox."
+                        "Pole z zamkniętą listą wartości wymaga typu dropdown, radio lub checkbox."
                     ),
                 )
             dictionary_proposals.append(
@@ -442,9 +423,7 @@ _COI_SELECTABLE_TYPES: frozenset[str] = frozenset({"SELECT", "RADIO", "CHECKBOX"
 _COI_SKIP_TYPES: frozenset[str] = frozenset(
     {"CONSENT_SECTION", "INFO_SECTION", "TEXT_BLOCK", "FILE_UPLOADER"}
 )
-_COI_DOMAIN_VALIDATORS: frozenset[str] = frozenset(
-    {"PESEL", "NIP", "REGON", "ZIP_CODE", "EMAIL"}
-)
+_COI_DOMAIN_VALIDATORS: frozenset[str] = frozenset({"PESEL", "NIP", "REGON", "ZIP_CODE", "EMAIL"})
 _DOMAIN_TO_COI_TYPE: dict[str, str] = {
     "text": "TEXT_FIELD",
     "phone": "TEXT_FIELD",
@@ -503,10 +482,7 @@ def _apply_coi_dict_to_leaf(
             attribute="type",
             rule_value="SELECT",
             rule=rule_tag,
-            reason=(
-                f"Słownik COI '{coi_dict}' wymaga typu z zakresu "
-                f"{sorted(allowed)}."
-            ),
+            reason=(f"Słownik COI '{coi_dict}' wymaga typu z zakresu {sorted(allowed)}."),
         )
 
     _apply_override(
@@ -539,13 +515,9 @@ def apply_rules_to_coi_form(form_data: dict[str, Any]) -> dict[str, Any]:
                     continue
 
                 label = str(field.get("title") or field.get("techName") or "").strip()
-                field_id = str(
-                    field.get("techName") or field.get("id") or _slugify(label)
-                )
+                field_id = str(field.get("techName") or field.get("id") or _slugify(label))
                 box_raw = field.get("box_count")
-                box_count = (
-                    box_raw if isinstance(box_raw, int) and box_raw > 0 else None
-                )
+                box_count = box_raw if isinstance(box_raw, int) and box_raw > 0 else None
                 llm_dict = field.get("dictionaryName")
                 option_labels = _extract_option_labels(field.get("options"))
 
@@ -565,9 +537,7 @@ def apply_rules_to_coi_form(form_data: dict[str, Any]) -> dict[str, Any]:
                 domain_match = infer_domain_rule(label, box_count=box_count)
                 if domain_match is not None:
                     rule_tag = f"domain:{domain_match.rule_name}"
-                    coi_type = _DOMAIN_TO_COI_TYPE.get(
-                        domain_match.field_type, "TEXT_FIELD"
-                    )
+                    coi_type = _DOMAIN_TO_COI_TYPE.get(domain_match.field_type, "TEXT_FIELD")
                     _apply_override(
                         field,
                         conflicts,
@@ -585,9 +555,7 @@ def apply_rules_to_coi_form(form_data: dict[str, Any]) -> dict[str, Any]:
                     if coi_val is not None:
                         old_vals = list(field.get("validation") or [])
                         wrong_domain = [
-                            v
-                            for v in old_vals
-                            if v in _COI_DOMAIN_VALIDATORS and v != coi_val
+                            v for v in old_vals if v in _COI_DOMAIN_VALIDATORS and v != coi_val
                         ]
                         new_vals = [v for v in old_vals if v not in wrong_domain]
                         if coi_val not in new_vals:
@@ -602,8 +570,7 @@ def apply_rules_to_coi_form(form_data: dict[str, Any]) -> dict[str, Any]:
                                     "rule_value": new_vals,
                                     "rule": rule_tag,
                                     "reason": (
-                                        f"Reguła dziedzinowa nadpisuje walidator "
-                                        f"na '{coi_val}'."
+                                        f"Reguła dziedzinowa nadpisuje walidator na '{coi_val}'."
                                     ),
                                 }
                             )
@@ -647,10 +614,7 @@ def apply_rules_to_coi_form(form_data: dict[str, Any]) -> dict[str, Any]:
                         attribute="dictionaryName",
                         rule_value=None,
                         rule="coi_dictionary_whitelist",
-                        reason=(
-                            f"Słownik '{llm_dict}' nie należy do 6 oficjalnych "
-                            "słowników COI."
-                        ),
+                        reason=(f"Słownik '{llm_dict}' nie należy do 6 oficjalnych słowników COI."),
                     )
                     field.pop("dictionaryName", None)
 

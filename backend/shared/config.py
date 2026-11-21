@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     database_url: SecretStr | None = Field(
         default=None, description="DSN PostgreSQL, np. postgresql://user:pass@postgres:5432/db"
     )
+    db_pool_max_size: int = Field(default=5, ge=1, le=50)
     valkey_url: str = "redis://valkey:6379/0"
 
     # --- kolejka zadań ---
@@ -49,17 +50,46 @@ class Settings(BaseSettings):
         default=3600,
         ge=60,
         le=24 * 3600,
-        description="Jak długo plik czeka w pamięci Valkey na workera; po tym czasie zadanie "
-        "wygasa, a plik jest usuwany.",
+        description="Jak długo plik czeka w pamięci Valkey na workera (łącznie z ponowieniami); "
+        "po tym czasie zadanie wygasa, a plik jest usuwany.",
     )
     job_result_ttl_seconds: int = Field(
-        default=3600, ge=60, le=7 * 24 * 3600, description="Jak długo wynik zadania jest dostępny."
+        default=3600,
+        ge=60,
+        le=7 * 24 * 3600,
+        description="Jak długo arq trzyma wynik w Valkey (źródłem prawdy jest PostgreSQL).",
     )
     job_timeout_seconds: int = Field(
         default=1800, ge=10, le=6 * 3600, description="Maksymalny czas analizy jednego pliku."
     )
     worker_max_jobs: int = Field(
         default=1, ge=1, le=32, description="Liczba równoległych analiz w jednym workerze."
+    )
+    max_job_tries: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Ile razy łącznie można uruchomić analizę pliku (ponowienia po błędach "
+        "przejściowych i awariach workera).",
+    )
+    retry_backoff_seconds: int = Field(
+        default=30,
+        ge=0,
+        le=3600,
+        description="Opóźnienie pierwszego ponowienia; kolejne rosną wykładniczo (×2).",
+    )
+    result_retention_days: int = Field(
+        default=30,
+        ge=1,
+        le=3650,
+        description="Po ilu dniach usuwane są zadania i wygenerowane wyniki "
+        "(zatwierdzone formularze zostają).",
+    )
+    stale_job_grace_seconds: int = Field(
+        default=120,
+        ge=10,
+        le=3600,
+        description="Po jakim czasie bez śladu w kolejce zadanie uznaje się za utracone.",
     )
 
     # --- lokalne modele (endpointy zgodne z OpenAI API: vLLM / Ollama / llama.cpp) ---

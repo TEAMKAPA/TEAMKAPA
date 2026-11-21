@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from datetime import date, datetime
-import re
 
 _PESEL_WEIGHTS = (1, 3, 7, 9, 1, 3, 7, 9, 1, 3)
 _NIP_WEIGHTS = (6, 5, 7, 2, 3, 4, 5, 6, 7)
@@ -13,9 +13,7 @@ _REGON14_WEIGHTS = (2, 4, 8, 5, 0, 9, 7, 3, 6, 1, 2, 4, 8)
 
 _POSTAL_CODE_RE = re.compile(r"^\d{2}-\d{3}$")
 _PHONE_CHARS_RE = re.compile(r"^\+?[\d\s()-]+$")
-_EMAIL_RE = re.compile(
-    r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$"
-)
+_EMAIL_RE = re.compile(r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$")
 _DATE_FORMATS = ("%Y-%m-%d", "%d-%m-%Y", "%d.%m.%Y", "%d/%m/%Y")
 
 
@@ -55,7 +53,7 @@ def validate_pesel(value: str) -> bool:
     if _extract_pesel_birth_date(digits) is None:
         return False
 
-    total = sum(int(d) * w for d, w in zip(digits[:10], _PESEL_WEIGHTS))
+    total = sum(int(d) * w for d, w in zip(digits[:10], _PESEL_WEIGHTS, strict=True))
     control = (10 - (total % 10)) % 10
     return control == int(digits[10])
 
@@ -69,12 +67,12 @@ def validate_nip(value: str) -> bool:
     if len(digits) != 10 or not digits.isdigit() or digits == "0" * 10:
         return False
 
-    checksum = sum(int(d) * w for d, w in zip(digits[:9], _NIP_WEIGHTS)) % 11
+    checksum = sum(int(d) * w for d, w in zip(digits[:9], _NIP_WEIGHTS, strict=True)) % 11
     return checksum == int(digits[9])
 
 
 def _check_regon_checksum(digits: str, weights: tuple[int, ...]) -> bool:
-    checksum = sum(int(d) * w for d, w in zip(digits[:-1], weights)) % 11
+    checksum = sum(int(d) * w for d, w in zip(digits[:-1], weights, strict=True)) % 11
     control = 0 if checksum == 10 else checksum
     return control == int(digits[-1])
 
