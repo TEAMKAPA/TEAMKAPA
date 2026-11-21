@@ -1,6 +1,7 @@
-"""Local LLM HTTP client (Ollama / vLLM / OpenAI-compatible) with structured output.
+"""Eden AI LLM HTTP client (OpenAI-compatible chat completions) with structured JSON output.
 
-Supports PLLuM and Bielik model configurations and an offline mock mode for tests/CI.
+Reads API key and endpoint settings from environment variables / ``Settings`` and supports
+an offline mock mode for tests and CI (no real API key required).
 """
 
 from __future__ import annotations
@@ -8,24 +9,14 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 from urllib import error as urllib_error
 from urllib import parse as urllib_parse
 from urllib import request as urllib_request
 
-MODEL_PRESETS: dict[str, dict[str, str]] = {
-    "pllum": {
-        "name": "PLLuM",
-        "model_id": "pllum:12b-instruct",
-        "provider": "ollama",
-    },
-    "bielik": {
-        "name": "Bielik",
-        "model_id": "bielik:11b-v2.3-instruct",
-        "provider": "ollama",
-    },
-}
+DEFAULT_EDENAI_BASE_URL = "https://api.edenai.run/v3"
+DEFAULT_LLM_MODEL = "deepinfra/Qwen/Qwen3-VL-30B-A3B-Instruct"  # model z otwartymi wagami
 
 
 class StructuredOutputError(ValueError):
@@ -34,31 +25,15 @@ class StructuredOutputError(ValueError):
 
 @dataclass(frozen=True)
 class LLMConfig:
-    """Configuration for connecting to a local LLM endpoint or offline mock."""
+    """Configuration for connecting to the Eden AI API or offline mock mode."""
 
-    model: str = "pllum"
-    base_url: str = "http://localhost:11434"
-    api_format: str = "ollama"  # "ollama" or "openai"
+    model: str = DEFAULT_LLM_MODEL
+    api_key: str = field(default="", repr=False)
+    base_url: str = DEFAULT_EDENAI_BASE_URL
     temperature: float = 0.0
     timeout_seconds: float = 30.0
     max_retries: int = 2
     offline: bool = True
-
-    @property
-    def canonical_model(self) -> str:
-        key = self.model.strip().lower()
-        if key in MODEL_PRESETS:
-            return MODEL_PRESETS[key]["model_id"]
-        return self.model
-
-    @property
-    def model_family(self) -> str:
-        lower = self.model.strip().lower()
-        if "bielik" in lower:
-            return "bielik"
-        if "pllum" in lower:
-            return "pllum"
-        return lower
 
 
 def _check_type(value: Any, expected: str) -> bool:
@@ -143,8 +118,15 @@ def _extract_json_text(raw: str) -> str:
     return text
 
 
+def _build_endpoint_url(base_url: str) -> str:
+    base = base_url.rstrip("/")
+    if base.endswith("/chat/completions"):
+        return base
+    return f"{base}/chat/completions"
+
+
 class LLMClient:
-    """HTTP client for local PLLuM / Bielik models with strict JSON schema output."""
+    """HTTP client for Eden AI chat completions with strict JSON schema output."""
 
     def __init__(
         self,
@@ -153,50 +135,43 @@ class LLMClient:
         transport: Callable[[str, str, int], str] | None = None,
     ) -> None:
         self.config = config or LLMConfig(
-            model=os.getenv("LOCAL_LLM_MODEL", "pllum"),
-            base_url=os.getenv("LOCAL_LLM_URL", "http://localhost:11434"),
-            api_format=os.getenv("LOCAL_LLM_API_FORMAT", "ollama"),
-            offline=os.getenv("LOCAL_LLM_OFFLINE", "true").lower() != "false",
+            model=os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL),
+            api_key=os.getenv("EDENAI_API_KEY", ""),
+            base_url=os.getenv("EDENAI_BASE_URL", DEFAULT_EDENAI_BASE_URL),
+            timeout_seconds=float(os.getenv("LLM_TIMEOUT_SECONDS", "30")),
+            offline=os.getenv("LLM_DEMO_MODE", "true").lower() != "false",
         )
         self._transport = transport
 
     def _call_http(self, prompt: str, system_prompt: str) -> str:
-        base = self.config.base_url.rstrip("/")
-        if self.config.api_format == "openai":
-            url = f"{base}/v1/chat/completions"
-            payload: dict[str, Any] = {
-                "model": self.config.canonical_model,
-                "temperature": self.config.temperature,
-                "response_format": {"type": "json_object"},
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt},
-                ],
-            }
-        else:
-            url = f"{base}/api/chat"
-            payload = {
-                "model": self.config.canonical_model,
-                "stream": False,
-                "format": "json",
-                "options": {"temperature": self.config.temperature},
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt},
-                ],
-            }
+        if not self.config.api_key.strip():
+            raise StructuredOutputError("Missing EDENAI_API_KEY for Eden AI API call.")
 
+        url = _build_endpoint_url(self.config.base_url)
         parsed_url = urllib_parse.urlparse(url)
         if parsed_url.scheme not in {"http", "https"}:
             raise StructuredOutputError(
-                f"Unsupported LLM URL scheme: {parsed_url.scheme!r} (only http/https allowed)"
+                f"Unsupported Eden AI URL scheme: {parsed_url.scheme!r} (only http/https allowed)"
             )
+
+        payload: dict[str, Any] = {
+            "model": self.config.model,
+            "temperature": self.config.temperature,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ],
+        }
 
         body = json.dumps(payload).encode("utf-8")
         req = urllib_request.Request(  # noqa: S310
             url,
             data=body,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Authorization": f"Bearer {self.config.api_key}",
+                "Content-Type": "application/json",
+            },
             method="POST",
         )
         try:
@@ -205,15 +180,12 @@ class LLMClient:
             ) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
         except (urllib_error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-            raise StructuredOutputError(f"Local LLM HTTP call failed: {exc}") from exc
+            raise StructuredOutputError(f"Eden AI HTTP call failed: {exc}") from exc
 
-        if self.config.api_format == "openai":
-            choices = data.get("choices") or []
-            if not choices:
-                raise StructuredOutputError("Empty choices in OpenAI response")
-            return str(choices[0].get("message", {}).get("content", ""))
-
-        return str(data.get("message", {}).get("content", ""))
+        choices = data.get("choices") or []
+        if not choices:
+            raise StructuredOutputError("Empty choices in Eden AI response")
+        return str(choices[0].get("message", {}).get("content", ""))
 
     def generate_structured(
         self,
@@ -223,7 +195,7 @@ class LLMClient:
         system_prompt: str = "Zwracaj wyłącznie poprawny JSON zgodny ze schematem.",
         mock_response_fn: Callable[[str], dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        """Request JSON from the LLM, validate against schema, retry or reject."""
+        """Request JSON from Eden AI, validate against schema, retry or reject."""
         attempts = self.config.max_retries + 1
         last_errors: list[str] = []
         current_prompt = prompt
@@ -236,9 +208,7 @@ class LLMClient:
                     raise StructuredOutputError(
                         "Offline mode requires mock_response_fn or custom transport."
                     )
-                raw_text = json.dumps(
-                    mock_response_fn(self.config.model_family), ensure_ascii=False
-                )
+                raw_text = json.dumps(mock_response_fn(self.config.model), ensure_ascii=False)
             else:
                 raw_text = self._call_http(current_prompt, system_prompt)
 
@@ -259,6 +229,6 @@ class LLMClient:
             )
 
         raise StructuredOutputError(
-            f"LLM ({self.config.canonical_model}) failed schema validation after "
+            f"LLM ({self.config.model}) failed schema validation after "
             f"{attempts} attempts: {'; '.join(last_errors)}"
         )

@@ -19,7 +19,10 @@ x-app-env: &app-env
   env_file: .env
   environment:
     DATABASE_URL: postgresql://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}
-    EDENAI_API_KEY: "" # klucz zna wyłącznie bramka llm-gateway
+    # Worker i API nie znają klucza i nie łączą się z internetem — do modelu idą przez bramkę
+    # (wartości z .env są nadpisywane: bezpośredni adres Eden AI nie ominie bramki).
+    EDENAI_API_KEY: ""
+    EDENAI_BASE_URL: http://llm-gateway:8080/v3
 
 services:
   # Jednorazowo stosuje migracje schematu (db/migrations) przed startem api i workera.

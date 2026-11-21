@@ -6,6 +6,7 @@ from typing import Any
 
 import jsonschema
 import pytest
+from pydantic import SecretStr
 
 from backend.shared.jobs import JobProgress
 from backend.shared.schemas.quality import ConfidenceLevel, Severity, StageStatus
@@ -36,6 +37,9 @@ from tests.pipeline_helpers import (
 )
 
 pytestmark = pytest.mark.anyio
+
+# W compose worker łączy się z Eden AI przez bramkę, która dokłada klucz.
+GATEWAY_URL = "http://llm-gateway:8080/v3"
 
 
 async def _run(tmp_path: Path, pipeline_stages: PipelineStages, **overrides: Any) -> Any:
@@ -215,7 +219,9 @@ async def test_closed_or_unknown_model_is_refused(
             url, model_id, catalog=_catalog(entries), **kw
         ),
     )
-    real_factory = default_stages(settings(llm_model=model)).llm_session_factory
+    real_factory = default_stages(
+        settings(llm_model=model, edenai_base_url=GATEWAY_URL)
+    ).llm_session_factory
     with pytest.raises(PipelineStageError, match=message):
         await _run(tmp_path, stages(llm_factory=real_factory))
 
@@ -229,7 +235,7 @@ async def test_model_catalog_unreachable_is_transient(
         raise ModelServiceUnavailableError("brak połączenia")
 
     monkeypatch.setattr(llm_module, "ensure_open_weights", down)
-    real_factory = default_stages(settings()).llm_session_factory
+    real_factory = default_stages(settings(edenai_base_url=GATEWAY_URL)).llm_session_factory
     with pytest.raises(PipelineTemporarilyUnavailableError, match="katalog modeli"):
         await _run(tmp_path, stages(llm_factory=real_factory))
 
@@ -255,6 +261,41 @@ async def test_usage_and_model_weights_in_report(tmp_path: Path) -> None:
         "cost_usd": 0.00036,
     }
     assert report.models["llm_weights"] == "Qwen/Qwen3-VL-30B-A3B-Instruct"
+
+
+async def test_edenai_api_key_required_for_direct_access(tmp_path: Path) -> None:
+    # Bezpośrednio do api.edenai.run (bez bramki) klucz jest wymagany.
+    real_factory = default_stages(settings(edenai_api_key=None)).llm_session_factory
+    with pytest.raises(PipelineStageError, match="EDENAI_API_KEY"):
+        await _run(tmp_path, stages(llm_factory=real_factory))
+
+
+async def test_placeholder_api_key_is_refused(tmp_path: Path) -> None:
+    real_factory = default_stages(
+        settings(edenai_api_key=SecretStr("change-me-in-runtime"))
+    ).llm_session_factory
+    with pytest.raises(PipelineStageError, match="wartość przykładową"):
+        await _run(tmp_path, stages(llm_factory=real_factory))
+
+
+async def test_gateway_needs_no_api_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """W compose klucz dokłada bramka — worker łączy się z nią bez klucza."""
+    seen: dict[str, Any] = {}
+
+    def fake_catalog(url: str, model: str, *, api_key: str | None = None) -> ModelInfo:
+        seen.update(url=url, model=model, api_key=api_key)
+        return ModelInfo(model, "Qwen/Qwen3-VL-30B-A3B-Instruct", 0.0, 0.0)
+
+    monkeypatch.setattr(llm_module, "ensure_open_weights", fake_catalog)
+    session = default_stages(
+        settings(edenai_base_url=GATEWAY_URL, edenai_api_key=None)
+    ).llm_session_factory()
+    assert seen == {
+        "url": GATEWAY_URL,
+        "model": "deepinfra/Qwen/Qwen3-VL-30B-A3B-Instruct",
+        "api_key": None,
+    }
+    assert session.model is not None
 
 
 async def test_unexpected_step_error_names_the_stage(

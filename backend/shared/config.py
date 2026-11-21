@@ -93,17 +93,20 @@ class Settings(BaseSettings):
     )
 
     # --- modele językowe: Eden AI (API zgodne z OpenAI), wyłącznie modele z otwartymi wagami ---
-    llm_base_url: str = Field(
-        default="http://llm-gateway:8080/v3",
-        description="Bramka do Eden AI w compose; poza compose: https://api.edenai.run/v3",
+    edenai_api_key: SecretStr | None = Field(
+        default=None,
+        description="Klucz API Eden AI. W compose zna go wyłącznie bramka llm-gateway "
+        "(worker i API mają pusty); wymagany tylko przy wywołaniu bezpośrednio do api.edenai.run.",
+    )
+    edenai_base_url: str = Field(
+        default="https://api.edenai.run/v3",
+        description="Adres Eden AI API (zgodny z OpenAI). W compose: bramka "
+        "http://llm-gateway:8080/v3 ustawiana w docker-compose.yml.",
     )
     llm_model: str = Field(
         default="deepinfra/Qwen/Qwen3-VL-30B-A3B-Instruct",
-        description="Identyfikator 'dostawca/model' z /v3/models Eden AI (musi mieć otwarte wagi)",
-    )
-    llm_api_key: SecretStr | None = Field(
-        default=None,
-        description="Klucz Eden AI — tylko przy wywołaniu bez bramki (w compose klucz ma bramka)",
+        description="Identyfikator 'dostawca/model' z /v3/models Eden AI — musi mieć otwarte "
+        "wagi (modele zamknięte, np. openai/gpt-4o-mini, są blokowane).",
     )
     llm_timeout_seconds: int = Field(
         default=300, ge=5, le=3600, description="Limit czasu jednego wywołania modelu"
@@ -120,6 +123,7 @@ class Settings(BaseSettings):
         description="Tryb demonstracyjny bez modelu (deterministyczny mock etapów 06–08). "
         "Wynik jest jawnie oznaczony w raporcie i ma pewność LOW — nie do importu.",
     )
+    # --- VLM (kanał wizualny, #11): ten sam dostęp do Eden AI co LLM ---
     vlm_base_url: str = "http://llm-gateway:8080/v3"
     vlm_model: str = "deepinfra/Qwen/Qwen3-VL-30B-A3B-Instruct"
 

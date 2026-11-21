@@ -67,7 +67,8 @@ TOKEN=$(docker compose exec -T api python -m backend.api.token_cli --sub urzedni
 curl -H "Authorization: Bearer $TOKEN" -F "file=@wniosek.pdf"      http://localhost:8000/api/v1/forms/analyze
 ```
 
-Bez klucza Eden AI (np. pokaz offline) ustaw `LLM_DEMO_MODE=true` — wynik jest jawnie
+Wywołania LLM korzystają z Eden AI API (`EDENAI_API_KEY`, `EDENAI_BASE_URL`, `LLM_MODEL`).
+Bez klucza API można uruchomić tryb demonstracyjny (`LLM_DEMO_MODE=true`) — wynik jest jawnie
 oznaczony w raporcie (`demo_mode`) i ma pewność LOW.
 
 API przy starcie waliduje konfigurację i kończy działanie z czytelnym błędem, jeśli np.
@@ -100,9 +101,10 @@ Sekret można też podać jako Docker secret — plik `/run/secrets/<nazwa_zmien
 | `DB_POOL_MAX_SIZE` | `5` | Maksymalna liczba połączeń z bazą na proces. |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | — (wymagane) | Dane bazy; z nich compose składa `DATABASE_URL`. |
 | `VALKEY_URL` | `redis://valkey:6379/0` | Adres kolejki. |
-| `EDENAI_API_KEY` | — | Klucz Eden AI; zna go wyłącznie `llm-gateway`. |
-| `LLM_BASE_URL` / `VLM_BASE_URL` | `http://llm-gateway:8080/v3` | Adres API modeli (poza compose: `https://api.edenai.run/v3` + `LLM_API_KEY`). |
-| `LLM_MODEL` / `VLM_MODEL` | `deepinfra/Qwen/Qwen3-VL-30B-A3B-Instruct` | Model `dostawca/model` z katalogu Eden AI — musi mieć otwarte wagi. |
+| `EDENAI_API_KEY` | — | Klucz API Eden AI. W compose zna go wyłącznie `llm-gateway`; bezpośrednio do `api.edenai.run` jest wymagany. |
+| `EDENAI_BASE_URL` | `https://api.edenai.run/v3` | Adres Eden AI API. W compose worker używa bramki `http://llm-gateway:8080/v3` (ustawia ją `docker-compose.yml`). |
+| `LLM_MODEL` / `VLM_MODEL` | `deepinfra/Qwen/Qwen3-VL-30B-A3B-Instruct` | Model `dostawca/model` z katalogu Eden AI — **musi mieć otwarte wagi** (np. `openai/gpt-4o-mini` jest blokowany). |
+| `VLM_BASE_URL` | `http://llm-gateway:8080/v3` | Adres API modelu wizyjnego (kanał wizualny, #11). |
 | `LLM_MAX_TOKENS` | `8192` | Limit długości odpowiedzi modelu. |
 | `LLM_ZERO_DATA_RETENTION` | `true` | Tylko dostawcy, którzy nie zapisują zapytań ani odpowiedzi. |
 | `LLM_TIMEOUT_SECONDS` | `300` | Limit czasu jednego wywołania modelu (generowanie JSON-a). |

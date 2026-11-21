@@ -15,6 +15,7 @@ import asyncio
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 from backend.shared.config import Settings
 from backend.worker.clients.llm_client import LLMClient, LLMConfig, StructuredOutputError
@@ -33,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 DEMO_MODEL_NAME = "tryb-demo (bez modelu)"
 CONFIG_STAGE = "konfiguracja modelu"
+EDENAI_HOST = "api.edenai.run"
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,18 +46,35 @@ class LLMSession:
     model: ModelInfo | None = None
 
 
+def _api_key(settings: Settings) -> str | None:
+    if settings.edenai_api_key is None:
+        return None
+    key = settings.edenai_api_key.get_secret_value().strip()
+    return key or None
+
+
 def build_llm_session(settings: Settings) -> LLMSession:
     if settings.llm_demo_mode:
         return LLMSession(LLMClient(LLMConfig(offline=True)))
-    api_key = settings.llm_api_key.get_secret_value() if settings.llm_api_key else None
+
+    base_url = settings.edenai_base_url.rstrip("/")
+    api_key = _api_key(settings)
+    if api_key is not None and api_key.lower().startswith("change-me"):
+        raise PipelineStageError(
+            CONFIG_STAGE, "EDENAI_API_KEY ma wartość przykładową — ustaw własny"
+        )
+    # W compose klucz dokłada bramka llm-gateway; bezpośrednio do Eden AI klucz jest wymagany.
+    if api_key is None and urlparse(base_url).hostname == EDENAI_HOST:
+        raise PipelineStageError(CONFIG_STAGE, "nie ustawiono EDENAI_API_KEY (klucz API Eden AI)")
+
     try:
-        info = ensure_open_weights(settings.llm_base_url, settings.llm_model, api_key=api_key)
+        info = ensure_open_weights(base_url, settings.llm_model, api_key=api_key)
     except (ModelNotAllowedError, ModelRequestRejectedError) as exc:
         raise PipelineStageError(CONFIG_STAGE, str(exc)) from exc
     except ModelServiceUnavailableError as exc:
         raise PipelineTemporarilyUnavailableError("katalog modeli Eden AI niedostępny") from exc
     api = ModelApiClient(
-        base_url=settings.llm_base_url,
+        base_url=base_url,
         model=settings.llm_model,
         api_key=api_key,
         timeout_seconds=float(settings.llm_timeout_seconds),
