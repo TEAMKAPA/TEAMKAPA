@@ -1,0 +1,8 @@
+{
+  "schema_version": "teamkapa.vision.split/1",
+  "registered": "2026-11-21",
+  "rule": "Podział po dokumentach (rodzajach wniosku): wszystkie strony i wszystkie warianty formatu dokumentu należą do jednej części. Ustalony przed Etapem C, bez wyników detektorów. Do zamrożenia może się zmienić wyłącznie na podstawie liczebności etykiet. Progi i kalibracja tylko na dev; holdout wyłącznie do raportu końcowego.",
+  "dev": ["f02", "f05", "f07", "f09"],
+  "holdout": ["f01", "f03", "f04", "f06", "f08"],
+  "pilot": ["f02-p01", "f07-p01"]
+}
