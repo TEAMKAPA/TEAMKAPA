@@ -295,6 +295,54 @@ uruchamiają się w CI bez dostępu do `dane/`:
 
 Test integracyjny z prawdziwym LibreOffice jest pomijany, gdy `soffice` nie jest dostępny.
 
+## Sprawdzenie na materiałach COI (A.8)
+
+Jednorazowe sprawdzenie lokalne na materiałach COI (2026-11-21; renderer z commitu `7754cb4`,
+200 DPI, tryb izolowany). Materiały i skrypty nie są częścią repozytorium; poniżej wyłącznie liczby zbiorcze.
+
+**Pliki i strony**
+
+| Wynik | Plików | Stron |
+|---|---|---|
+| PDF wyrenderowane | 11 | 65 |
+| PNG wyrenderowane | 9 | 33 |
+| JPEG wyrenderowane | 18 | 66 |
+| DOC/DOCX/ODS/XLSX: `OFFICE_CONVERSION_DISABLED` (zgodnie z flagą) | 40 | – |
+| JSON (pominięte) | 3 | – |
+| **Razem** | **81** | **164** |
+
+Żadnego błędu renderowania poza zamierzonym `OFFICE_CONVERSION_DISABLED`.
+
+**PDF**: 0 formularzy AcroForm i XFA, 0 widgetów; warstwa tekstu na każdej stronie każdego
+formularza; `/Rotate` = 0 i CropBox = MediaBox na wszystkich stronach; każda strona w 200 DPI ma
+1654 × 2339 px.
+
+**Obrazy**: 24 z 24 obrazów zszytych pocięte na tyle stron, ile ma odpowiadający PDF (1, 2, 6 lub 16);
+3 skany (130 DPI z metadanych) bez cięcia; 0 × `TALL_IMAGE_UNSPLIT`, `DPI_REDUCED`, `MULTI_FRAME_IMAGE`.
+`dpi_estimate` dla obrazów bez DPI: 200,06.
+
+**Zgodność geometrii: render PDF (200 DPI) vs obrazy COI po cięciu** (32 strony × 3 formaty = 96 porównań):
+
+| Miara | Wynik |
+|---|---|
+| Rozmiar strony identyczny | 96 / 96 |
+| Przesunięcie | 0 lub 1 px (≈ 0,0004 wysokości strony) |
+| Pokrycie tuszu z tolerancją 1 px (PNG, 32 strony) | min. 97,9%, średnio 99,7–99,9% |
+| Pokrycie tuszu dokładne (IoU) | 0,71–0,80 |
+| Średnia różnica jasności | 1,6–6,6 (na 255) |
+| Piksele różniące się o więcej niż 64 | ≤ 3,0% |
+
+Niższe IoU dokładne wynika z innego wygładzania krawędzi (obrazy COI powstały w innym programie,
+a kreski tekstu mają 1–3 px), nie z różnic geometrii.
+
+**Czasy** (`render_document` w trybie izolowanym, ze startem procesu ok. 0,5 s):
+
+| Rodzaj | Plików | Stron | Łącznie | Maks. na plik |
+|---|---|---|---|---|
+| PDF | 11 | 65 | 7,7 s | 1,1 s |
+| PNG | 9 | 33 | 7,8 s | 2,1 s |
+| JPEG | 18 | 66 | 15,8 s | 2,2 s |
+
 ## Znane ograniczenia
 
 - **Skany obrócone bez `/Rotate` lub bez orientacji EXIF** (np. kartka zeskanowana bokiem) nie są
