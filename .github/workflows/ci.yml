@@ -113,7 +113,7 @@ jobs:
 
       - name: Images run as non-root user
         run: |
-          for image in teamkapa/api:0.3.0 teamkapa/worker:0.3.0; do
+          for image in teamkapa/api:0.4.0 teamkapa/worker:0.4.0; do
             uid=$(docker run --rm --entrypoint id "$image" -u)
             echo "$image runs as UID $uid"
             if [ "$uid" = "0" ]; then echo "::error::$image runs as root"; exit 1; fi
@@ -121,7 +121,7 @@ jobs:
 
       - name: Images contain no secrets or .env
         run: |
-          for image in teamkapa/api:0.3.0 teamkapa/worker:0.3.0; do
+          for image in teamkapa/api:0.4.0 teamkapa/worker:0.4.0; do
             if docker run --rm --entrypoint sh "$image" -c 'find / -xdev -name ".env" 2>/dev/null | grep -q .'; then
               echo "::error::$image contains a .env file"; exit 1
             fi

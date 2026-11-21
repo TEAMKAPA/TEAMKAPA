@@ -4,9 +4,9 @@ Usługa REST, która z blankietu urzędowego (PDF, DOC/DOCX, ODS, XLSX, JPG/PNG)
 konfiguracji e-formularza zgodny ze schematem COI. Każde pole ma źródło w dokumencie i ocenę
 pewności — urzędnik sprawdza tylko pola niepewne. Wszystkie modele AI działają lokalnie.
 
-> Stan: infrastruktura (#14), modele COI (#17), REST API (#13) oraz kolejka z bazą i ponowieniami
-> (#15) gotowe; pipeline analizy (#16) w trakcie — do tego czasu analiza kończy się błędem 501
-> `PIPELINE_NOT_IMPLEMENTED`.
+> Stan: infrastruktura (#14), modele COI (#17), REST API (#13), kolejka z bazą (#15) i integracja
+> pipeline'u (#16) gotowe; etapy 05–09 (#6, #8) podłączone. Do czasu scalenia ekstrakcji tekstu
+> (#7) analiza pliku kończy się błędem 501 `PIPELINE_NOT_IMPLEMENTED`.
 
 ## Architektura uruchomieniowa
 
@@ -61,7 +61,7 @@ docker compose up -d                       # api, worker, postgres, valkey
 docker compose --profile gpu up -d         # + lokalne LLM i VLM (vLLM)
 docker compose --profile frontend up -d    # + frontend na http://localhost:8080
 
-curl http://localhost:8000/health          # {"status":"ok","version":"0.2.0"}
+curl http://localhost:8000/health          # {"status":"ok","version":"0.4.0"}
 
 # token JWT dla użytkownika (sekret jest tylko w kontenerze)
 TOKEN=$(docker compose exec -T api python -m backend.api.token_cli --sub urzednik)
@@ -104,6 +104,9 @@ Sekret można też podać jako Docker secret — plik `/run/secrets/<nazwa_zmien
 | `LLM_BASE_URL` / `LLM_MODEL` | `http://llm:8000/v1` / — | Serwer i nazwa lokalnego LLM tekstowego. |
 | `VLM_BASE_URL` / `VLM_MODEL` | `http://vlm:8001/v1` / — | Serwer i nazwa lokalnego modelu wizyjnego. |
 | `LLM_GPU_MEMORY_UTILIZATION` / `VLM_GPU_MEMORY_UTILIZATION` | `0.45` | Ułamek pamięci GPU na model (suma < 1 na jednej karcie). |
+| `LLM_API_FORMAT` | `openai` | `openai` (vLLM, llama.cpp) albo `ollama`. |
+| `LLM_TIMEOUT_SECONDS` | `300` | Limit czasu jednego wywołania modelu (generowanie JSON-a). |
+| `LLM_DEMO_MODE` | `false` | Tryb demonstracyjny bez modelu: deterministyczne odpowiedzi etapów 06–08; raport ma `demo_mode: true`, wszystkie pola pewność LOW — nie do importu. |
 | `HF_TOKEN` | puste | Tylko gdy model na Hugging Face wymaga akceptacji licencji. |
 | `ACCURACY_MODE` | `max` | `max` — podwójny odczyt każdej strony; `balanced` — tylko stron o niskiej pewności. |
 | `RENDER_DPI` | `200` | Rozdzielczość renderowania stron (72–600). |
@@ -173,10 +176,34 @@ po retencji zadań (katalog wzorców).
 | 413 | `FILE_TOO_LARGE`, `REQUEST_TOO_LARGE` |
 | 415 | `EXTENSION_NOT_ALLOWED`, `MIME_MISMATCH` |
 | 422 | `REQUEST_INVALID`, `BATCH_ALL_REJECTED`, `DOCUMENT_UNREADABLE`, `FORM_RULES_VIOLATED` |
-| 500 | `PIPELINE_ERROR`, `JOB_FAILED`, `JOB_LOST`, `FILE_EXPIRED`, `FILE_CORRUPTED` |
+| 500 | `PIPELINE_STAGE_FAILED`, `PIPELINE_ERROR`, `JOB_FAILED`, `JOB_LOST`, `FILE_EXPIRED`, `FILE_CORRUPTED` |
 | 501 | `PIPELINE_NOT_IMPLEMENTED` |
 | 503 | `QUEUE_UNAVAILABLE`, `DATABASE_UNAVAILABLE`, `PIPELINE_UNAVAILABLE` |
 | 504 | `PIPELINE_TIMEOUT` |
+
+## Pipeline analizy
+
+`backend/worker/pipeline/orchestrator.py` prowadzi analizę jednego pliku:
+
+1. **Odczyt** — równolegle kanał tekstowy (`TextExtractor`, krok 02, #7) i wizualny
+   (`VisualAnalyzer`, krok 03, #10/#11). Kontrakty: `pipeline/contracts.py`, rejestr
+   implementacji: `pipeline/stages.py`.
+2. **Etapy 05–09** (#6, #8) — typ wniosku, struktura, pola, zależności, reguły i słowniki.
+   Wywołania modelu działają w wątku, z limitem `LLM_TIMEOUT_SECONDS`.
+3. **Normalizacja** (`pipeline/normalize.py`) — wynik etapów → plik importu COI. Źródła pól,
+   propozycje słowników i konflikty reguł trafiają do raportu, a każda poprawka (pole poza
+   sekcją, klucz niedozwolony dla typu, nazwa techniczna, dane inicjalne bez źródła) jest
+   w nim odnotowana.
+4. **Kontrola** — reguły COI i ocena pewności pól (`pipeline/scoring.py`): nazwane sygnały
+   (`source_found`, `source_element`, `ocr`, `rules`, `domain_rules`, `visual_match`), poziom
+   HIGH / MEDIUM / LOW. Pole odczytane bez kanału wizualnego ma najwyżej MEDIUM.
+
+Raport zawiera też przebieg etapów (`stages`: OK / SKIPPED / DEGRADED, czas). Błędy:
+niedostępny serwer modelu → ponowienie; awaria kanału wizualnego → analiza na tekście
+(`DEGRADED`, niższa pewność); błąd etapu → `PIPELINE_STAGE_FAILED` z nazwą etapu.
+
+**Podłączenie nowego etapu** (#7, #10/#11): zaimplementuj protokół z `contracts.py`
+i zwróć implementację w `stages.default_stages()`.
 
 ## Development
 
