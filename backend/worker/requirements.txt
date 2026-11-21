@@ -1,5 +1,6 @@
 # Zależności runtime obrazu workera. Wersje przypięte; licencje sprawdza CI (pip-licenses).
 # Biblioteki pipeline'u (Docling, OpenCV, pypdfium2, Tesseract...) dochodzą w zadaniach #7, #10.
 arq==0.28.0                 # MIT
+msgpack==1.2.4              # Apache-2.0 — serializacja zadań zamiast pickle
 pydantic==2.14.4            # MIT
 pydantic-settings==2.16.3   # MIT
