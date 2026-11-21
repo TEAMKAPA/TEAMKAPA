@@ -87,6 +87,7 @@ Sekret można też podać jako Docker secret — plik `/run/secrets/<nazwa_zmien
 | `HF_TOKEN` | puste | Tylko gdy model na Hugging Face wymaga akceptacji licencji. |
 | `ACCURACY_MODE` | `max` | `max` — podwójny odczyt każdej strony; `balanced` — tylko stron o niskiej pewności. |
 | `RENDER_DPI` | `200` | Rozdzielczość renderowania stron (72–600). |
+| `CONFIDENCE_HIGH` / `CONFIDENCE_LOW` | `0.85` / `0.5` | Progi pewności pola: zielone / żółte / czerwone (do kalibracji). |
 | `API_PORT` / `FRONTEND_PORT` | `8000` / `8080` | Porty publikowane na hoście. |
 | `TMPFS_SIZE` | `512m` | Rozmiar `tmpfs` na pliki tymczasowe w `api` i `worker`. |
 
