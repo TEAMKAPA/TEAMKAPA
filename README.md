@@ -4,16 +4,18 @@ Usługa REST, która z blankietu urzędowego (PDF, DOC/DOCX, ODS, XLSX, JPG/PNG)
 konfiguracji e-formularza zgodny ze schematem COI. Każde pole ma źródło w dokumencie i ocenę
 pewności — urzędnik sprawdza tylko pola niepewne. Wszystkie modele AI działają lokalnie.
 
-> Stan: infrastruktura (#14), modele COI (#17) i REST API z kolejką (#13) gotowe; pipeline
-> analizy (#16) w trakcie — do tego czasu analiza kończy się błędem 501 `PIPELINE_NOT_IMPLEMENTED`.
+> Stan: infrastruktura (#14), modele COI (#17), REST API (#13) oraz kolejka z bazą i ponowieniami
+> (#15) gotowe; pipeline analizy (#16) w trakcie — do tego czasu analiza kończy się błędem 501
+> `PIPELINE_NOT_IMPLEMENTED`.
 
 ## Architektura uruchomieniowa
 
 | Usługa | Obraz | Rola | Port na hoście |
 | --- | --- | --- | --- |
+| `migrate` | obraz `api` | jednorazowo stosuje migracje schematu (`db/migrations`) | — |
 | `api` | `python:3.14.10-alpine3.24` | REST API (FastAPI), JWT, walidacja plików | `8000` |
 | `worker` | `python:3.14.10-slim-trixie` | pipeline przetwarzania (arq) | — |
-| `postgres` | `pgvector/pgvector:0.8.7-pg18-trixie` | wzorce, słowniki, metadane zadań | — |
+| `postgres` | `pgvector/pgvector:0.8.7-pg18-trixie` | zadania, wyniki, zatwierdzone formularze | — |
 | `valkey` | `valkey/valkey:9.0.8-alpine3.24` | kolejka zadań batch | — |
 | `llm` *(profil `gpu`)* | `vllm/vllm-openai:v0.19.1` + użytkownik bez roota | lokalny LLM tekstowy | — |
 | `vlm` *(profil `gpu`)* | `vllm/vllm-openai:v0.19.1` + użytkownik bez roota | lokalny model wizyjny | — |
@@ -88,10 +90,15 @@ Sekret można też podać jako Docker secret — plik `/run/secrets/<nazwa_zmien
 | `ANALYZE_WAIT_SECONDS` | `60` | Ile `POST /forms/analyze` czeka na wynik, zanim zwróci 202 z `job_id`. |
 | `ANALYZE_MAX_WAIT_SECONDS` | `300` | Górny limit parametru `?wait=` (proxy frontendu ma timeout 300 s). |
 | `MAX_BATCH_FILES` | `20` | Maksymalna liczba plików w jednym żądaniu batch. |
-| `JOB_QUEUE_TTL_SECONDS` | `3600` | Jak długo plik czeka w pamięci kolejki na workera; potem zadanie wygasa. |
-| `JOB_RESULT_TTL_SECONDS` | `3600` | Jak długo wynik zadania jest dostępny w `GET /jobs/{id}`. |
-| `JOB_TIMEOUT_SECONDS` | `1800` | Maksymalny czas analizy jednego pliku. |
+| `JOB_QUEUE_TTL_SECONDS` | `3600` | Jak długo plik czeka w pamięci kolejki na workera (łącznie z ponowieniami). |
+| `JOB_RESULT_TTL_SECONDS` | `3600` | Jak długo arq trzyma status w Valkey (źródłem prawdy jest PostgreSQL). |
+| `JOB_TIMEOUT_SECONDS` | `1800` | Maksymalny czas analizy jednego pliku (potem `PIPELINE_TIMEOUT`, bez ponowienia). |
 | `WORKER_MAX_JOBS` | `1` | Liczba równoległych analiz w jednym workerze (ograniczona przez GPU). |
+| `MAX_JOB_TRIES` | `3` | Łączna liczba prób analizy pliku (błędy przejściowe, awarie workera). |
+| `RETRY_BACKOFF_SECONDS` | `30` | Opóźnienie pierwszego ponowienia; kolejne ×2 (30 s, 60 s, …). |
+| `RESULT_RETENTION_DAYS` | `30` | Po ilu dniach usuwane są zadania i wygenerowane wyniki; zatwierdzone formularze zostają. |
+| `STALE_JOB_GRACE_SECONDS` | `120` | Po jakim czasie zadanie bez śladu w kolejce jest uznawane za utracone. |
+| `DB_POOL_MAX_SIZE` | `5` | Maksymalna liczba połączeń z bazą na proces. |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | — (wymagane) | Dane bazy; z nich compose składa `DATABASE_URL`. |
 | `VALKEY_URL` | `redis://valkey:6379/0` | Adres kolejki. |
 | `LLM_BASE_URL` / `LLM_MODEL` | `http://llm:8000/v1` / — | Serwer i nazwa lokalnego LLM tekstowego. |
@@ -112,8 +119,12 @@ Interaktywna dokumentacja OpenAPI: `http://localhost:8000/api/docs`, specyfikacj
 | Metoda | Ścieżka | JWT | Opis |
 | --- | --- | --- | --- |
 | `POST` | `/api/v1/forms/analyze` | tak | Jeden plik (`file`) → `200 {form, report}` albo `202` z `job_id`. |
-| `POST` | `/api/v1/forms/batch` | tak | Wiele plików (`files`) → `202 {jobs, rejected}`. |
-| `GET` | `/api/v1/jobs/{job_id}` | tak | Status `QUEUED` / `IN_PROGRESS` / `SUCCEEDED` / `FAILED`, postęp, wynik albo błąd. |
+| `POST` | `/api/v1/forms/batch` | tak | Wiele plików (`files`) → `202 {batch_id, status_url, jobs, rejected}`. |
+| `GET` | `/api/v1/batches/{batch_id}` | tak | Stan paczki: liczniki statusów, zadania, odrzucone pliki, `finished`. |
+| `GET` | `/api/v1/jobs` | tak | Moje zadania od najnowszych; filtry `status`, `batch_id`; `limit`/`offset`. |
+| `GET` | `/api/v1/jobs/{job_id}` | tak | Status `QUEUED` / `IN_PROGRESS` / `SUCCEEDED` / `FAILED`, próby, postęp, wynik albo błąd. |
+| `PUT` | `/api/v1/jobs/{job_id}/approval` | tak | Zatwierdzenie (poprawionego) formularza COI — walidacja modeli i reguł. |
+| `GET` | `/api/v1/jobs/{job_id}/approval` | tak | Zatwierdzony formularz z ostrzeżeniami reguł. |
 | `GET` | `/health` | nie | Liveness probe. |
 | `GET` | `/ready` | nie | Readiness probe — sprawdza kolejkę (503, gdy niedostępna). |
 
@@ -133,8 +144,23 @@ rozmiar ≤ `MAX_FILE_SIZE_MB`. W batch poprawne pliki trafiają do kolejki, a o
 zwracane w `rejected` z kodem i komunikatem.
 
 **Plik nie jest utrwalany:** API trzyma go w pamięci (lub `tmpfs`), przekazuje do pamięci
-Valkey (bez zapisu na dysk) z TTL, a worker usuwa go po analizie. W argumentach i wynikach
-zadań są tylko metadane (nazwa, rozmiar, SHA-256, właściciel).
+Valkey (bez zapisu na dysk) z TTL, a worker usuwa go po ostatecznym zakończeniu analizy.
+W bazie i w argumentach zadań są wyłącznie dane pochodne: metadane (nazwa, rozmiar, SHA-256,
+właściciel), wygenerowany i zatwierdzony JSON.
+
+**Stan zadań i niezawodność:** źródłem prawdy jest PostgreSQL (tabele `jobs`, `batches`,
+`approved_forms`; migracje w `db/migrations`, stosowane przez usługę `migrate`). Błąd
+przejściowy pipeline'u (np. serwer modelu niedostępny) lub chwilowa niedostępność bazy
+powodują ponowienie z wykładniczym opóźnieniem, łącznie do `MAX_JOB_TRIES` prób. Zadanie
+przerwane zamknięciem workera przejmuje kolejny worker; po twardej awarii zadanie wraca do
+kolejki po wygaśnięciu blokady. Zadania porzucone przez kolejkę (limit prób po awariach,
+restart Valkey) co 5 minut uzgadnia worker — trafiają do `FAILED` z kodem `JOB_FAILED` lub
+`JOB_LOST`. Codziennie usuwane są zadania starsze niż `RESULT_RETENTION_DAYS`.
+
+**Zatwierdzanie:** `PUT /jobs/{id}/approval` przyjmuje plik importu COI po korekcie
+urzędnika. Problemy reguł COI poziomu ERROR blokują zapis (422 `FORM_RULES_VIOLATED`
+z listą problemów), ostrzeżenia są zwracane w `warnings`. Zatwierdzone formularze zostają
+po retencji zadań (katalog wzorców).
 
 **Błędy** mają jeden format: `{"error": {"code": "...", "message": "...", "details": ...}}`.
 
@@ -142,13 +168,15 @@ zadań są tylko metadane (nazwa, rozmiar, SHA-256, właściciel).
 | --- | --- |
 | 400 | `FILENAME_MISSING`, `FILENAME_TOO_LONG`, `FILENAME_FORBIDDEN_CHARS`, `FILE_EMPTY`, `TOO_MANY_FILES` |
 | 401 | `AUTH_REQUIRED`, `TOKEN_INVALID`, `TOKEN_EXPIRED` |
-| 404 | `JOB_NOT_FOUND` |
+| 404 | `JOB_NOT_FOUND`, `BATCH_NOT_FOUND`, `APPROVAL_NOT_FOUND` |
+| 409 | `JOB_NOT_SUCCEEDED` |
 | 413 | `FILE_TOO_LARGE`, `REQUEST_TOO_LARGE` |
 | 415 | `EXTENSION_NOT_ALLOWED`, `MIME_MISMATCH` |
-| 422 | `REQUEST_INVALID`, `BATCH_ALL_REJECTED`, `DOCUMENT_UNREADABLE` |
-| 500 | `PIPELINE_ERROR`, `JOB_FAILED`, `FILE_EXPIRED`, `FILE_CORRUPTED` |
+| 422 | `REQUEST_INVALID`, `BATCH_ALL_REJECTED`, `DOCUMENT_UNREADABLE`, `FORM_RULES_VIOLATED` |
+| 500 | `PIPELINE_ERROR`, `JOB_FAILED`, `JOB_LOST`, `FILE_EXPIRED`, `FILE_CORRUPTED` |
 | 501 | `PIPELINE_NOT_IMPLEMENTED` |
-| 503 | `QUEUE_UNAVAILABLE` |
+| 503 | `QUEUE_UNAVAILABLE`, `DATABASE_UNAVAILABLE`, `PIPELINE_UNAVAILABLE` |
+| 504 | `PIPELINE_TIMEOUT` |
 
 ## Development
 
@@ -162,9 +190,23 @@ mypy
 pytest
 ```
 
-CI (`.github/workflows/ci.yml`) uruchamia: skan sekretów (Gitleaks), ruff, mypy, testy,
-kontrolę licencji (blokuje GPL/AGPL/LGPL) oraz budowanie obrazów z weryfikacją, że nie działają
-jako root i nie zawierają `.env`.
+Testy integracyjne (prawdziwy PostgreSQL, Valkey i worker arq — w tym scenariusze awarii
+workera i ponowień) uruchamiają się, gdy ustawisz:
+
+```bash
+docker run -d --rm -p 5432:5432 -e POSTGRES_USER=coi -e POSTGRES_PASSWORD=test \
+    -e POSTGRES_DB=coi_test pgvector/pgvector:0.8.7-pg18-trixie
+docker run -d --rm -p 6379:6379 valkey/valkey:9.0.8-alpine3.24
+export POSTGRES_TEST_URL=postgresql://coi:test@localhost:5432/coi_test
+export VALKEY_TEST_URL=redis://localhost:6379/15
+pytest
+```
+
+Każdy test integracyjny dostaje własny schemat bazy z zastosowanymi migracjami.
+
+CI (`.github/workflows/ci.yml`) uruchamia: skan sekretów (Gitleaks), ruff, mypy, testy (z
+prawdziwą libmagic, PostgreSQL i Valkey), kontrolę licencji (blokuje GPL/AGPL/LGPL) oraz
+budowanie obrazów z weryfikacją, że nie działają jako root i nie zawierają `.env`.
 
 ## Licencje
 

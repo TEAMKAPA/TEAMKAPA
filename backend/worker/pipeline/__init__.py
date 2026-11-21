@@ -19,14 +19,19 @@ class DocumentUnreadableError(RuntimeError):
     """Treści dokumentu nie da się odczytać (uszkodzony plik, chroniony hasłem itp.)."""
 
 
+class PipelineTemporarilyUnavailableError(RuntimeError):
+    """Błąd przejściowy (np. lokalny serwer modelu niedostępny) — zadanie zostanie ponowione."""
+
+
 async def run_pipeline(
     document: IncomingDocument, progress: ProgressReporter, settings: Settings
 ) -> AnalysisResult:
     """Analizuje dokument i zwraca plik importu COI z raportem jakości.
 
     Kontrakt dla #16: postęp raportuj przez ``progress.update(...)``; dokument nieczytelny
-    sygnalizuj ``DocumentUnreadableError``; każdy inny wyjątek kończy zadanie błędem
-    ``PIPELINE_ERROR``.
+    sygnalizuj ``DocumentUnreadableError``; chwilową niedostępność zależności (serwer LLM/VLM,
+    timeout połączenia) — ``PipelineTemporarilyUnavailableError`` (ponowienie do
+    ``MAX_JOB_TRIES``); każdy inny wyjątek kończy zadanie błędem ``PIPELINE_ERROR``.
     """
     raise PipelineNotImplementedError(
         "Pipeline analizy nie jest jeszcze zintegrowany (zadanie #16)"
