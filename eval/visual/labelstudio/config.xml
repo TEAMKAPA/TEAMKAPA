@@ -1,0 +1,73 @@
+<View>
+  <!--
+    Konfiguracja oznaczania zbioru #12 (Label Studio 1.23.2). Konwencje: eval/visual/LABELING.md.
+    Nazwy kontrolek i wartości muszą odpowiadać eval/visual/ls.py i modelom w
+    backend/worker/vision/models.py (sprawdza to test tests/vision/test_eval_labelstudio.py).
+  -->
+  <Header value="$label_id ($split)" size="5"/>
+  <View style="display: flex; align-items: flex-start; gap: 16px;">
+    <View style="flex: 1 1 auto; min-width: 0;">
+      <Image name="image" value="$image" zoom="true" zoomControl="true" rotateControl="false"
+             smoothing="false" crosshair="true" maxWidth="100%" defaultZoom="fit"/>
+    </View>
+    <View style="flex: 0 0 300px; position: sticky; top: 0;">
+      <Header value="Kategoria (skróty 1-9)" size="6"/>
+      <RectangleLabels name="kind" toName="image" canRotate="false" snap="pixel"
+                       strokeWidth="1" opacity="0.2" showInline="false">
+        <Label value="char_boxes" hotkey="1" background="#E6194B"
+               hint="Ciąg przylegających kratek na znaki; cała grupa, podaj liczbę kratek"/>
+        <Label value="checkbox" hotkey="2" background="#3CB44B"
+               hint="Pojedynczy kwadrat wyboru, bez tekstu opcji"/>
+        <Label value="checkbox_group" hotkey="3" background="#4363D8"
+               hint="Grupa powiązanych checkboxów razem z tekstami opcji"/>
+        <Label value="text_line" hotkey="4" background="#F58231"
+               hint="Linia ciągła lub z podkreślników do wpisywania"/>
+        <Label value="dotted_line" hotkey="5" background="#911EB4"
+               hint="Kropki lub wielokropek do wpisywania"/>
+        <Label value="table_cell" hotkey="6" background="#42D4F4"
+               hint="Zamknięty prostokąt na tekst: komórka tabeli albo samodzielna ramka pola"/>
+        <Label value="section_frame" hotkey="7" background="#808000"
+               hint="Duża ramka obejmująca sekcję lub całą tabelę"/>
+        <Label value="signature" hotkey="8" background="#F032E6"
+               hint="Miejsce na podpis (linia, kropki albo ramka), bez podpisu pod spodem"/>
+        <Label value="office_only" hotkey="9" background="#9A6324"
+               hint="Miejsce wypełniane przez urząd"/>
+      </RectangleLabels>
+
+      <View visibleWhen="region-selected" whenLabelValue="char_boxes">
+        <Header value="Liczba kratek (wymagana)" size="6"/>
+        <Number name="cells" toName="image" perRegion="true" min="1" max="200"/>
+      </View>
+
+      <View visibleWhen="region-selected" whenLabelValue="checkbox_group">
+        <Header value="Wybór w grupie" size="6"/>
+        <Choices name="multi" toName="image" perRegion="true" choice="single" showInline="true">
+          <Choice value="single"/>
+          <Choice value="multi"/>
+          <Choice value="unknown"/>
+        </Choices>
+      </View>
+
+      <View visibleWhen="region-selected">
+        <Header value="Rola (tylko gdy inna niż domyślna)" size="6"/>
+        <Choices name="role" toName="image" perRegion="true" choice="single" showInline="true">
+          <Choice value="input"/>
+          <Choice value="choice"/>
+          <Choice value="skip"/>
+          <Choice value="e_signature"/>
+          <Choice value="section"/>
+        </Choices>
+        <Choices name="flags" toName="image" perRegion="true" choice="multiple" showInline="true">
+          <Choice value="uncertain" hint="Nie jestem pewien kategorii, roli albo granic elementu"/>
+        </Choices>
+      </View>
+
+      <Header value="Status strony (wymagany przed zapisaniem)" size="6"/>
+      <Choices name="page_status" toName="image" choice="single" showInline="true"
+               required="true" requiredMessage="Zaznacz status strony: complete albo empty">
+        <Choice value="complete" hint="Strona oznaczona w całości"/>
+        <Choice value="empty" hint="Strona sprawdzona, nie ma na niej żadnego elementu"/>
+      </Choices>
+    </View>
+  </View>
+</View>

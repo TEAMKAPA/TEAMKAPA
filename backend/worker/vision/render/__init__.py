@@ -1,0 +1,90 @@
+"""Renderowanie dokumentów do obrazów stron (#10).
+
+Punkt wejścia: ``render_document``. Ścieżka jest wybierana według rodzaju **wykrytego
+z zawartości** (``detect.detect_kind``), a nie według rozszerzenia; niezgodność z rodzajem
+deklarowanym to ostrzeżenie ``DECLARED_KIND_MISMATCH`` w metadanych dokumentu (decyzja 10).
+
+Moduł nie zależy od detektorów ani VLM, żeby mógł zostać przeniesiony do #7 lub podmieniony.
+"""
+
+import hashlib
+
+from backend.worker.vision.config import RenderConfig
+from backend.worker.vision.errors import IssueCode, RenderError
+from backend.worker.vision.models import (
+    DocumentKind,
+    DocumentMeta,
+    PageSource,
+    RenderedDocument,
+    RenderIssue,
+)
+from backend.worker.vision.render.detect import declared_kind_issues, detect_kind
+from backend.worker.vision.render.image import render_image
+from backend.worker.vision.render.pdf import render_pdf
+
+__all__ = ["render_document"]
+
+
+def render_document(
+    data: bytes,
+    declared_kind: DocumentKind | None,
+    cfg: RenderConfig,
+    *,
+    isolated: bool = True,
+) -> RenderedDocument:
+    """Renderuje dokument do stron RGB z metadanymi.
+
+    ``declared_kind``: rodzaj z kroku 1 (np. z rozszerzenia) albo ``None``.
+    Dokumenty biurowe (DOC, DOCX, ODS, XLSX) nie są renderowane: zespół odrzucił LibreOffice, więc
+    zgłaszany jest ``OFFICE_FORMAT_NOT_RENDERED`` (brak kanału wizualnego, ``docs/vision.md``).
+    Błędy dokumentu zgłasza jako ``RenderError`` z kodem; nie ma wyniku częściowego. Błąd zawsze
+    niesie w ``detail`` rodzaj deklarowany i wykryty, a w ``issues`` problemy zebrane przed błędem
+    (np. ``DECLARED_KIND_MISMATCH``).
+    """
+    detection = detect_kind(data)
+    declared = declared_kind.value if declared_kind is not None else "none"
+    if detection.kind is None:
+        raise RenderError(
+            IssueCode.UNSUPPORTED_FORMAT, f"declared={declared} detected={detection.detail}"
+        )
+    kind = detection.kind
+    issues: list[RenderIssue] = declared_kind_issues(declared_kind, detection)
+    try:
+        return _render_detected(data, declared_kind, kind, issues, cfg, isolated)
+    except RenderError as exc:
+        context = f"declared={declared} detected={kind.value}"
+        detail = f"{exc.detail} {context}" if exc.detail else context
+        raise RenderError(exc.code, detail, tuple(issues) + exc.issues) from exc
+
+
+def _render_detected(
+    data: bytes,
+    declared_kind: DocumentKind | None,
+    kind: DocumentKind,
+    issues: list[RenderIssue],
+    cfg: RenderConfig,
+    isolated: bool,
+) -> RenderedDocument:
+    if kind is DocumentKind.PDF:
+        pdf = render_pdf(data, cfg, PageSource.NATIVE_PDF, isolated=isolated)
+        pages, versions, source_pages = pdf.pages, pdf.info.renderer_versions, pdf.info.page_count
+    elif kind.is_image:
+        image = render_image(data, kind, cfg, isolated=isolated)
+        pages, versions = image.pages, image.info.renderer_versions
+        source_pages = 1  # jeden obraz (pierwsza klatka), niezależnie od liczby stron po cięciu
+        issues.extend(image.info.issues)
+    else:
+        raise RenderError(
+            IssueCode.OFFICE_FORMAT_NOT_RENDERED,
+            f"kind={kind.value}: office formats are not rendered",
+        )
+
+    meta = DocumentMeta(
+        sha256=hashlib.sha256(data).hexdigest(),
+        declared_kind=declared_kind,
+        detected_kind=kind,
+        source_page_count=source_pages,
+        renderer_versions=versions,
+        issues=tuple(issues),
+    )
+    return RenderedDocument(meta=meta, pages=pages)
