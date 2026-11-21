@@ -152,8 +152,7 @@ async def _extract(
     extractor = stages.text_extractor
     if extractor is None:
         raise PipelineNotImplementedError(
-            "Etap ekstrakcji tekstu (#7) nie jest jeszcze podłączony — analiza dokumentów "
-            "będzie możliwa po jego scaleniu"
+            "Brak skonfigurowanego etapu ekstrakcji tekstu — analiza dokumentu jest niemożliwa"
         )
     # Kanały tekstowy i wizualny działają równolegle; błąd tekstu przerywa wizualny.
     visual_task = asyncio.create_task(_visual_channel(stages.visual_analyzer, document))

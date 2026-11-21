@@ -123,8 +123,15 @@ async def test_demo_mode_is_marked_and_all_low(tmp_path: Path) -> None:
 
 
 async def test_missing_text_extractor_is_not_implemented(tmp_path: Path) -> None:
-    with pytest.raises(PipelineNotImplementedError, match="#7"):
-        await _run(tmp_path, default_stages(settings()))
+    without_extractor = PipelineStages(None, None, default_stages(settings()).llm_client_factory)
+    with pytest.raises(PipelineNotImplementedError, match="ekstrakcji tekstu"):
+        await _run(tmp_path, without_extractor)
+
+
+def test_default_stages_use_step02_extractor() -> None:
+    from backend.worker.pipeline.text_extraction import Step02TextExtractor
+
+    assert isinstance(default_stages(settings()).text_extractor, Step02TextExtractor)
 
 
 async def test_empty_document_is_unreadable(tmp_path: Path) -> None:
