@@ -260,11 +260,18 @@ class TestStep06StructureAndCOIRules:
         assert (block["type"], block["techName"]) == ("TEXT_BLOCK", "podglad_1")
         assert block["description"].startswith("Zanim")
 
-        # Logical COI section ordering on Tab 1.
+        # Strona „Dane” i „Kontakt i zgody” ze standardowego szablonu COI, w kolejności COI.
+        assert tabs[0]["title"] == "Dane"
+        assert tabs[-2]["title"] == "Kontakt i zgody"
         tab1_techs = [q["field"]["techName"] for q in tabs[0]["questions"]]
-        assert tab1_techs.index("urzad_wniosku") < tab1_techs.index("podmiot_wniosku")
-        assert tab1_techs.index("podmiot_wniosku") < tab1_techs.index("twoje_dane")
-        assert tab1_techs.index("twoje_dane") < tab1_techs.index("adres_zamieszkania")
+        assert tab1_techs[0] in {
+            "urzad_do_ktorego_jest_skladany_wniosek",
+            "organ_do_ktorego_jest_skladany_wniosek",
+        }
+        assert tab1_techs[1:4] == ["podmiot_wniosku", "twoje_dane", "adres_zamieszkania"]
+        assert all(t.get("origin") == "standard" for t in (tabs[0], tabs[-2]))
+        # Model odpowiada tylko za strony tematyczne między nimi.
+        assert len(tabs) >= 4
         assert validate_coi_structure(structure) == []
 
     def test_validator_rejects_nested_section_and_finish_input(self) -> None:
@@ -355,20 +362,23 @@ class TestStep07FieldsAndStep08Dependencies:
                     all_fields.append(f)
                     assert f["type"] in (COI_COMPONENT_TYPES - COI_SECTION_TYPES)
                     assert all(v in COI_VALIDATORS for v in f.get("validation", []))
+                    if f.get("origin") == "standard":
+                        continue  # pole szablonu COI — nie pochodzi z dokumentu
                     assert isinstance(f.get("source_text"), str) and f["source_text"]
                     assert isinstance(f.get("page"), int) and f["page"] >= 1
                     assert "element_id" in f
 
         by_tech = {f["techName"]: f for f in all_fields}
 
-        # Authority is readOnly.
-        assert by_tech["nazwa_urzedu"]["readOnly"] is True
+        # Dokument nie podaje nazwy urzędu („Urząd Miasta / CEIDG”) — pole zostaje puste
+        # i edytowalne do uzupełnienia przez urzędnika (nazwy nie zgadujemy).
+        authority = by_tech["nazwa_urzedu"]
+        assert authority["readOnly"] is False and "defaultValue" not in authority
 
-        # Twoje dane: Imię, Nazwisko, PESEL readOnly + EXTERNAL_SYSTEM.
-        for key in ("imie", "nazwisko", "pesel"):
+        # Twoje dane (szablon COI): Imię, Nazwisko, PESEL z rejestru, tylko do odczytu.
+        for key in ("imie", "nazwisko", "numer_pesel"):
             assert by_tech[key]["readOnly"] is True
             assert by_tech[key]["defaultValueType"] == "EXTERNAL_SYSTEM"
-        assert "PESEL" in by_tech["pesel"]["validation"]
 
         # Consents MUST be CONSENT_SECTION (never CHECKBOX or RADIO).
         consent_fields = [f for f in all_fields if f["type"] == "CONSENT_SECTION"]
@@ -382,13 +392,20 @@ class TestStep07FieldsAndStep08Dependencies:
         step05 = run_step05(SAMPLE_DOC)
         step06 = run_step06(SAMPLE_DOC, template=step05["selected_template"])
 
+        subject_section = next(
+            q["field"]["techName"]
+            for tab in step06["tabs"]
+            if tab["type"] == "MAIN" and tab.get("origin") != "standard"
+            for q in tab["questions"]
+        )
+
         # Simulate an LLM mistakenly classifying a consent as CHECKBOX.
         def mock_bad_consent_transport(_p: str, _s: str, _a: int) -> str:
             return json.dumps(
                 {
                     "fields": [
                         {
-                            "section_tech_name": "zgody_i_oswiadczenia",
+                            "section_tech_name": subject_section,
                             "techName": "zgoda_rodo",
                             "title": "Wyrażam zgodę na przetwarzanie danych",
                             "type": "CHECKBOX",
@@ -412,6 +429,7 @@ class TestStep07FieldsAndStep08Dependencies:
             if tab["type"] == "MAIN"
             for q in tab["questions"]
             for child in q["field"]["repeatingSectionGrid"]
+            if child["field"].get("origin") != "standard"
         ]
         assert len(fields) == 1
         assert fields[0]["type"] == "CONSENT_SECTION"
@@ -532,12 +550,12 @@ class TestModelComparison:
                     "title": "Wniosek testowy",
                     "tabs": [
                         {
-                            "title": "Dane wnioskodawcy",
+                            "title": "Powód złożenia wniosku",
                             "type": "MAIN",
                             "sections": [
                                 {
-                                    "title": "Twoje dane",
-                                    "techName": "twoje_dane",
+                                    "title": "Powód złożenia wniosku",
+                                    "techName": "powod_wniosku",
                                     "type": "SECTION",
                                 }
                             ],
@@ -560,12 +578,13 @@ class TestModelComparison:
                 payload = {
                     "fields": [
                         {
-                            "section_tech_name": "twoje_dane",
-                            "techName": "imie",
-                            "title": "Imię",
-                            "type": "TEXT_FIELD",
+                            "section_tech_name": "powod_wniosku",
+                            "techName": "powod_zlozenia_wniosku",
+                            "title": "Powód złożenia wniosku",
+                            "type": "RADIO",
+                            "options": ["Utrata dowodu", "Zmiana danych"],
                             "validation": ["REQUIRED"],
-                            "source_text": "Imię",
+                            "source_text": "Powód złożenia wniosku",
                             "page": 1,
                             "element_id": "e1",
                         }

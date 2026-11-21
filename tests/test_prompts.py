@@ -48,21 +48,24 @@ def test_structure_prompt_contains_document_rules_and_schema() -> None:
     prompt = structure_prompt(DOCUMENT, "Wniosek o zaświadczenie", STRUCTURE_SCHEMA)
     assert "[p2-b1|s.2] PESEL" in prompt
     assert "Strona końcowa" in prompt and "Kontakt i zgody" in prompt
+    assert "authority" in prompt and "Wójt Gminy Elbląg" in prompt
     assert json.dumps(STRUCTURE_SCHEMA, ensure_ascii=False, separators=(",", ":")) in prompt
 
 
-def test_fields_prompt_lists_sections_and_coi_conventions() -> None:
+def test_fields_prompt_lists_only_subject_sections() -> None:
     structure = run_step06(DOCUMENT)
     prompt = fields_prompt(DOCUMENT, structure, None, FIELDS_SCHEMA)
-    main_sections = [
+    subject = [
         q["field"]["techName"]
         for tab in structure["tabs"]
-        if tab["type"] == "MAIN"
+        if tab["type"] == "MAIN" and tab.get("origin") != "standard"
         for q in tab["questions"]
     ]
-    assert all(f"- {tech}:" in prompt for tech in main_sections)
-    assert "podglad_uzupelnionego_wniosku" not in prompt  # FINISH nie dostaje pól
-    assert "TERYT_4G_DOWODOWY" in prompt and "MLPZ.name" in prompt
+    assert subject and all(f"- {tech}:" in prompt for tech in subject)
+    # Sekcje standardowe (szablon COI) i strona końcowa nie dostają pól od modelu.
+    assert "- twoje_dane:" not in prompt and "- podmiot_wniosku:" not in prompt
+    assert "podglad_uzupelnionego_wniosku" not in prompt
+    assert "„Kraje”" in prompt
     assert "[p1-b2|s.1] Imię i nazwisko" in prompt
 
 

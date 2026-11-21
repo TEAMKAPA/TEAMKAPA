@@ -253,6 +253,9 @@ class TestStep09RulesAndDicts:
             "Miejscowość",
             "Kraje",
             "Numery kierunkowe",
+            # drzewa adresowe z konfiguracji wyeksportowanych z COI
+            "TERYT_4G_DOWODOWY",
+            "TERYT_DOWODOWY",
         }
         assert match_coi_dictionary("Województwo zamieszkania") == "Województwo"
         assert match_coi_dictionary("Powiat") == "Powiat"

@@ -9,6 +9,7 @@ from typing import Any
 
 from backend.worker.clients.llm_client import LLMClient
 from backend.worker.pipeline.prompts import SYSTEM_PROMPT, fields_prompt
+from backend.worker.pipeline.standard_sections import is_standard, is_standard_section
 from backend.worker.pipeline.step06_structure import (
     COI_COMPONENT_TYPES,
     COI_SECTION_TYPES,
@@ -625,7 +626,8 @@ def run_step07(
             continue
         for q in tab.get("questions", []):
             sec_field = q.get("field", {})
-            if sec_field.get("type") in COI_SECTION_TYPES:
+            # Sekcje standardowe COI mają już pola z szablonu — model ich nie uzupełnia.
+            if sec_field.get("type") in COI_SECTION_TYPES and not is_standard(sec_field):
                 sections_by_tech[sec_field["techName"]] = sec_field
                 if first_main_section is None:
                     first_main_section = sec_field
@@ -640,22 +642,31 @@ def run_step07(
     )
 
     for raw_field in llm_output["fields"]:
+        # Standard COI: podpis elektroniczny jest domyślny i nie jest polem formularza.
+        if slugify_tech_name(str(raw_field.get("techName") or "")).startswith("podpis"):
+            continue
         sec_key = slugify_tech_name(str(raw_field["section_tech_name"]))
+        if sec_key not in sections_by_tech and is_standard_section(sec_key):
+            continue  # pole sekcji standardowej (dane wnioskodawcy, kontakt…) jest w szablonie
         target_sec = sections_by_tech.get(sec_key) or first_main_section
         if target_sec is None:
             continue
         grid = target_sec.setdefault("repeatingSectionGrid", [])
         grid.append(_to_coi_question_field(raw_field, order=len(grid) + 1))
 
-    # Drop empty optional sections on MAIN tabs (keep every tab with >= 1 field).
+    # Strony tematyczne: bez pustych sekcji; strona bez żadnego pola znika (standardowe zostają).
+    kept_tabs = []
     for tab in form.get("tabs", []):
-        if tab.get("type") != "MAIN":
+        if tab.get("type") != "MAIN" or is_standard(tab):
+            kept_tabs.append(tab)
             continue
         non_empty = [q for q in tab.get("questions", []) if q["field"].get("repeatingSectionGrid")]
         if non_empty:
             for idx, q in enumerate(non_empty):
                 q["y"] = idx
-                q["field"]["questionOrder"] = idx + 1
+                q["field"]["questionOrder"] = idx
             tab["questions"] = non_empty
+            kept_tabs.append(tab)
+    form["tabs"] = kept_tabs
 
     return form

@@ -57,18 +57,22 @@ def schema_instruction(schema: dict[str, Any]) -> str:
 
 _STRUCTURE_RULES = """\
 Zasady COI dla stron i sekcji:
-- Strony MAIN w kolejności: 1) „Dane” — urząd/organ, podmiot wniosku (w czyim imieniu),
-  dane wnioskodawcy, adres, dane innej osoby lub podmiotu, pełnomocnictwo, opłata skarbowa;
-  2) jedna lub więcej stron tematycznych z przedmiotem wniosku, nazwanych od treści
-  (np. „Informacje o budynku”, „Informacje o nadpłacie”); 3) „Kontakt i zgody” — dane do
-  kontaktu i zgody/oświadczenia.
-- Ostatnia strona: type FINISH, tytuł „Strona końcowa”, jedna sekcja „Podgląd uzupełnionego
-  wniosku” (techName podglad_uzupelnionego_wniosku) — treść wstawi system.
-- Sekcja grupuje powiązane pola (np. „Adres zamieszkania”, „Dane do kontaktu”). Sekcja,
-  której wierszy może być wiele (np. lista osób, nieruchomości), ma typ REPEATING_SECTION.
+- System sam dodaje standardowe strony COI: „Dane” (urząd, podmiot wniosku, dane i adres
+  wnioskodawcy, dane innej osoby lub podmiotu, reprezentant, pełnomocnictwo, opłata skarbowa
+  za pełnomocnictwo), „Kontakt i zgody” (telefon, e-mail, zgoda RODO) oraz „Strona końcowa”.
+  Nie twórz tych stron ani sekcji o takiej treści.
+- Zwróć wyłącznie strony tematyczne (type MAIN) z przedmiotem wniosku, nazwane od treści
+  (np. „Informacje o budynku”, „Informacje o nadpłacie”, „Dane psa”) — zwykle jedną;
+  kilka tylko przy długim formularzu z wyraźnie odrębnymi częściami.
+- Sekcja grupuje powiązane pola (np. „Lokalizacja budynku”, „Rozliczenie nadpłaty”).
+  Sekcja, której wierszy może być wiele (np. lista osób, nieruchomości), ma typ
+  REPEATING_SECTION.
 - techName: snake_case, bez polskich znaków, unikalny w formularzu.
 - Nie twórz sekcji dla: podpisu, daty i miejsca złożenia, pieczęci, pól „wypełnia urząd”,
   instrukcji wypełniania ani klauzuli informacyjnej RODO.
+- authority: pełna nazwa organu albo urzędu, do którego składany jest wniosek, dokładnie jak
+  w dokumencie (np. „Wójt Gminy Elbląg”, „Urząd Gminy Ulan-Majorat”); kind ORGAN dla wójta,
+  burmistrza, prezydenta miasta, starosty; URZAD dla urzędu.
 - Tytuł formularza zaczyna się od rodzaju dokumentu („Wniosek o …”, „Deklaracja …”,
   „Zgłoszenie …”, „Oświadczenie …”), maks. 255 znaków."""
 
@@ -100,16 +104,12 @@ Zasady COI dla pól:
   „opcjonalnie”, „jeśli dotyczy”). Dla TEXT_FIELD dodatkowo: EMAIL, PESEL, NIP, REGON,
   ZIP_CODE (kod pocztowy), EPUAP, ADE, SERIAL_NUMBER_ID_CARD (seria i numer dowodu) —
   tylko gdy pole dokładnie tego dotyczy.
-- Słowniki zamiast opcji: kraj → SELECT, dictionaryName „Kraje”, defaultValue „Polska”;
-  adres w Polsce (województwo, powiat, gmina, miejscowość) → jedno pole SELECT
-  „wojewodztwo”, dictionaryName „TERYT_4G_DOWODOWY”. Pole ze słownikiem ma puste options.
-- Dane wnioskodawcy z profilu zalogowanego (tylko wnioskodawca, nie inne osoby):
-  defaultValueType „EXTERNAL_SYSTEM” i defaultValue: imię „MLPZ.name”, nazwisko
-  „MLPZ.surname”, PESEL „PESEL.pesel”, kod pocztowy „MLPZ.postCode”, ulica „MLPZ.street”,
-  numer budynku „MLPZ.building”, numer lokalu „MLPZ.apartment”, telefon „MLPZ.phoneNumber”,
-  e-mail „MLPZ.email”. Imię, nazwisko i PESEL mają readOnly true.
-- Urząd/organ, do którego składany jest wniosek: TEXT_FIELD readOnly true, defaultValue =
-  pełna nazwa urzędu lub organu z dokumentu (np. „Wójt Gminy Elbląg”).
+- Słownik zamiast opcji: kraj → SELECT, dictionaryName „Kraje”, defaultValue „Polska”
+  (pole ze słownikiem ma puste options).
+- Dane wnioskodawcy, jego adres, PESEL, dane pełnomocnika lub reprezentanta, telefon, e-mail,
+  zgoda RODO i nazwa urzędu są w standardowych sekcjach COI — nie zwracaj takich pól.
+  Zwracaj pola dotyczące przedmiotu wniosku (np. położenie nieruchomości, kwota, uzasadnienie,
+  załączniki wymagane przez wniosek, oświadczenia właściwe dla sprawy).
 - options: nazwy opcji dokładnie jak w dokumencie (pole wyboru), bez znaków □ ☐ ⃞.
 - Pomiń: podpis, datę i miejsce złożenia, pola „wypełnia urząd”, pieczęcie, nagłówki,
   numerację, instrukcje wypełniania, klauzulę RODO.
@@ -122,8 +122,8 @@ Zasady COI dla pól:
 def _sections_listing(form: dict[str, Any]) -> str:
     lines = []
     for tab in form.get("tabs", []):
-        if tab.get("type") != "MAIN":
-            continue
+        if tab.get("type") != "MAIN" or tab.get("origin") == "standard":
+            continue  # strony ze standardowego szablonu COI mają już pola
         for question in tab.get("questions", []):
             section = question.get("field", {})
             lines.append(

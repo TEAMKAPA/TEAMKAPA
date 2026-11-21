@@ -10,6 +10,14 @@ from typing import Any
 
 from backend.worker.clients.llm_client import LLMClient
 from backend.worker.pipeline.prompts import SYSTEM_PROMPT, structure_prompt
+from backend.worker.pipeline.standard_sections import (
+    AuthorityKind,
+    find_authority,
+    is_standard_section,
+    standard_contact_tab,
+    standard_dane_tab,
+    standard_tab_titles,
+)
 
 COI_SECTION_TYPES: frozenset[str] = frozenset({"SECTION", "REPEATING_SECTION"})
 
@@ -80,9 +88,17 @@ STRUCTURE_SCHEMA: dict[str, Any] = {
     "required": ["title", "tabs"],
     "properties": {
         "title": {"type": "string", "minLength": 3, "maxLength": 255},
+        "authority": {
+            "type": "object",
+            "required": ["name", "kind"],
+            "properties": {
+                "name": {"type": "string"},
+                "kind": {"type": "string", "enum": ["ORGAN", "URZAD"]},
+            },
+        },
         "tabs": {
             "type": "array",
-            "minItems": 2,
+            "minItems": 1,
             "items": {
                 "type": "object",
                 "required": ["title", "type", "sections"],
@@ -337,30 +353,59 @@ def _build_mock_structure(
     }
 
 
-def _to_coi_tabs(raw_structure: dict[str, Any], *, has_signature: bool = True) -> dict[str, Any]:
-    title = normalize_form_title(str(raw_structure.get("title", "")))
-    raw_tabs = raw_structure.get("tabs", [])
-
-    main_tabs = [t for t in raw_tabs if t.get("type") != "FINISH"]
-
-    if not main_tabs:
-        main_tabs = [
+def _subject_tabs(raw_tabs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Strony tematyczne od modelu — bez sekcji, które zapewnia standardowy szablon COI."""
+    subject: list[dict[str, Any]] = []
+    for raw_tab in raw_tabs:
+        if raw_tab.get("type") == "FINISH":
+            continue
+        sections = [
+            sec
+            for sec in raw_tab.get("sections", [])
+            if not is_standard_section(
+                slugify_tech_name(str(sec.get("techName") or sec.get("title") or ""))
+            )
+        ]
+        if sections:
+            subject.append({**raw_tab, "sections": sections})
+    if not subject:
+        subject = [
             {
-                "title": "Dane wnioskodawcy",
+                "title": "Przedmiot wniosku",
                 "type": "MAIN",
                 "sections": [
                     {
-                        "title": "Twoje dane",
-                        "techName": "twoje_dane",
+                        "title": "Przedmiot wniosku",
+                        "techName": "przedmiot_wniosku",
                         "type": "SECTION",
                     }
                 ],
             }
         ]
+    return subject
 
-    coi_tabs: list[dict[str, Any]] = []
-    for tab_idx, raw_tab in enumerate(main_tabs):
-        tab_title = str(raw_tab.get("title") or f"Strona {tab_idx + 1}").strip()
+
+def _to_coi_tabs(
+    raw_structure: dict[str, Any],
+    *,
+    has_signature: bool = True,
+    authority: tuple[str, AuthorityKind] | None = None,
+) -> dict[str, Any]:
+    """Strony: „Dane” (szablon COI) → strony tematyczne (model) → „Kontakt i zgody” (szablon)
+    → „Strona końcowa” (standard COI)."""
+    title = normalize_form_title(str(raw_structure.get("title", "")))
+    used_titles = {*standard_tab_titles(), FINISH_TAB_TITLE}
+
+    coi_tabs: list[dict[str, Any]] = [standard_dane_tab(authority)]
+    for tab_idx, raw_tab in enumerate(_subject_tabs(raw_structure.get("tabs", []))):
+        tab_title = str(raw_tab.get("title") or "").strip() or "Przedmiot wniosku"
+        if tab_title in used_titles:
+            tab_title = (
+                "Przedmiot wniosku"
+                if "Przedmiot wniosku" not in used_titles
+                else (f"Przedmiot wniosku ({tab_idx + 1})")
+            )
+        used_titles.add(tab_title)
         tab_seed = f"tab.{tab_idx}.{slugify_tech_name(tab_title)}"
         sections = raw_tab.get("sections", [])
 
@@ -387,20 +432,12 @@ def _to_coi_tabs(raw_structure: dict[str, Any], *, has_signature: bool = True) -
                 "title": sec_title,
                 "repeatingSectionGrid": [],
                 "states": [],
-                "questionOrder": q_idx + 1,
+                "questionOrder": q_idx,
             }
             if sec.get("description"):
                 field_obj["description"] = str(sec["description"])
 
-            questions.append(
-                {
-                    "x": 0,
-                    "y": q_idx,
-                    "rows": 1,
-                    "cols": 12,
-                    "field": field_obj,
-                }
-            )
+            questions.append({"x": 0, "y": q_idx, "rows": 1, "cols": 3, "field": field_obj})
 
         coi_tabs.append(
             {
@@ -410,6 +447,7 @@ def _to_coi_tabs(raw_structure: dict[str, Any], *, has_signature: bool = True) -
                 "questions": questions,
             }
         )
+    coi_tabs.append(standard_contact_tab())
 
     # Strona końcowa zawsze według standardu COI (treść nie pochodzi z dokumentu).
     finish_seed = "tab.finish.strona_koncowa"
@@ -425,6 +463,15 @@ def _to_coi_tabs(raw_structure: dict[str, Any], *, has_signature: bool = True) -
     )
 
     return {"title": title, "tabs": coi_tabs, "flow": {"links": []}}
+
+
+def _authority(llm_output: dict[str, Any], text: str) -> tuple[str, AuthorityKind] | None:
+    """Urząd/organ: z odpowiedzi modelu, a gdy jej brak — z treści dokumentu."""
+    raw = llm_output.get("authority")
+    if isinstance(raw, dict) and str(raw.get("name") or "").strip():
+        kind: AuthorityKind = "ORGAN" if raw.get("kind") == "ORGAN" else "URZAD"
+        return str(raw["name"]).strip(), kind
+    return find_authority(text)
 
 
 _FINISH_TYPES = frozenset({"TEXT_BLOCK", "INFO_SECTION"})
@@ -505,9 +552,14 @@ def run_step06(
         mock_response_fn=lambda _model: _build_mock_structure(document, template),
     )
 
+    text = str(document.get("text", ""))
     # Formularz papierowy z miejscem na podpis → w e-usłudze krok wyboru sposobu podpisu.
-    has_signature = "podpis" in str(document.get("text", "")).lower()
-    form = _to_coi_tabs(deepcopy(llm_output), has_signature=has_signature)
+    has_signature = "podpis" in text.lower()
+    form = _to_coi_tabs(
+        deepcopy(llm_output),
+        has_signature=has_signature,
+        authority=_authority(llm_output, text),
+    )
     validation_errors = validate_coi_structure(form)
     if validation_errors:
         raise ValueError(f"Invalid COI structure: {'; '.join(validation_errors)}")

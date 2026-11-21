@@ -7,6 +7,7 @@ from typing import Any
 
 from backend.worker.clients.llm_client import LLMClient
 from backend.worker.pipeline.prompts import SYSTEM_PROMPT, dependencies_prompt
+from backend.worker.pipeline.standard_sections import is_standard
 from backend.worker.pipeline.step06_structure import (
     COI_COMPONENT_TYPES,
     COI_SECTION_TYPES,
@@ -235,6 +236,8 @@ def validate_form_definition(form: dict[str, Any]) -> list[str]:
                     errors.append(
                         f"CONSENT_SECTION '{f.get('techName')}' missing consentSectionConfig."
                     )
+                if is_standard(f):
+                    continue  # pole szablonu COI nie pochodzi z dokumentu — bez metadanych źródła
                 if not f.get("source_text") or not isinstance(f.get("page"), int):
                     errors.append(f"Field '{f.get('techName')}' missing source_text or page.")
                 if "element_id" not in f:
@@ -307,6 +310,12 @@ def run_step08(
         target_kind = dep["target_kind"]
         target_tech = dep["target_tech_name"]
         state_type = dep["state_type"]
+
+        # Szablon COI ma już kompletne warunki sekcji i pól standardowych.
+        target = sections.get(target_tech) if target_kind == "section" else None
+        target = target or (fields_by_tech.get(target_tech) if target_kind == "field" else None)
+        if target is not None and is_standard(target):
+            continue
 
         if target_kind == "section" and target_tech in sections:
             if state_type not in STATE_TYPES_SECTION:

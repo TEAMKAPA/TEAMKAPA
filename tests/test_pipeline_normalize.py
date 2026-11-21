@@ -193,3 +193,12 @@ def test_unfixable_result_is_stage_error() -> None:
     leaf(raw, 1, 0, 1)["type"] = "SIGNATURE"
     with pytest.raises(PipelineStageError, match="niezgodny ze schematem COI"):
         normalize_form(raw)
+
+
+def test_choice_without_options_becomes_text_field() -> None:
+    raw = sample()
+    radio = leaf(raw, 0, 1, 0)
+    radio["options"] = []
+    normalized = normalize_form(raw)
+    assert leaf(normalized.form.to_coi_json(), 0, 1, 0)["type"] == "TEXT_FIELD"
+    assert "CHOICE_WITHOUT_OPTIONS" in _codes(normalized.issues)

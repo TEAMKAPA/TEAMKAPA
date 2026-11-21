@@ -21,6 +21,9 @@ COI_DICTIONARIES: dict[str, frozenset[str]] = {
     "Miejscowość": frozenset({"dropdown"}),
     "Kraje": frozenset({"dropdown"}),
     "Numery kierunkowe": DICTIONARY_ALLOWED_TYPES,
+    # Drzewa adresowe TERYT z konfiguracji wyeksportowanych z COI (województwo → miejscowość).
+    "TERYT_4G_DOWODOWY": frozenset({"dropdown"}),
+    "TERYT_DOWODOWY": frozenset({"dropdown"}),
 }
 
 _TYPE_ALIASES: dict[str, str] = {
@@ -511,7 +514,8 @@ def apply_rules_to_coi_form(form_data: dict[str, Any]) -> dict[str, Any]:
             sec_field = sec_q.get("field", {})
             for child in sec_field.get("repeatingSectionGrid", []):
                 field = child.get("field", {})
-                if field.get("type") in _COI_SKIP_TYPES:
+                # Pola szablonu COI są wzorcem — reguły ich nie nadpisują.
+                if field.get("type") in _COI_SKIP_TYPES or field.get("origin") == "standard":
                     continue
 
                 label = str(field.get("title") or field.get("techName") or "").strip()

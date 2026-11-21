@@ -3,7 +3,8 @@
 Etapy 06–09 zwracają słownik zbliżony do formatu COI, ale z dodatkami, które w pliku
 importu są niedozwolone. Normalizacja niczego nie gubi po cichu:
 
-- metadane źródeł pól (``source_text``, ``page``, ``element_id``) → raport jakości,
+- metadane źródeł pól (``source_text``, ``page``, ``element_id``) i znacznik ``origin``
+  (pole ze standardowego szablonu COI) → raport jakości,
 - ``dictionary_proposals`` i ``conflicts`` z kroku 09 → raport jakości,
 - pole leżące bezpośrednio na stronie (np. blok tekstu na FINISH) → opakowane w sekcję,
   bo według reguł COI każde pole musi być w sekcji,
@@ -65,6 +66,7 @@ from backend.worker.pipeline.step06_structure import slugify_tech_name
 STAGE = "normalizacja do schematu COI"
 
 SOURCE_KEYS = ("source_text", "page", "element_id")
+ORIGIN_KEY = "origin"
 _TECH_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _LEGACY_GRID_KEY = "repetingSectionGrid"  # pisownia ze schematu importu
 
@@ -115,6 +117,8 @@ class StepSource:
     text: str | None
     page: int | None
     element_id: str | None
+    #: "standard" — pole ze standardowego szablonu COI (nie pochodzi z dokumentu).
+    origin: str | None = None
 
 
 @dataclass(slots=True)
@@ -277,12 +281,14 @@ class _Normalizer:
 
     def clean_field(self, field: dict[str, Any], path: str) -> None:
         uuid = _field_uuid(field)
-        if uuid is not None and any(k in field for k in SOURCE_KEYS):
+        origin = field.pop(ORIGIN_KEY, None)
+        if uuid is not None and (origin or any(k in field for k in SOURCE_KEYS)):
             page = field.get("page")
             self.sources[uuid] = StepSource(
                 text=str(field["source_text"]) if field.get("source_text") else None,
                 page=page if isinstance(page, int) and page >= 1 else None,
                 element_id=str(field["element_id"]) if field.get("element_id") else None,
+                origin=str(origin) if origin else None,
             )
         for key in SOURCE_KEYS:
             field.pop(key, None)
@@ -299,6 +305,22 @@ class _Normalizer:
             if _is_empty(field.get(GRID_KEY)) and _is_empty(field.get(_LEGACY_GRID_KEY)):
                 field.pop(_LEGACY_GRID_KEY, None)
 
+        if (
+            field_type in _CHOICE_TYPES
+            and not field.get("options")
+            and not field.get("dictionaryName")
+        ):
+            # Pole wyboru bez opcji i słownika nie przejdzie importu — zostaje polem tekstowym.
+            field["type"] = FieldType.TEXT_FIELD.value
+            self.note(
+                "CHOICE_WITHOUT_OPTIONS",
+                f"Pole wyboru „{field.get('title') or field.get('techName')}” nie ma opcji ani "
+                "słownika — zamienione na pole tekstowe; uzupełnij opcje ręcznie",
+                path,
+                field,
+                warn=True,
+            )
+            field_type = FieldType.TEXT_FIELD
         if field_type in _CHOICE_TYPES:
             self.clean_options(field)
             if field.get("dictionaryName") and field.get("options"):
@@ -382,6 +404,7 @@ class _Normalizer:
 
         for t, tab in enumerate(form.get("tabs") or []):
             self.tab_index = t
+            tab.pop(ORIGIN_KEY, None)
             questions = tab.get("questions") or []
             for q, question in enumerate(questions):
                 if question.get("field", {}).get("type") not in {s.value for s in SECTION_TYPES}:
