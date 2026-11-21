@@ -9,6 +9,7 @@ ustawienia prywatności serwera: ``eval/visual/labelstudio/ls.env``.
 import hashlib
 from pathlib import Path
 from typing import Final
+from xml.etree import ElementTree
 
 LS_NAME: Final = "label-studio"
 LS_VERSION: Final = "1.23.2"
@@ -40,6 +41,20 @@ PAGES_DIR_IN_CONTAINER: Final = "pages"
 def config_sha256(path: Path = CONFIG_PATH) -> str:
     """Hash konfiguracji oznaczania (zapisywany w etykietach i manifeście)."""
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def label_colors(path: Path = CONFIG_PATH) -> dict[str, str]:
+    """Kolory kategorii z ``config.xml`` (wartość etykiety → ``#RRGGBB``), jak w Label Studio."""
+    root = ElementTree.parse(path).getroot()  # noqa: S314 - plik konfiguracji z repozytorium
+    colors: dict[str, str] = {}
+    for control in root.iter("RectangleLabels"):
+        if control.get("name") != KIND_CONTROL:
+            continue
+        for label in control.iter("Label"):
+            value, background = label.get("value"), label.get("background")
+            if value is not None and background is not None:
+                colors[value] = background
+    return colors
 
 
 def image_url(label_id: str) -> str:

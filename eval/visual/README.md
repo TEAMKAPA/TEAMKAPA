@@ -12,6 +12,7 @@ więc trafiają do niego tylko kod, manifest bez ścieżek i liczby zbiorcze.
 | `prepare.py` | render stron do oznaczania, zadania Label Studio, manifest |
 | `geometry.py` | hash pikseli strony, zgodność geometrii wariantów formatu |
 | `ls.py`, `labelstudio/config.xml`, `labelstudio/ls.env` | przypięta wersja Label Studio, konfiguracja oznaczania, ustawienia serwera |
+| `convert_ls.py`, `preview.py` | eksport Label Studio → etykiety stron, kontrola zgodności z `LABELING.md`, nakładki |
 | `LABELING.md` | konwencje oznaczania (kategorie, ramki, role, przypadki graniczne) |
 
 ## Pochodzenie zbioru
@@ -159,14 +160,43 @@ kanał pozostał włączony).
 6. **Settings → Annotation**: kolejność zadań **Sequential**.
 
 Jeżeli kreator magazynu wymusza synchronizację, wybierz tryb, w którym każdy plik PNG jest zadaniem,
-i **nie importuj** wtedy `tasks.json`, żeby zadania się nie podwoiły. Konwerter odczyta `label_id`
-z nazwy pliku, ale kolejność będzie alfabetyczna, więc zadania wybieraj ręcznie według `tasks.json`.
+i **nie importuj** wtedy `tasks.json`, żeby zadania się nie podwoiły. Zadania utworzone w ten sposób
+nie mają pól `label_id`, `doc_id`, `split` i `page`, a konwerter ich wymaga, więc taki projekt trzeba
+założyć od nowa z importem `tasks.json`.
 
 ### Eksport
 
 **Export → JSON** (nie JSON-MIN). Plik zapisz w `dane/robocze/labelstudio/exports/`, a kopię z folderu
 Pobrane usuń. Eksport zawiera też czas pracy nad zadaniem (`lead_time`), więc nie trzeba mierzyć go ręcznie.
-Konwersję eksportu do formatu etykiet wykonuje `eval/visual/convert_ls.py` (Etap B.3).
+Label Studio zapisuje własną kopię w `dane/robocze/labelstudio/export/`; konwertujemy plik z `exports/`.
+
+## Konwersja i kontrola nakładek
+
+```powershell
+.venv\Scripts\python.exe -m eval.visual.convert_ls dane\robocze\labelstudio\exports\<plik>.json
+```
+
+Wynik w `dane/robocze/labels/` (poza repozytorium):
+
+| Plik | Zawartość |
+|---|---|
+| `<label_id>.json` | etykiety strony (`teamkapa.vision.labels/1`), tylko strony bez błędów |
+| `preview/<label_id>.png` | nakładka: ramki w kolorach kategorii z Label Studio, numer elementu, atrybuty, legenda |
+| `convert_report.md`, `convert_report.json` | błędy, ostrzeżenia, role wywnioskowane, czas na element, ciasność ramek |
+
+- **Błąd** (strona nie dostaje pliku etykiet, poprzedni zostaje bez zmian, kod wyjścia 1): niezgodność
+  z `LABELING.md` albo z manifestem, opisana w raporcie z identyfikatorem i położeniem regionu
+  w pikselach. Na nakładce region z błędem ma czerwoną ramkę `ERR`. Poprawka: w Label Studio,
+  potem **Update**, nowy eksport i ponowna konwersja.
+- **Ostrzeżenie** (strona jest konwertowana): krawędź ramki komórki, kratek, sekcji lub checkboxa dalej
+  niż 2 px od linii w obrazie, niezapisany szkic, nieprawdopodobne `cells` przy fladze `uncertain`.
+- **Automatycznie, z wpisem w raporcie:** przycięcie ramki wystającej poza stronę o ≤ 0,5 px, rola
+  `skip` dla komórki z innym elementem do wypełnienia, role domyślne.
+- ID elementów (`gt-p{strona}-{nnn}`) nadaje kolejność czytania (od góry, potem od lewej). Ten sam
+  eksport daje identyczne pliki. Oznaczający jest zapisany jako `human-<id użytkownika LS>`,
+  bez adresu e-mail.
+- Konwerter odrzuca regiony z pre-anotacji (`origin` inny niż `manual`, `predictions`).
+- Nakładki stron `holdout` ogląda tylko oznaczający. Przy strojeniu (Etap C i dalej) ich się nie ogląda.
 
 ## Pilot
 
@@ -174,8 +204,9 @@ Konwersję eksportu do formatu etykiet wykonuje `eval/visual/convert_ls.py` (Eta
    obejmują prawie wszystkie kategorie.
 2. Każdą stronę zakończ statusem strony (`complete` albo `empty`) i **Submit**.
 3. Wyeksportuj JSON do `dane/robocze/labelstudio/exports/`.
-4. Na podstawie eksportu przygotuję konwersję, nakładki do kontroli (`dane/robocze/labels/preview/`)
-   i czas na element. Potem razem poprawimy konwencje, a po pilocie przeliczę szacunek czasu.
+4. Konwersja, nakładki i przegląd konwencji (wykonane 2026-11-22). Wynik pilota: 65 regionów, średnio
+   72 s na element, 95% krawędzi ramek najwyżej 1 px od linii. Konwerter wykrył status `empty`
+   na oznaczonej stronie, literówkę w `cells` i przypadkowe kliknięcie; reguły dodane do `LABELING.md`.
 
 ## Kolejność oznaczania i szacunek czasu
 
@@ -184,8 +215,11 @@ liczbą stron), potem reszta `dev` z f09 (16 stron) na końcu. Po `holdout`, a p
 dochodzą własne skany i zdjęcia wydruków stron `holdout` (pomiar jakości skanów na `holdout`).
 Po kilku dniach ponowne oznaczenie 3 stron mierzy zgodność oznaczającego z samym sobą.
 
-Szacunek: około 7,3 h oznaczania, 30 min pilotu i 1 h kontroli nakładek. Najlepiej w sesjach po
-≤ 90 min, bo zmęczenie pogarsza dokładność ramek.
+Szacunek przed pilotem: około 7,3 h oznaczania (38 s na element). Pilot zmierzył 72 s na element
+(`lead_time` liczy cały czas otwarcia zadania, razem z przerwami i nauką narzędzia), a f07-p01 ma
+46 elementów wobec szacowanych ~20. Po pilocie: **pozostałe 34 zestawy to około 10–15 h** oznaczania
+(~650–750 elementów po 50–72 s), czyli 7–10 sesji po ≤ 90 min, plus ~1 h kontroli nakładek.
+Szacunek przeliczam po `holdout`. Zmęczenie pogarsza dokładność ramek, więc sesje krótkie.
 
 ## Znane ograniczenia zbioru
 

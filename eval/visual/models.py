@@ -152,6 +152,24 @@ DEFAULT_ROLES: Mapping[ElementKind, ElementRole] = MappingProxyType(
 )
 """Rola przyjmowana, gdy oznaczający jej nie wybrał (``role_origin=default``)."""
 
+_FILL = (ElementRole.INPUT, ElementRole.SKIP)
+_CHOOSE = (ElementRole.CHOICE, ElementRole.SKIP)
+ALLOWED_ROLES: Mapping[ElementKind, frozenset[ElementRole]] = MappingProxyType(
+    {
+        ElementKind.CHAR_BOXES: frozenset(_FILL),
+        ElementKind.CHECKBOX: frozenset(_CHOOSE),
+        ElementKind.CHECKBOX_GROUP: frozenset(_CHOOSE),
+        ElementKind.TEXT_LINE: frozenset(_FILL),
+        ElementKind.DOTTED_LINE: frozenset(_FILL),
+        ElementKind.TABLE_CELL: frozenset(_FILL),
+        ElementKind.SECTION_FRAME: frozenset({ElementRole.SECTION}),
+        ElementKind.SIGNATURE: frozenset({ElementRole.E_SIGNATURE, ElementRole.SKIP}),
+        ElementKind.OFFICE_ONLY: frozenset({ElementRole.SKIP}),
+    }
+)
+"""Role zgodne z kategorią (LABELING.md). Np. kropki pod „podpis” to kategoria ``signature``,
+a nie ``dotted_line`` z rolą ``e_signature``; miejsce urzędu to ``office_only``."""
+
 
 class LabelElement(EvalModel):
     """Element oznaczony ręcznie; ``options`` grupy to ID jej checkboxów (jak w kroku 3)."""
@@ -175,6 +193,8 @@ class LabelElement(EvalModel):
     def _consistent(self) -> LabelElement:
         if self.role is ElementRole.UNKNOWN:
             raise ValueError("etykieta musi mieć ustaloną rolę (unknown jest niedozwolone)")
+        if self.role not in ALLOWED_ROLES[self.kind]:
+            raise ValueError(f"rola {self.role.value} niedozwolona dla kategorii {self.kind.value}")
         if not has_area(self.bbox):
             raise ValueError("bbox musi mieć dodatnią szerokość i wysokość")
         check_kind_attributes(self.kind, self.cells, self.options, self.multi, self.id)

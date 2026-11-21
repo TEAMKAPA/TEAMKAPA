@@ -43,8 +43,10 @@ Oznaczamy ręcznie. Nie korzystamy z wyników detektorów ani z żadnych wstępn
   i `table_cell`. Kropki pod napisem „podpis” to jeden element `signature`, a nie `dotted_line`.
 - **Komórka scalona** to jedna komórka. Komórka nagłówka albo komórka z samą etykietą (np. lewa
   kolumna z nazwami pól) to też `table_cell`, ale z rolą `skip`.
-- **Kropki lub linia w komórce:** oznaczamy oba elementy, komórkę i kropki. Komórce nie trzeba zmieniać
-  roli: konwerter sam ustawi `skip` dla komórki, w której jest inny element do wpisywania.
+- **Element do wypełnienia w komórce** (kropki, linia, kratki, checkbox, grupa): oznaczamy oba
+  elementy, komórkę i to, co w niej jest. Komórce nie trzeba zmieniać roli: konwerter sam ustawi `skip`
+  dla komórki zawierającej (≥ 90% pola) inny element z rolą `input`, `choice` albo `e_signature`
+  (w pilocie: kropki w komórce wartości, checkboxy „pies”/„suka” w osobnych komórkach).
 - **Ramka z instrukcją albo adresem urzędu** (tekst w ramce, nic do wpisania): `table_cell` z rolą `skip`.
 - **Tabela:** każda komórka osobno (`table_cell`) i obramowanie całej tabeli (`section_frame`).
 - **Pojedynczy checkbox** bez grupy (np. oświadczenie, zgoda) to tylko `checkbox`, bez `checkbox_group`.
@@ -73,6 +75,18 @@ Typowe wyjątki:
 
 Pole wypełniane przez urząd oznaczamy kategorią `office_only` (rola `skip` jest wtedy domyślna).
 
+Dozwolone role (inne konwerter odrzuca jako błąd):
+
+| Kategoria | Role |
+|---|---|
+| `char_boxes`, `text_line`, `dotted_line`, `table_cell` | `input`, `skip` |
+| `checkbox`, `checkbox_group` | `choice`, `skip` |
+| `signature` | `e_signature`, `skip` |
+| `section_frame` | `section` |
+| `office_only` | `skip` |
+
+Kropki z rolą `e_signature` to błąd: miejsce na podpis ma kategorię `signature`.
+
 ## Flaga `uncertain`
 
 Zaznacz, gdy nie masz pewności co do kategorii, roli albo granic elementu. Element z flagą jest w metrykach
@@ -89,10 +103,27 @@ Przed zapisaniem (**Submit**) wybierz:
 Strony oznaczonej częściowo nie zapisuj przez Submit. Label Studio przechowuje szkic, a pracę można
 dokończyć później.
 
+## Co sprawdza konwerter
+
+Konwerter (`convert_ls.py`, README: „Konwersja i kontrola nakładek”) **nie zapisze strony** z błędem:
+
+- status strony: `empty` przy oznaczonych regionach albo `complete` bez regionów,
+- region mniejszy niż 8 px w dłuższym boku (przypadkowe kliknięcie: usuń go),
+- `char_boxes` bez `cells` albo z liczbą kratek niepasującą do ramki (szerokość jednej kratki
+  poza 0,25–4 × wysokość grupy; przy fladze `uncertain` tylko ostrzeżenie),
+- `cells` lub `multi` pozostawione po zmianie kategorii regionu (usuń wartość),
+- `checkbox_group` bez `multi` albo z mniej niż 2 checkboxami; checkbox należy do grupy, gdy jego
+  **środek** leży w ramce grupy, a środek w dwóch grupach to błąd,
+- ramka obrócona albo wychodząca poza stronę o więcej niż 0,5 px, rola spoza tabeli wyżej.
+
+Ostrzega, gdy krawędź ramki komórki, kratek, sekcji lub checkboxa leży dalej niż 2 px od linii
+w obrazie (zasada 4: ramka ciasna). W pilocie 95% krawędzi było najwyżej 1 px od linii.
+
 ## Wskazówki
 
 - Skróty: 1–9 wybierają kategorię przed narysowaniem ramki, Ctrl+Enter zapisuje stronę.
 - Najpierw duże elementy (`section_frame`, tabele), potem drobne (kratki, checkboxy, kropki).
 - Po każdej stronie przejrzyj listę regionów: czy każda grupa kratek ma `cells`, a każda grupa
-  checkboxów `multi`.
+  checkboxów `multi`. Wpisując `cells`, sprawdź liczbę jeszcze raz (w pilocie zamiast 10 trafiło 106).
+- Przed **Submit** sprawdź status strony: `complete`, gdy są regiony.
 - Sesje po ≤ 90 min. Czas pracy na stronie zapisuje Label Studio.

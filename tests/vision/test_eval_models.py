@@ -17,6 +17,7 @@ from backend.worker.vision.models import (
     VisualElement,
 )
 from eval.visual.models import (
+    ALLOWED_ROLES,
     DEFAULT_ROLES,
     FileOrigin,
     FileStatus,
@@ -210,6 +211,20 @@ def test_page_labels_valid_and_roundtrip(tmp_path: Path) -> None:
 def test_default_roles_cover_all_kinds_without_unknown() -> None:
     assert set(DEFAULT_ROLES) == set(ElementKind)
     assert ElementRole.UNKNOWN not in DEFAULT_ROLES.values()
+    assert set(ALLOWED_ROLES) == set(ElementKind)
+    for kind, role in DEFAULT_ROLES.items():
+        assert role in ALLOWED_ROLES[kind]
+        assert ElementRole.UNKNOWN not in ALLOWED_ROLES[kind]
+
+
+def test_label_element_role_must_fit_kind() -> None:
+    LabelElement.model_validate(_label_element(role=ElementRole.SKIP))
+    with pytest.raises(ValidationError, match="niedozwolona dla kategorii dotted_line"):
+        LabelElement.model_validate(_label_element(role=ElementRole.E_SIGNATURE))
+    with pytest.raises(ValidationError, match="office_only"):
+        LabelElement.model_validate(
+            _label_element(kind=ElementKind.OFFICE_ONLY, role=ElementRole.INPUT)
+        )
 
 
 @pytest.mark.parametrize(
