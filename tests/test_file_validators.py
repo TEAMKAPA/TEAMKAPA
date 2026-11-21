@@ -14,7 +14,7 @@ from backend.api.file_validators import (
     validate_filename,
     validate_upload,
 )
-from tests.file_samples import SAMPLES, docx, ods, pdf, png, sniff_mime, xlsx
+from tests.file_samples import SAMPLES, doc, docx, jpeg, ods, pdf, png, sniff_mime, xlsx
 
 MB = 1024 * 1024
 
@@ -34,6 +34,7 @@ def _error(callable_: object, *args: object, **kwargs: object) -> FileErrorCode:
         ("wniosek.pdf", "pdf"),
         ("Wniosek o nadpłatę (2024).PDF", "pdf"),
         ("skan.strona.1.jpeg", "jpeg"),
+        ("SKAN.JPE", "jpeg"),  # alias JPEG
         ("zażółć gęślą jaźń.docx", "docx"),
         ("a" * 246 + ".pdf", "pdf"),  # dokładnie 250 znaków
     ],
@@ -111,6 +112,27 @@ def test_each_format_accepted(extension: str) -> None:
 )
 def test_content_must_match_extension(name: str, content: bytes) -> None:
     assert _error(validate_upload, name, content, max_bytes=MB, detect_mime=sniff_mime) is (
+        FileErrorCode.MIME_MISMATCH
+    )
+
+
+@pytest.mark.parametrize(
+    ("name", "content", "effective"),
+    [
+        ("Wniosek o stwierdzenie nadpłaty podatku.DOC", docx(), "docx"),  # jak u organizatora
+        ("wniosek.docx", doc(), "doc"),
+        ("wniosek.doc", doc(), "doc"),
+        ("skan.JPE", jpeg(), "jpeg"),
+    ],
+)
+def test_same_kind_processed_by_content(name: str, content: bytes, effective: str) -> None:
+    result = validate_upload(name, content, max_bytes=MB, detect_mime=sniff_mime)
+    assert (result.filename, result.extension) == (name, effective)
+    assert result.mime_type == CANONICAL_MIME[effective]
+
+
+def test_jpe_with_png_content_rejected() -> None:
+    assert _error(validate_upload, "skan.jpe", png(), max_bytes=MB, detect_mime=sniff_mime) is (
         FileErrorCode.MIME_MISMATCH
     )
 

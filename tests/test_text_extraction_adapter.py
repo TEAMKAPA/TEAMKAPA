@@ -122,3 +122,23 @@ async def test_extractor_receives_content_and_neutral_name(tmp_path: Path) -> No
     assert seen["filename"] == "document.pdf"  # nazwa użytkownika nie trafia do ekstraktora
     assert seen["mime_type"] == "application/pdf"
     assert contract.elements[0].text == "Wniosek"
+
+
+@pytest.mark.parametrize(
+    ("filename", "extension", "warned"),
+    [("Wniosek.DOC", "docx", True), ("skan.JPE", "jpeg", False), ("skan.jpg", "jpg", False),
+     ("wniosek.pdf", "pdf", False)],
+)  # fmt: skip
+async def test_content_based_type_is_reported(
+    tmp_path: Path, filename: str, extension: str, warned: bool
+) -> None:
+    def fake(content: bytes, **kwargs: Any) -> Step02Document:
+        return _document(full_text="Wniosek")
+
+    document = incoming(tmp_path)
+    ref = document.ref.model_copy(update={"filename": filename, "extension": extension})
+    contract = await Step02TextExtractor(settings(), fake).extract(
+        document.__class__(ref=ref, content=document.content, path=document.path)
+    )
+    codes = [i.code for i in contract.issues]
+    assert ("FILE_TYPE_CORRECTED" in codes) is warned

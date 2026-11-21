@@ -5,6 +5,11 @@
 - rozmiar ≤ ``MAX_FILE_SIZE_MB``, plik niepusty,
 - typ MIME wykryty z treści (libmagic) musi odpowiadać rozszerzeniu.
 
+Wyjątek — ten sam rodzaj dokumentu pod pokrewnym rozszerzeniem (spotykany w materiałach
+urzędów, także w plikach od organizatora): ``.doc`` z treścią DOCX (i odwrotnie) oraz ``.jpe``
+z JPEG są przyjmowane i przetwarzane według rzeczywistej treści; przetwarzanie odnotowuje to
+w raporcie. Każda inna niezgodność (np. PNG udający PDF) jest odrzucana.
+
 libmagic dla kontenerów ZIP (DOCX/XLSX/ODS) i OLE (DOC) czasem zwraca typ ogólny
 (``application/zip``, ``application/x-ole-storage``). Wtedy rozstrzyga sprawdzenie struktury
 kontenera — wyłącznie odczyt spisu treści, bez rozpakowywania (odporne na zip-bomby).
@@ -71,6 +76,12 @@ CANONICAL_MIME: dict[str, str] = {
 }
 ALLOWED_EXTENSIONS = frozenset(CANONICAL_MIME)
 
+#: Pokrewne rozszerzenia JPEG (``.jpe`` to standardowy alias, rejestrowany w image/jpeg).
+EXTENSION_ALIASES: dict[str, str] = {"jpe": "jpeg"}
+
+#: Rodziny formatów: rozszerzenie zadeklarowane → rozszerzenia, których treść też przyjmujemy.
+_SAME_KIND: dict[str, tuple[str, ...]] = {"doc": ("docx",), "docx": ("doc",)}
+
 # Typy ogólne kontenerów, przy których decyduje sprawdzenie struktury.
 _ZIP_GENERIC = frozenset(
     {"application/zip", "application/x-zip-compressed", "application/octet-stream"}
@@ -100,7 +111,7 @@ def validate_filename(filename: str | None) -> tuple[str, str]:
             f"Nazwa pliku zawiera niedozwolone znaki: {shown}",
         )
     stem, dot, extension = filename.rpartition(".")
-    extension = extension.lower()
+    extension = EXTENSION_ALIASES.get(extension.lower(), extension.lower())
     if not dot or not stem.strip() or extension not in ALLOWED_EXTENSIONS:
         allowed = ", ".join(sorted(ALLOWED_EXTENSIONS))
         raise FileValidationError(
@@ -169,6 +180,14 @@ def mime_matches_extension(extension: str, detected: str, content: bytes) -> boo
             return False
 
 
+def effective_extension(declared: str, detected: str, content: bytes) -> str | None:
+    """Rozszerzenie, według którego plik będzie przetwarzany, albo ``None`` (niezgodność)."""
+    for candidate in (declared, *_SAME_KIND.get(declared, ())):
+        if mime_matches_extension(candidate, detected, content):
+            return candidate
+    return None
+
+
 def libmagic_detector(content: bytes) -> str:
     """Domyślny detektor MIME (libmagic). Import leniwy — biblioteka natywna tylko w runtime."""
     import magic
@@ -187,15 +206,16 @@ def validate_upload(
     name, extension = validate_filename(filename)
     validate_size(len(content), max_bytes)
     detected = detect_mime(content)
-    if not mime_matches_extension(extension, detected, content):
+    effective = effective_extension(extension, detected, content)
+    if effective is None:
         raise FileValidationError(
             FileErrorCode.MIME_MISMATCH,
             f"Zawartość pliku ({detected}) nie odpowiada rozszerzeniu .{extension}",
         )
     return ValidatedFile(
         filename=name,
-        extension=extension,
-        mime_type=CANONICAL_MIME[extension],
+        extension=effective,
+        mime_type=CANONICAL_MIME[effective],
         content=content,
         sha256=hashlib.sha256(content).hexdigest(),
     )
