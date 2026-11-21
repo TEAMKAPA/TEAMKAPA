@@ -299,3 +299,33 @@ def png_claiming_size(width: int, height: int) -> bytes:
     crc = zlib.crc32(bytes(data[ihdr : ihdr + 17]))
     data[ihdr + 17 : ihdr + 21] = struct.pack(">I", crc)
     return bytes(data)
+
+
+# --- dokumenty biurowe (A.6) -------------------------------------------------------------------
+
+
+def make_minimal_docx(text: str = "Synthetic") -> bytes:
+    """Najmniejszy poprawny DOCX (dla testu integracyjnego z LibreOffice)."""
+    w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    return make_zip(
+        {
+            "[Content_Types].xml": (
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                '<Default Extension="rels" '
+                'ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                '<Default Extension="xml" ContentType="application/xml"/>'
+                f'<Override PartName="/word/document.xml" ContentType="{DOCX_TYPE}"/></Types>'
+            ).encode(),
+            "_rels/.rels": (
+                b'<?xml version="1.0" encoding="UTF-8"?>'
+                b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                b'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/'
+                b'2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'
+            ),
+            "word/document.xml": (
+                f'<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="{w}">'
+                f"<w:body><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:body></w:document>"
+            ).encode(),
+        }
+    )
