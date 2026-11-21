@@ -384,3 +384,168 @@ class TestStep09RulesAndDicts:
         ]
         assert len(custom_conflicts) == 1
         assert custom_conflicts[0]["rule"] == "coi_dictionary_whitelist"
+
+    def test_run_step09_supports_coi_form_definition_from_step08(self) -> None:
+        coi_form = {
+            "title": "Wniosek o wydanie dowodu osobistego",
+            "tabs": [
+                {
+                    "id": "tab-1",
+                    "title": "Dane wnioskodawcy",
+                    "type": "MAIN",
+                    "questions": [
+                        {
+                            "x": 0,
+                            "y": 0,
+                            "rows": 1,
+                            "cols": 12,
+                            "field": {
+                                "id": "sec-1",
+                                "type": "SECTION",
+                                "techName": "twoje_dane",
+                                "title": "Twoje dane",
+                                "repetingSectionGrid": [
+                                    {
+                                        "x": 0,
+                                        "y": 0,
+                                        "rows": 1,
+                                        "cols": 12,
+                                        "field": {
+                                            "id": "f-pesel",
+                                            "type": "NUMBER",
+                                            "techName": "pesel",
+                                            "title": "Numer PESEL",
+                                            "validation": ["REQUIRED", "NIP"],
+                                        },
+                                    },
+                                    {
+                                        "x": 0,
+                                        "y": 1,
+                                        "rows": 1,
+                                        "cols": 12,
+                                        "field": {
+                                            "id": "f-woj",
+                                            "type": "RADIO",
+                                            "techName": "wojewodztwo",
+                                            "title": "Województwo",
+                                            "validation": ["REQUIRED"],
+                                            "options": [
+                                                {
+                                                    "id": "o1",
+                                                    "name": "Mazowieckie",
+                                                    "techName": "mazowieckie",
+                                                }
+                                            ],
+                                        },
+                                    },
+                                    {
+                                        "x": 0,
+                                        "y": 2,
+                                        "rows": 1,
+                                        "cols": 12,
+                                        "field": {
+                                            "id": "f-powod",
+                                            "type": "RADIO",
+                                            "techName": "powod_wniosku",
+                                            "title": "Powód złożenia wniosku",
+                                            "validation": ["REQUIRED"],
+                                            "options": [
+                                                {
+                                                    "id": "p1",
+                                                    "name": "Pierwszy dowód",
+                                                    "techName": "pierwszy",
+                                                },
+                                                {
+                                                    "id": "p2",
+                                                    "name": "Utrata dowodu",
+                                                    "techName": "utrata",
+                                                },
+                                            ],
+                                        },
+                                    },
+                                    {
+                                        "x": 0,
+                                        "y": 3,
+                                        "rows": 1,
+                                        "cols": 12,
+                                        "field": {
+                                            "id": "f-zgoda",
+                                            "type": "CONSENT_SECTION",
+                                            "techName": "zgoda_1",
+                                            "title": "Wyrażam zgodę",
+                                            "consentSectionConfig": {
+                                                "consents": [
+                                                    {
+                                                        "description": "Zgoda",
+                                                        "required": True,
+                                                    }
+                                                ],
+                                                "required": True,
+                                                "files": [],
+                                            },
+                                        },
+                                    },
+                                ],
+                            },
+                        }
+                    ],
+                },
+                {
+                    "id": "tab-finish",
+                    "title": "Podsumowanie",
+                    "type": "FINISH",
+                    "questions": [
+                        {
+                            "x": 0,
+                            "y": 0,
+                            "rows": 1,
+                            "cols": 12,
+                            "field": {
+                                "id": "info-1",
+                                "type": "INFO_SECTION",
+                                "techName": "podglad",
+                                "description": "Sprawdź dane przed wysłaniem.",
+                            },
+                        }
+                    ],
+                },
+            ],
+            "flow": {
+                "links": [{"id": "l1", "source": "tab-1", "target": "tab-finish"}]
+            },
+        }
+
+        result = run_step09(coi_form)
+
+        # Input must remain untouched.
+        orig_grid = coi_form["tabs"][0]["questions"][0]["field"]["repetingSectionGrid"]
+        assert orig_grid[0]["field"]["type"] == "NUMBER"
+
+        grid = result["tabs"][0]["questions"][0]["field"]["repetingSectionGrid"]
+        by_tech = {c["field"]["techName"]: c["field"] for c in grid}
+
+        # PESEL overridden from NUMBER/NIP -> TEXT_FIELD/PESEL.
+        assert by_tech["pesel"]["type"] == "TEXT_FIELD"
+        assert by_tech["pesel"]["validation"] == ["REQUIRED", "PESEL"]
+
+        # Województwo overridden from RADIO -> SELECT + dictionaryName + empty options.
+        assert by_tech["wojewodztwo"]["type"] == "SELECT"
+        assert by_tech["wojewodztwo"]["dictionaryName"] == "Województwo"
+        assert by_tech["wojewodztwo"]["options"] == []
+
+        # CONSENT_SECTION stays untouched.
+        assert by_tech["zgoda_1"]["type"] == "CONSENT_SECTION"
+
+        # Unmatched closed-list field produces a new dictionary proposal.
+        assert len(result["dictionary_proposals"]) == 1
+        assert result["dictionary_proposals"][0]["name"] == "Powód złożenia wniosku"
+        assert result["dictionary_proposals"][0]["values"] == [
+            "Pierwszy dowód",
+            "Utrata dowodu",
+        ]
+
+        # Conflicts recorded for PESEL (type + validation) and Województwo (type).
+        conflict_pairs = {(c["field_id"], c["attribute"]) for c in result["conflicts"]}
+        assert ("pesel", "type") in conflict_pairs
+        assert ("pesel", "validation") in conflict_pairs
+        assert ("wojewodztwo", "type") in conflict_pairs

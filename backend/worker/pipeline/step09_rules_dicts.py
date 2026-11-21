@@ -438,8 +438,257 @@ def apply_rules_and_dicts(fields: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+_COI_SELECTABLE_TYPES: frozenset[str] = frozenset({"SELECT", "RADIO", "CHECKBOX"})
+_COI_SKIP_TYPES: frozenset[str] = frozenset(
+    {"CONSENT_SECTION", "INFO_SECTION", "TEXT_BLOCK", "FILE_UPLOADER"}
+)
+_COI_DOMAIN_VALIDATORS: frozenset[str] = frozenset(
+    {"PESEL", "NIP", "REGON", "ZIP_CODE", "EMAIL"}
+)
+_DOMAIN_TO_COI_TYPE: dict[str, str] = {
+    "text": "TEXT_FIELD",
+    "phone": "TEXT_FIELD",
+    "email": "TEXT_FIELD",
+    "date": "DATEPICKER",
+    "number": "NUMBER",
+    "textarea": "TEXTAREA",
+    "dropdown": "SELECT",
+    "radio": "RADIO",
+    "checkbox": "CHECKBOX",
+}
+_DOMAIN_TO_COI_VALIDATOR: dict[str, str] = {
+    "pesel": "PESEL",
+    "nip": "NIP",
+    "regon": "REGON",
+    "postal_code": "ZIP_CODE",
+    "email": "EMAIL",
+}
+
+
+def _extract_option_labels(options: Any) -> list[str]:
+    if not isinstance(options, list):
+        return []
+    labels: list[str] = []
+    for opt in options:
+        if isinstance(opt, dict):
+            name = str(opt.get("name") or opt.get("label") or "").strip()
+            if name:
+                labels.append(name)
+        elif str(opt).strip():
+            labels.append(str(opt).strip())
+    return labels
+
+
+def _apply_coi_dict_to_leaf(
+    field: dict[str, Any],
+    conflicts: list[dict[str, Any]],
+    *,
+    field_id: str,
+    label: str,
+    coi_dict: str,
+) -> None:
+    allowed = (
+        frozenset({"SELECT"})
+        if COI_DICTIONARIES[coi_dict] == frozenset({"dropdown"})
+        else _COI_SELECTABLE_TYPES
+    )
+    rule_tag = f"coi_dictionary:{coi_dict}"
+
+    if field.get("type") not in allowed:
+        _apply_override(
+            field,
+            conflicts,
+            field_id=field_id,
+            label=label,
+            attribute="type",
+            rule_value="SELECT",
+            rule=rule_tag,
+            reason=(
+                f"Słownik COI '{coi_dict}' wymaga typu z zakresu "
+                f"{sorted(allowed)}."
+            ),
+        )
+
+    _apply_override(
+        field,
+        conflicts,
+        field_id=field_id,
+        label=label,
+        attribute="dictionaryName",
+        rule_value=coi_dict,
+        rule=rule_tag,
+        reason=f"Pole dopasowane deterministycznie do słownika COI '{coi_dict}'.",
+    )
+    field["options"] = []
+
+
+def apply_rules_to_coi_form(form_data: dict[str, Any]) -> dict[str, Any]:
+    """Apply Step 09 rules and COI dictionaries directly to a COI FormDefinition."""
+    result = deepcopy(form_data)
+    dictionary_proposals: list[dict[str, Any]] = []
+    conflicts: list[dict[str, Any]] = []
+
+    for tab in result.get("tabs", []):
+        if tab.get("type") != "MAIN":
+            continue
+        for sec_q in tab.get("questions", []):
+            sec_field = sec_q.get("field", {})
+            for child in sec_field.get("repetingSectionGrid", []):
+                field = child.get("field", {})
+                if field.get("type") in _COI_SKIP_TYPES:
+                    continue
+
+                label = str(field.get("title") or field.get("techName") or "").strip()
+                field_id = str(
+                    field.get("techName") or field.get("id") or _slugify(label)
+                )
+                box_raw = field.get("box_count")
+                box_count = (
+                    box_raw if isinstance(box_raw, int) and box_raw > 0 else None
+                )
+                llm_dict = field.get("dictionaryName")
+                option_labels = _extract_option_labels(field.get("options"))
+
+                # 1. Official COI dictionary match from label.
+                coi_dict = match_coi_dictionary(label)
+                if coi_dict is not None:
+                    _apply_coi_dict_to_leaf(
+                        field,
+                        conflicts,
+                        field_id=field_id,
+                        label=label,
+                        coi_dict=coi_dict,
+                    )
+                    continue
+
+                # 2. Deterministic domain rule (PESEL, NIP, REGON, ZIP_CODE, etc.).
+                domain_match = infer_domain_rule(label, box_count=box_count)
+                if domain_match is not None:
+                    rule_tag = f"domain:{domain_match.rule_name}"
+                    coi_type = _DOMAIN_TO_COI_TYPE.get(
+                        domain_match.field_type, "TEXT_FIELD"
+                    )
+                    _apply_override(
+                        field,
+                        conflicts,
+                        field_id=field_id,
+                        label=label,
+                        attribute="type",
+                        rule_value=coi_type,
+                        rule=rule_tag,
+                        reason=(
+                            f"Reguła dziedzinowa '{domain_match.rule_name}' "
+                            f"wymusza typ COI '{coi_type}'."
+                        ),
+                    )
+                    coi_val = _DOMAIN_TO_COI_VALIDATOR.get(domain_match.validator or "")
+                    if coi_val is not None:
+                        old_vals = list(field.get("validation") or [])
+                        wrong_domain = [
+                            v
+                            for v in old_vals
+                            if v in _COI_DOMAIN_VALIDATORS and v != coi_val
+                        ]
+                        new_vals = [v for v in old_vals if v not in wrong_domain]
+                        if coi_val not in new_vals:
+                            new_vals.append(coi_val)
+                        if wrong_domain:
+                            conflicts.append(
+                                {
+                                    "field_id": field_id,
+                                    "field_label": label,
+                                    "attribute": "validation",
+                                    "llm_value": old_vals,
+                                    "rule_value": new_vals,
+                                    "rule": rule_tag,
+                                    "reason": (
+                                        f"Reguła dziedzinowa nadpisuje walidator "
+                                        f"na '{coi_val}'."
+                                    ),
+                                }
+                            )
+                        field["validation"] = new_vals
+
+                    if llm_dict is not None:
+                        _apply_override(
+                            field,
+                            conflicts,
+                            field_id=field_id,
+                            label=label,
+                            attribute="dictionaryName",
+                            rule_value=None,
+                            rule=rule_tag,
+                            reason=(
+                                f"Pole z regułą '{domain_match.rule_name}' nie może "
+                                "mieć przypisanego słownika."
+                            ),
+                        )
+                        field.pop("dictionaryName", None)
+                    continue
+
+                # 3. Official COI dictionary explicitly set by LLM -> enforce type rule.
+                if llm_dict in COI_DICTIONARIES:
+                    _apply_coi_dict_to_leaf(
+                        field,
+                        conflicts,
+                        field_id=field_id,
+                        label=label,
+                        coi_dict=llm_dict,
+                    )
+                    continue
+
+                # 4. Reject non-COI dictionaryName.
+                if llm_dict is not None:
+                    _apply_override(
+                        field,
+                        conflicts,
+                        field_id=field_id,
+                        label=label,
+                        attribute="dictionaryName",
+                        rule_value=None,
+                        rule="coi_dictionary_whitelist",
+                        reason=(
+                            f"Słownik '{llm_dict}' nie należy do 6 oficjalnych "
+                            "słowników COI."
+                        ),
+                    )
+                    field.pop("dictionaryName", None)
+
+                # 5. Closed-list field outside 6 COI dicts -> dictionary proposal.
+                if len(option_labels) >= 2:
+                    if field.get("type") not in _COI_SELECTABLE_TYPES:
+                        _apply_override(
+                            field,
+                            conflicts,
+                            field_id=field_id,
+                            label=label,
+                            attribute="type",
+                            rule_value="SELECT",
+                            rule="coi_closed_list",
+                            reason=(
+                                "Pole z zamkniętą listą wartości wymaga typu "
+                                "SELECT, RADIO lub CHECKBOX."
+                            ),
+                        )
+                    dictionary_proposals.append(
+                        _build_dictionary_proposal(
+                            field_id=field_id,
+                            label=label,
+                            field_type=str(field.get("type", "SELECT")),
+                            options=option_labels,
+                        )
+                    )
+
+    result["dictionary_proposals"] = dictionary_proposals
+    result["conflicts"] = conflicts
+    return result
+
+
 def run_step09(form_data: dict[str, Any]) -> dict[str, Any]:
-    """Run Step 09 on a form payload containing top-level ``fields``."""
+    """Run Step 09 on either a COI FormDefinition (``tabs``) or flat ``fields``."""
+    if "tabs" in form_data:
+        return apply_rules_to_coi_form(form_data)
+
     result = deepcopy(form_data)
     step_output = apply_rules_and_dicts(form_data.get("fields", []))
     result["fields"] = step_output["fields"]
