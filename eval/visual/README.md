@@ -26,8 +26,8 @@ więc trafiają do niego tylko kod, manifest bez ścieżek i liczby zbiorcze.
   treści ≤ 1 px, tusz każdego obrazu w odległości ≤ 1 px od tuszu drugiego w co najmniej 97%
   (zmierzone minimum: 0,9786). Strona, która warunku nie spełnia (3 skany w folderze 5: 130 DPI,
   inna geometria), dostaje własny zestaw etykiet. Razem **36 zestawów etykiet obsługuje 132 strony oceny**.
-- **Wykluczone:** formaty biurowe (DOC, DOCX, ODS, XLSX: `OFFICE_CONVERSION_DISABLED` do decyzji
-  o LibreOffice; po konwersji będą miały inną geometrię i dostaną własne etykiety), wizualizacje
+- **Wykluczone:** formaty biurowe (DOC, DOCX, ODS, XLSX: `OFFICE_CONVERSION_DISABLED`, bo zespół
+  odrzucił LibreOffice, więc nie przechodzą przez kanał wizualny), wizualizacje
   formularza po cyfryzacji (`NOT_A_FORM`). Oczekiwane JSON-y (foldery 1 i 5) są w manifeście jako
   materiał referencyjny (`REFERENCE_JSON`).
 - **Identyfikacja plików:** manifest w repozytorium nie zawiera ścieżek ani nazw plików. Plik opisują
@@ -194,7 +194,8 @@ Szacunek: około 7,3 h oznaczania, 30 min pilotu i 1 h kontroli nakładek. Najle
   format (PDF, obraz cyfrowy, skan).
 - Prawdziwe skany są tylko w jednym dokumencie (`dev`), zdjęć z aparatu nie ma. Pomiar na `holdout`
   wymaga własnych skanów i zdjęć wydruków.
-- Formaty biurowe są poza zbiorem do decyzji o LibreOffice.
+- Formaty biurowe są poza zbiorem (LibreOffice odrzucony; ich pola dostają w Etapie E kod
+  `NO_VISUAL_CHANNEL`, `docs/vision.md`).
 - Etykiety wariantów nie są korygowane o przesunięcie ≤ 1 px (około 0,0004 wysokości strony).
 - Folder 9 to około 60% elementów `dev`, a folder 8 około 2/3 `holdout` (szacunek przed oznaczeniem),
   stąd raport per dokument i makro-średnie.

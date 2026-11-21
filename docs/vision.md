@@ -15,11 +15,12 @@ Dokument nie zawiera treści formularzy COI. Liczby dotyczące materiałów są 
 5. [Cięcie zszytych obrazów A4](#cięcie-zszytych-obrazów-a4)
 6. [Kody błędów i ostrzeżeń](#kody-błędów-i-ostrzeżeń)
 7. [Wpływ na pewność w Etapie E](#wpływ-na-pewność-w-etapie-e)
-8. [LibreOffice: wyłączony do decyzji mentorów](#libreoffice-wyłączony-do-decyzji-mentorów)
-9. [Konfiguracja i limity](#konfiguracja-i-limity)
-10. [Bezpieczeństwo](#bezpieczeństwo)
-11. [Testy](#testy)
-12. [Znane ograniczenia](#znane-ograniczenia)
+8. [LibreOffice: odrzucony przez zespół](#libreoffice-odrzucony-przez-zespół)
+9. [Analiza stron przez Eden AI (Etap D)](#analiza-stron-przez-eden-ai-etap-d)
+10. [Konfiguracja i limity](#konfiguracja-i-limity)
+11. [Bezpieczeństwo](#bezpieczeństwo)
+12. [Testy](#testy)
+13. [Znane ograniczenia](#znane-ograniczenia)
 
 ## Punkt wejścia
 
@@ -83,7 +84,7 @@ dopiero przez jawną decyzję:
 
 ### PDF: CropBox, MediaBox i `/Rotate`
 
-Sprawdzone empirycznie na PDFium (build 8146) i pokryte testem spójności:
+Sprawdzone empirycznie na PDFium (build 8146, potwierdzone na 8149) i pokryte testem spójności:
 
 - renderowany jest widoczny obszar **CropBox ∩ MediaBox** (`PageGeometry.visible_box`),
 - `/Rotate` działa **zgodnie z ruchem wskazówek zegara**; bitmapa ma rozmiar strony po obrocie
@@ -209,33 +210,52 @@ Ustalenia:
   (sposób uwzględnienia ustalimy w Etapie C).
 - `DECLARED_KIND_MISMATCH` i `MULTI_FRAME_IMAGE` trafiają do raportu przeglądu na poziomie dokumentu.
 
-## LibreOffice: wyłączony do decyzji mentorów
+## LibreOffice: odrzucony przez zespół
 
-Konwersja DOC, DOCX, ODS i XLSX do PDF wymaga LibreOffice (MPL 2.0, uruchamiany jako niezmodyfikowany
-proces zewnętrzny). **Do czasu decyzji mentorów konwersja jest domyślnie wyłączona**
-(`VISION_OFFICE_ENABLED=false`).
+Konwersja DOC, DOCX, ODS i XLSX do PDF wymagałaby LibreOffice (MPL 2.0). **Zespół odrzucił LibreOffice
+(2026-11-21)**, więc konwersja pozostaje wyłączona (`VISION_OFFICE_ENABLED=false`) i nie jest
+częścią obrazu workera.
 
-Skutki przy wyłączonym LibreOffice:
+Skutki:
 
 - **pliki DOC, DOCX, ODS i XLSX nie przechodzą przez kanał wizualny**: `render_document` zgłasza
-  `OFFICE_CONVERSION_DISABLED` (czytelny błąd, nie awaria), a wynik dla tych plików może powstać
-  wyłącznie z kanału tekstowego (#7) z odpowiednio niższą pewnością,
-- w materiałach COI dotyczy to **33 z 69 plików formularzy** (foldery formularzy, bez oczekiwanych
-  JSON-ów i wizualizacji), więc wpływ na ewaluację jest istotny,
-- **to otwarte pytanie do mentorów**: czy LibreOffice uruchamiany jako niezmodyfikowany proces
-  zewnętrzny jest dopuszczalny.
+  `OFFICE_CONVERSION_DISABLED` (czytelny błąd, nie awaria). W materiałach COI to **40 z 81 plików**
+  (w folderach formularzy 33 z 69 plików formularzy; pozostałe to wizualizacje formularza po
+  cyfryzacji i materiały do zadania),
+- pola takich dokumentów pochodzą wyłącznie z kanału tekstowego (#7, #8): **nie mają elementów
+  OpenCV, bbox, potwierdzenia wizualnego ani podwójnego odczytu VLM**,
+- zbiór oznaczeń #12 nie obejmuje tych formatów (`eval/visual/README.md`).
 
-Po włączeniu (`VISION_OFFICE_ENABLED=true`, `VISION_SOFFICE_PATH`) konwerter działa tak:
+**Kod powodu w Etapie E (propozycja): `NO_VISUAL_CHANNEL`.**
 
-- każde żądanie dostaje osobny katalog tymczasowy (profil, wejście, wyjście), usuwany w `finally`,
-- świeży profil (`-env:UserInstallation`) wyłącza wykonywanie makr (`DisableMacrosExecution`,
-  `MacroSecurityLevel=3`) i blokuje niezaufane linki zewnętrzne (`BlockUntrustedRefererLinks`),
-- plik wejściowy ma stałą nazwę `input.<rodzaj wykryty>`, więc oryginalna nazwa nie trafia do LibreOffice,
-- `soffice --headless --invisible --norestore --nolockcheck --nodefault --nologo --convert-to pdf`,
-  bez wejścia standardowego; wyjście jest odrzucane i nie trafia do logów,
-- po `office_timeout_s` zabijane jest całe drzewo procesów (`soffice` uruchamia `soffice.bin`).
+| Kod | Gdzie | Kiedy | Skutek |
+|---|---|---|---|
+| `NO_VISUAL_CHANNEL` | `confidence_reasons` każdego pola | kanał wizualny nie przetworzył strony ani dokumentu, z którego pochodzi pole: `OFFICE_CONVERSION_DISABLED` albo inny `RenderError` | obniżona pewność pola; propozycja: najwyżej poziom MEDIUM, czyli pole zawsze trafia do przejrzenia (wielkość obniżenia kalibrowana na `dev`) |
 
-Wymaga to pakietu LibreOffice w obrazie workera (obszar #14).
+Kod jest jeden dla wszystkich przyczyn braku kanału wizualnego, a przyczyna jest zapisana osobno:
+w raporcie przebiegu etap 3 ma `StageReport(status=SKIPPED, detail="OFFICE_CONVERSION_DISABLED")`
+(albo inny kod błędu renderera). Dzięki temu urzędnik widzi, dlaczego pole nie ma potwierdzenia wizualnego.
+
+Konwerter (`render/office.py`) zostaje w kodzie wyłączony i nieużywany: profil bez makr, katalog
+tymczasowy usuwany w `finally`, limit czasu i zabicie drzewa procesów. Ewentualne usunięcie modułu
+to osobna decyzja zespołu.
+
+## Analiza stron przez Eden AI (Etap D)
+
+Od 2026-11-21 VLM (#11) działa przez **Eden AI**: organizatorzy przekazali zespołowi token i dopuścili
+jego użycie z modelami open-weight. Implementacja powstanie w Etapie D; poniżej zasady.
+
+- **Obrazy stron formularzy, także materiałów COI, są wysyłane do Eden AI** i dalej do dostawcy
+  wybranego modelu. W trybie przypisywania ról razem z obrazem wysyłana jest lista elementów
+  wykrytych przez OpenCV i bloki tekstu strony.
+- Dozwolone są **tylko modele open-weight z licencją permisywną**; model, dostawca w Eden AI i licencja
+  wag trafiają do `docs/licenses.md`.
+- Token tylko w zmiennej środowiskowej `EDENAI_API_KEY` (konfiguracja wspólna z LLM tekstowym,
+  `backend/shared/config.py`). Nie trafia do repozytorium, logów, raportów ani nagranych odpowiedzi.
+- Odpowiedzi są cache'owane w `dane/robocze/` po hashu (obraz strony, model, wersja promptu, schemat,
+  parametry), więc ta sama strona z tym samym promptem nie jest wysyłana ponownie.
+- Implementacja lokalna (Qwen3-VL na vLLM lub llama.cpp) zostaje jako awaryjna za tym samym interfejsem.
+- Testy w CI nie łączą się z siecią: używają fake'a z nagranymi odpowiedziami bez treści COI.
 
 ## Konfiguracja i limity
 
@@ -348,8 +368,8 @@ a kreski tekstu mają 1–3 px), nie z różnic geometrii.
 - **Skany obrócone bez `/Rotate` lub bez orientacji EXIF** (np. kartka zeskanowana bokiem) nie są
   prostowane w Etapie A. Wykrycie orientacji treści i prostowanie (deskew) to preprocessing w Etapie C.
   Wtedy bbox będzie przeliczany z powrotem do układu strony wyrenderowanej.
-- **Układ wydruku XLSX i ODS** zależy od ustawień strony arkusza (obszar wydruku, podziały) interpretowanych
-  przez LibreOffice; obraz może różnić się od wydruku z innego programu.
+- **DOC, DOCX, ODS i XLSX nie mają kanału wizualnego** (LibreOffice odrzucony): pola tych dokumentów
+  dostają w Etapie E kod `NO_VISUAL_CHANNEL` i obniżoną pewność.
 - **Perspektywa i zniekształcenia zdjęć** nie są korygowane; w materiałach COI nie ma zdjęć z aparatu.
 - **Profile kolorów ICC** nie są stosowane przy konwersji do RGB.
 - **DPI z metadanych bywa fikcyjne** (np. domyślne 72 lub 96 w zrzutach ekranu); przyjmujemy je, gdy jest
@@ -357,5 +377,3 @@ a kreski tekstu mają 1–3 px), nie z różnic geometrii.
 - **`/UserUnit`** (rzadki parametr PDF zmieniający rozmiar jednostki) nie jest uwzględniany w DPI.
 - **Narzut izolacji** to ok. 0,5 s na dokument (start procesu), a przy dużych obrazach dochodzi
   przesyłanie pikseli między procesami.
-- Wersja LibreOffice nie jest odpytywana w trakcie działania (`renderer_versions["libreoffice"] = "external"`);
-  do manifestu #12 trzeba ją wziąć z obrazu workera.
