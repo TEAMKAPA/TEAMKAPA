@@ -1,5 +1,15 @@
 # Zależności runtime obrazu workera. Wersje przypięte; licencje sprawdza CI (pip-licenses).
-# Biblioteki pipeline'u (Docling, OpenCV, pypdfium2, Tesseract...) dochodzą w zadaniach #7, #10.
-arq==0.28.0                 # MIT
-pydantic==2.14.4            # MIT
-pydantic-settings==2.16.3   # MIT
+# Wyłącznie licencje permisywne (MIT / Apache-2.0 / BSD / MIT-CMU), zero copyleftu i zero LibreOffice.
+arq==0.28.0                        # MIT
+pydantic==2.14.4                   # MIT
+pydantic-settings==2.16.3          # MIT
+
+# Ekstrakcja dokumentów i przetwarzanie obrazów.
+# Dla ODF użyto odfdo (Apache-2.0) zamiast odfpy (odfpy 1.4.1 zawiera kod LGPL-2.1+/GPL-2.0+ i blokuje CI).
+docling==2.151.1                   # MIT
+pypdfium2==5.15.2                  # Apache-2.0 / BSD-3-Clause
+odfdo==3.27.3                      # Apache-2.0
+olefile==0.47                      # BSD-2-Clause
+opencv-python-headless==5.1.0.95   # Apache-2.0
+pytesseract==0.3.13                # Apache-2.0
+pillow==13.0.0                     # MIT-CMU (HPND)
