@@ -74,6 +74,33 @@ def test_office_document_disabled_by_default() -> None:
     with pytest.raises(RenderError) as info:
         render_document(make_ooxml(DOCX_TYPE), DocumentKind.DOCX, CFG, isolated=False)
     assert info.value.code is IssueCode.OFFICE_CONVERSION_DISABLED
+    assert info.value.detail.endswith("declared=docx detected=docx")
+    assert info.value.issues == ()
+
+
+def test_error_keeps_declared_kind_mismatch() -> None:
+    """Obserwacja z A.8: ".DOC" z zawartością DOCX przy wyłączonym LibreOffice."""
+    with pytest.raises(RenderError) as info:
+        render_document(make_ooxml(DOCX_TYPE), DocumentKind.DOC, CFG, isolated=False)
+    err = info.value
+    assert err.code is IssueCode.OFFICE_CONVERSION_DISABLED
+    assert err.detail.endswith("declared=doc detected=docx")
+    assert "VISION_OFFICE_ENABLED=false" in err.detail  # szczegóły pierwotnego błędu zostają
+    [issue] = err.issues
+    assert issue.code is IssueCode.DECLARED_KIND_MISMATCH
+    assert issue.detail == "declared=doc detected=docx"
+    assert isinstance(err.__cause__, RenderError)
+
+
+@pytest.mark.parametrize("isolated", [False, True])
+def test_render_failure_keeps_issues_and_kinds(isolated: bool) -> None:
+    encrypted = make_pdf([SynthPage()], user_password="tajne")
+    with pytest.raises(RenderError) as info:
+        render_document(encrypted, DocumentKind.PNG, CFG, isolated=isolated)
+    err = info.value
+    assert err.code is IssueCode.PDF_ENCRYPTED
+    assert err.detail.endswith("declared=png detected=pdf")
+    assert [i.code for i in err.issues] == [IssueCode.DECLARED_KIND_MISMATCH]
 
 
 def test_office_document_with_converter_uses_detected_kind() -> None:
@@ -106,13 +133,20 @@ def test_each_office_kind_goes_through_converter(kind: DocumentKind) -> None:
 @pytest.mark.parametrize(
     ("data", "detail"),
     [
-        (b"plain text", "detected=unknown"),
-        (make_ooxml(DOCM_TYPE), "detected=ooxml:docm"),
-        (make_odf("application/vnd.oasis.opendocument.text"), "detected=odf:text"),
-        (make_ole2(["Workbook"]), "detected=ole2:xls"),
+        (b"plain text", "declared=none detected=unknown"),
+        (make_ooxml(DOCM_TYPE), "declared=none detected=ooxml:docm"),
+        (make_odf("application/vnd.oasis.opendocument.text"), "declared=none detected=odf:text"),
+        (make_ole2(["Workbook"]), "declared=none detected=ole2:xls"),
     ],
 )
 def test_unsupported_formats(data: bytes, detail: str) -> None:
     with pytest.raises(RenderError) as info:
         render_document(data, None, CFG, office=FakeConverter(), isolated=False)
     assert (info.value.code, info.value.detail) == (IssueCode.UNSUPPORTED_FORMAT, detail)
+
+
+def test_unsupported_format_reports_declared_kind() -> None:
+    with pytest.raises(RenderError) as info:
+        render_document(make_ooxml(DOCM_TYPE), DocumentKind.DOCX, CFG, isolated=False)
+    assert info.value.detail == "declared=docx detected=ooxml:docm"
+    assert info.value.issues == ()

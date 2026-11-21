@@ -38,14 +38,35 @@ def render_document(
 
     ``declared_kind``: rodzaj z kroku 1 (np. z rozszerzenia) albo ``None``.
     ``office``: konwerter dokumentów biurowych; domyślnie według ``cfg.office_enabled``.
-    Błędy dokumentu zgłasza jako ``RenderError`` z kodem; nie ma wyniku częściowego.
+    Błędy dokumentu zgłasza jako ``RenderError`` z kodem; nie ma wyniku częściowego. Błąd zawsze
+    niesie w ``detail`` rodzaj deklarowany i wykryty, a w ``issues`` problemy zebrane przed błędem
+    (np. ``DECLARED_KIND_MISMATCH``).
     """
     detection = detect_kind(data)
+    declared = declared_kind.value if declared_kind is not None else "none"
     if detection.kind is None:
-        raise RenderError(IssueCode.UNSUPPORTED_FORMAT, f"detected={detection.detail}")
+        raise RenderError(
+            IssueCode.UNSUPPORTED_FORMAT, f"declared={declared} detected={detection.detail}"
+        )
     kind = detection.kind
     issues: list[RenderIssue] = declared_kind_issues(declared_kind, detection)
+    try:
+        return _render_detected(data, declared_kind, kind, issues, cfg, office, isolated)
+    except RenderError as exc:
+        context = f"declared={declared} detected={kind.value}"
+        detail = f"{exc.detail} {context}" if exc.detail else context
+        raise RenderError(exc.code, detail, tuple(issues) + exc.issues) from exc
 
+
+def _render_detected(
+    data: bytes,
+    declared_kind: DocumentKind | None,
+    kind: DocumentKind,
+    issues: list[RenderIssue],
+    cfg: RenderConfig,
+    office: OfficeConverter | None,
+    isolated: bool,
+) -> RenderedDocument:
     if kind is DocumentKind.PDF:
         pdf = render_pdf(data, cfg, PageSource.NATIVE_PDF, isolated=isolated)
         pages, versions, source_pages = pdf.pages, pdf.info.renderer_versions, pdf.info.page_count

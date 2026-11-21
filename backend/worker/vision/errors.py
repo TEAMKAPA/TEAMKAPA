@@ -5,6 +5,10 @@ Komunikaty i szczegóły nigdy nie zawierają treści dokumentu: tylko liczby, r
 """
 
 from enum import StrEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # tylko typy: models importuje kody z tego modułu
+    from backend.worker.vision.models import RenderIssue
 
 
 class IssueCode(StrEnum):
@@ -31,11 +35,18 @@ class IssueCode(StrEnum):
 
 
 class RenderError(Exception):
-    """Błąd dokumentu z kodem. ``detail``: wyłącznie dane techniczne, bez treści dokumentu."""
+    """Błąd dokumentu z kodem. ``detail``: wyłącznie dane techniczne, bez treści dokumentu.
 
-    def __init__(self, code: IssueCode, detail: str = "") -> None:
+    ``issues``: problemy dokumentu zebrane przed błędem (np. ``DECLARED_KIND_MISMATCH``), żeby
+    nie zginęły w raporcie przeglądu, gdy renderowanie się nie powiedzie.
+    """
+
+    def __init__(
+        self, code: IssueCode, detail: str = "", issues: tuple[RenderIssue, ...] = ()
+    ) -> None:
         self.code = code
         self.detail = detail
+        self.issues = issues
         super().__init__(f"{code}: {detail}" if detail else str(code))
 
 

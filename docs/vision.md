@@ -38,6 +38,8 @@ for page in doc.pages:
   rozszerzenia. Niezgodność to ostrzeżenie `DECLARED_KIND_MISMATCH` w `doc.meta.issues`, a politykę
   odrzucania plików ustala krok 1 (API).
 - Każdy błąd dokumentu to `RenderError` ze stałym kodem (`errors.IssueCode`). Wyników częściowych nie ma.
+  Błąd zawsze niesie w `detail` rodzaj deklarowany i wykryty (`declared=… detected=…`), a w `issues`
+  problemy zebrane przed błędem (np. `DECLARED_KIND_MISMATCH`), żeby trafiły do raportu przeglądu.
 - Renderowanie PDF i dekodowanie obrazów odbywa się domyślnie w procesie potomnym (`isolated=True`).
 
 Moduł `render` nie zależy od detektorów ani VLM, więc można go przenieść do #7 lub podmienić.
