@@ -4,7 +4,8 @@ Usługa REST, która z blankietu urzędowego (PDF, DOC/DOCX, ODS, XLSX, JPG/PNG)
 konfiguracji e-formularza zgodny ze schematem COI. Każde pole ma źródło w dokumencie i ocenę
 pewności — urzędnik sprawdza tylko pola niepewne. Wszystkie modele AI działają lokalnie.
 
-> Stan: fundament repozytorium (#14). Endpointy analizy, kolejka i pipeline są w trakcie realizacji.
+> Stan: infrastruktura (#14), modele COI (#17) i REST API z kolejką (#13) gotowe; pipeline
+> analizy (#16) w trakcie — do tego czasu analiza kończy się błędem 501 `PIPELINE_NOT_IMPLEMENTED`.
 
 ## Architektura uruchomieniowa
 
@@ -58,7 +59,11 @@ docker compose up -d                       # api, worker, postgres, valkey
 docker compose --profile gpu up -d         # + lokalne LLM i VLM (vLLM)
 docker compose --profile frontend up -d    # + frontend na http://localhost:8080
 
-curl http://localhost:8000/health          # {"status":"ok","version":"0.1.0"}
+curl http://localhost:8000/health          # {"status":"ok","version":"0.2.0"}
+
+# token JWT dla użytkownika (sekret jest tylko w kontenerze)
+TOKEN=$(docker compose exec -T api python -m backend.api.token_cli --sub urzednik)
+curl -H "Authorization: Bearer $TOKEN" -F "file=@wniosek.pdf"      http://localhost:8000/api/v1/forms/analyze
 ```
 
 Bez GPU można wskazać dowolny lokalny serwer zgodny z API OpenAI (np. Ollama, llama.cpp)
@@ -79,6 +84,14 @@ Sekret można też podać jako Docker secret — plik `/run/secrets/<nazwa_zmien
 | `JWT_SECRET_KEY` | — (wymagany) | Klucz weryfikacji tokenów, min. 32 znaki. |
 | `JWT_ALGORITHM` | `HS256` | `HS256`, `HS384` lub `HS512`. |
 | `JWT_EXPIRE_MINUTES` | `60` | Czas życia tokenu wystawianego skryptem CLI (1–1440). |
+| `JWT_LEEWAY_SECONDS` | `30` | Tolerancja różnicy zegarów przy sprawdzaniu ważności tokenu. |
+| `ANALYZE_WAIT_SECONDS` | `60` | Ile `POST /forms/analyze` czeka na wynik, zanim zwróci 202 z `job_id`. |
+| `ANALYZE_MAX_WAIT_SECONDS` | `300` | Górny limit parametru `?wait=` (proxy frontendu ma timeout 300 s). |
+| `MAX_BATCH_FILES` | `20` | Maksymalna liczba plików w jednym żądaniu batch. |
+| `JOB_QUEUE_TTL_SECONDS` | `3600` | Jak długo plik czeka w pamięci kolejki na workera; potem zadanie wygasa. |
+| `JOB_RESULT_TTL_SECONDS` | `3600` | Jak długo wynik zadania jest dostępny w `GET /jobs/{id}`. |
+| `JOB_TIMEOUT_SECONDS` | `1800` | Maksymalny czas analizy jednego pliku. |
+| `WORKER_MAX_JOBS` | `1` | Liczba równoległych analiz w jednym workerze (ograniczona przez GPU). |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | — (wymagane) | Dane bazy; z nich compose składa `DATABASE_URL`. |
 | `VALKEY_URL` | `redis://valkey:6379/0` | Adres kolejki. |
 | `LLM_BASE_URL` / `LLM_MODEL` | `http://llm:8000/v1` / — | Serwer i nazwa lokalnego LLM tekstowego. |
@@ -93,14 +106,49 @@ Sekret można też podać jako Docker secret — plik `/run/secrets/<nazwa_zmien
 
 ## REST API
 
-Interaktywna dokumentacja OpenAPI: `http://localhost:8000/docs`, specyfikacja: `/openapi.json`.
+Interaktywna dokumentacja OpenAPI: `http://localhost:8000/api/docs`, specyfikacja:
+`/api/openapi.json` (dostępne też przez frontend pod `/api/...`).
 
-| Metoda | Ścieżka | Uwierzytelnianie | Opis |
+| Metoda | Ścieżka | JWT | Opis |
 | --- | --- | --- | --- |
+| `POST` | `/api/v1/forms/analyze` | tak | Jeden plik (`file`) → `200 {form, report}` albo `202` z `job_id`. |
+| `POST` | `/api/v1/forms/batch` | tak | Wiele plików (`files`) → `202 {jobs, rejected}`. |
+| `GET` | `/api/v1/jobs/{job_id}` | tak | Status `QUEUED` / `IN_PROGRESS` / `SUCCEEDED` / `FAILED`, postęp, wynik albo błąd. |
 | `GET` | `/health` | nie | Liveness probe. |
+| `GET` | `/ready` | nie | Readiness probe — sprawdza kolejkę (503, gdy niedostępna). |
 
-Endpointy `POST /api/v1/forms/analyze`, `POST /api/v1/forms/batch` i `GET /api/v1/jobs/{id}`
-powstają w ramach #13.
+**Uwierzytelnianie:** nagłówek `Authorization: Bearer <token>`. API tylko weryfikuje tokeny
+(podpis, algorytm z `JWT_ALGORITHM`, wymagane `exp` i `sub`). Token wystawia
+`python -m backend.api.token_cli --sub <użytkownik> [--minutes N]` uruchomione w kontenerze
+`api`. Użytkownik widzi wyłącznie swoje zadania — cudze zwracają 404.
+
+**Długie analizy:** `analyze` czeka na wynik najwyżej `ANALYZE_WAIT_SECONDS` (parametr
+`?wait=` od 0 do `ANALYZE_MAX_WAIT_SECONDS`). Gdy analiza trwa dłużej, zwraca **202**
+z `job_id`, nagłówkami `Location` i `Retry-After`; wynik i postęp (`progress`: etap,
+krok / liczba kroków) są pod `GET /api/v1/jobs/{job_id}`.
+
+**Walidacja plików:** dozwolone PDF, DOC, DOCX, ODS, XLSX, JPG, JPEG, PNG; typ MIME wykryty
+z treści (libmagic) musi pasować do rozszerzenia; nazwa ≤ 250 znaków bez `; : > < / \ | ' * % $`;
+rozmiar ≤ `MAX_FILE_SIZE_MB`. W batch poprawne pliki trafiają do kolejki, a odrzucone są
+zwracane w `rejected` z kodem i komunikatem.
+
+**Plik nie jest utrwalany:** API trzyma go w pamięci (lub `tmpfs`), przekazuje do pamięci
+Valkey (bez zapisu na dysk) z TTL, a worker usuwa go po analizie. W argumentach i wynikach
+zadań są tylko metadane (nazwa, rozmiar, SHA-256, właściciel).
+
+**Błędy** mają jeden format: `{"error": {"code": "...", "message": "...", "details": ...}}`.
+
+| Kod HTTP | `error.code` |
+| --- | --- |
+| 400 | `FILENAME_MISSING`, `FILENAME_TOO_LONG`, `FILENAME_FORBIDDEN_CHARS`, `FILE_EMPTY`, `TOO_MANY_FILES` |
+| 401 | `AUTH_REQUIRED`, `TOKEN_INVALID`, `TOKEN_EXPIRED` |
+| 404 | `JOB_NOT_FOUND` |
+| 413 | `FILE_TOO_LARGE`, `REQUEST_TOO_LARGE` |
+| 415 | `EXTENSION_NOT_ALLOWED`, `MIME_MISMATCH` |
+| 422 | `REQUEST_INVALID`, `BATCH_ALL_REJECTED`, `DOCUMENT_UNREADABLE` |
+| 500 | `PIPELINE_ERROR`, `JOB_FAILED`, `FILE_EXPIRED`, `FILE_CORRUPTED` |
+| 501 | `PIPELINE_NOT_IMPLEMENTED` |
+| 503 | `QUEUE_UNAVAILABLE` |
 
 ## Development
 

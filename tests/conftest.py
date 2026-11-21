@@ -7,6 +7,11 @@ from backend.shared.config import get_api_settings, get_settings
 TEST_JWT_SECRET = "test-secret-" + "x" * 40
 
 
+@pytest.fixture
+def anyio_backend() -> str:
+    return "asyncio"
+
+
 @pytest.fixture(autouse=True)
 def _test_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Każdy test startuje z poprawną, izolowaną konfiguracją i pustym cache ustawień."""

@@ -44,7 +44,7 @@ services:
     build:
       context: .
       dockerfile: backend/api/Dockerfile
-    image: teamkapa/api:0.1.0
+    image: teamkapa/api:0.2.0
     ports:
       - "${API_PORT:-8000}:8000"
     tmpfs:
@@ -59,7 +59,7 @@ services:
     build:
       context: .
       dockerfile: backend/worker/Dockerfile
-    image: teamkapa/worker:0.1.0
+    image: teamkapa/worker:0.2.0
     tmpfs:
       - /tmp:size=${TMPFS_SIZE:-512m},mode=1777
     depends_on:
