@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -332,7 +333,7 @@ class TestStep09RulesAndDicts:
         assert "Stan cywilny" in proposal["usage"]
 
     def test_deterministic_rule_overrides_llm_conflicts(self) -> None:
-        raw_form = {
+        raw_form: dict[str, Any] = {
             "form_id": "test_form",
             "fields": [
                 {
@@ -382,7 +383,7 @@ class TestStep09RulesAndDicts:
         assert custom_conflicts[0]["rule"] == "coi_dictionary_whitelist"
 
     def test_run_step09_supports_coi_form_definition_from_step08(self) -> None:
-        coi_form = {
+        coi_form: dict[str, Any] = {
             "title": "Wniosek o wydanie dowodu osobistego",
             "tabs": [
                 {
