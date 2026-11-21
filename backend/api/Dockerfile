@@ -21,6 +21,8 @@ RUN pip install -r /tmp/requirements.txt && rm /tmp/requirements.txt
 COPY backend/__init__.py backend/__init__.py
 COPY backend/shared backend/shared
 COPY backend/api backend/api
+# Migracje schematu — uruchamia je jednorazowa usługa compose `migrate` (ten sam obraz).
+COPY db/migrations db/migrations
 
 USER 10001:10001
 EXPOSE 8000

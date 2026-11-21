@@ -1,14 +1,17 @@
 """Kontrakt kolejki zadań między API a workerem.
 
+Źródłem prawdy o zadaniu (status, próby, wynik, błąd) jest PostgreSQL (``backend.shared.db``).
+Valkey służy wyłącznie jako kolejka, tymczasowy nośnik pliku i bieżący postęp.
+
 Przepływ pliku (plik nigdy nie trafia na dysk ani do bazy):
-1. API waliduje plik i zapisuje jego bajty w pamięci Valkey pod kluczem ``coi:file:{job_id}``
-   z TTL (``JOB_QUEUE_TTL_SECONDS``); Valkey działa bez trwałości na dysku.
+1. API zapisuje zadanie w bazie (QUEUED), a bajty pliku w pamięci Valkey pod kluczem
+   ``coi:file:{job_id}`` z TTL (``JOB_QUEUE_TTL_SECONDS``); Valkey działa bez zapisu na dysk.
 2. API kolejkuje zadanie ``analyze_document`` z samymi metadanymi (``DocumentRef``) —
    argumenty zadania arq są zapisywane także w wyniku, więc bajty pliku nie mogą tam trafić.
-3. Worker pobiera bajty, analizuje je i usuwa klucz pliku po zakończeniu (sukces lub błąd).
-   Klucz zostaje usunięty najpóźniej po TTL, nawet gdy worker przestanie działać.
-4. Wynik (``JobOutcome``) przechowuje arq przez ``JOB_RESULT_TTL_SECONDS``; postęp analizy
-   worker zapisuje pod ``coi:progress:{job_id}``.
+3. Worker oznacza zadanie IN_PROGRESS, analizuje plik i zapisuje wynik w bazie. Plik usuwa po
+   ostatecznym zakończeniu (sukces lub błąd); przy ponowieniu plik zostaje do kolejnej próby,
+   najdłużej do wygaśnięcia TTL.
+4. Postęp analizy worker zapisuje pod ``coi:progress:{job_id}``.
 
 Serializacja zadań i wyników: msgpack (zamiast domyślnego pickle — brak wykonywania kodu
 przy deserializacji danych z kolejki).
@@ -30,7 +33,7 @@ FILE_KEY_PREFIX = "coi:file:"
 PROGRESS_KEY_PREFIX = "coi:progress:"
 
 JOB_ID_PATTERN = r"^[0-9a-f]{32}$"
-JobId = Annotated[str, Field(pattern=JOB_ID_PATTERN, description="Identyfikator zadania (hex)")]
+JobId = Annotated[str, Field(pattern=JOB_ID_PATTERN, description="Identyfikator (hex)")]
 Sha256 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 
 
@@ -81,8 +84,11 @@ class JobErrorCode(StrEnum):
     FILE_CORRUPTED = "FILE_CORRUPTED"  # suma kontrolna nie zgadza się z przesłaną
     DOCUMENT_UNREADABLE = "DOCUMENT_UNREADABLE"  # nie da się odczytać treści dokumentu
     PIPELINE_NOT_IMPLEMENTED = "PIPELINE_NOT_IMPLEMENTED"
+    PIPELINE_UNAVAILABLE = "PIPELINE_UNAVAILABLE"  # błąd przejściowy po wyczerpaniu prób
+    PIPELINE_TIMEOUT = "PIPELINE_TIMEOUT"  # przekroczony JOB_TIMEOUT_SECONDS
     PIPELINE_ERROR = "PIPELINE_ERROR"  # nieoczekiwany błąd analizy
-    JOB_FAILED = "JOB_FAILED"  # zadanie przerwane (np. przekroczony czas)
+    JOB_FAILED = "JOB_FAILED"  # kolejka przerwała zadanie (np. limit prób po awariach workera)
+    JOB_LOST = "JOB_LOST"  # zadanie zniknęło z kolejki (np. restart Valkey)
 
 
 class JobError(JobModel):
@@ -93,7 +99,7 @@ class JobError(JobModel):
 class JobOutcome(JobModel):
     """Wartość zwracana przez zadanie ``analyze_document`` (zawsze — także przy błędzie)."""
 
-    status: Literal["succeeded", "failed"]
+    status: Literal["succeeded", "failed", "skipped"]
     result: AnalysisResult | None = None
     error: JobError | None = None
 
@@ -104,6 +110,11 @@ class JobOutcome(JobModel):
     @classmethod
     def failed(cls, code: JobErrorCode, message: str) -> JobOutcome:
         return cls(status="failed", error=JobError(code=code, message=message))
+
+    @classmethod
+    def skipped(cls) -> JobOutcome:
+        """Zadanie nie istnieje już w bazie albo jest zakończone — nic do zrobienia."""
+        return cls(status="skipped")
 
 
 class JobStatus(StrEnum):
@@ -117,12 +128,9 @@ class JobStatus(StrEnum):
         return self in {JobStatus.SUCCEEDED, JobStatus.FAILED}
 
 
-class JobSnapshot(JobModel):
-    """Stan zadania odczytany z kolejki."""
+class QueueState(StrEnum):
+    """Stan zadania widziany przez kolejkę arq (do uzgadniania z bazą)."""
 
-    job_id: JobId
-    status: JobStatus
-    document: DocumentRef
-    progress: JobProgress | None = None
-    result: AnalysisResult | None = None
-    error: JobError | None = None
+    PENDING = "PENDING"  # w kolejce, odroczone (ponowienie) lub w trakcie
+    COMPLETE = "COMPLETE"  # arq zapisał wynik (także porażkę, np. limit prób)
+    NOT_FOUND = "NOT_FOUND"  # brak śladu w kolejce

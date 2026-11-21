@@ -1,12 +1,9 @@
-"""Kolejka zadań po stronie API (arq + Valkey). Kontrakt: ``backend.shared.jobs``."""
+"""Kolejka zadań po stronie API (arq + Valkey). Status zadań czytamy z PostgreSQL."""
 
-import asyncio
 import logging
-from typing import Any, Protocol
+from typing import Protocol
 
 from arq.connections import ArqRedis, RedisSettings, create_pool
-from arq.jobs import Job
-from arq.jobs import JobStatus as ArqJobStatus
 from pydantic import ValidationError
 from redis.exceptions import RedisError
 
@@ -14,21 +11,17 @@ from backend.shared.config import Settings
 from backend.shared.jobs import (
     ANALYZE_TASK,
     DocumentRef,
-    JobError,
-    JobErrorCode,
-    JobOutcome,
     JobProgress,
-    JobSnapshot,
-    JobStatus,
+    QueueState,
     deserialize,
     file_key,
     progress_key,
     serialize,
 )
+from backend.shared.reconcile import queue_state
 
 logger = logging.getLogger(__name__)
 
-_POLL_INTERVAL_SECONDS = 0.5
 _QUEUE_ERRORS = (RedisError, OSError)
 
 
@@ -39,11 +32,9 @@ class QueueUnavailableError(Exception):
 class JobQueue(Protocol):
     async def submit(self, document: DocumentRef, content: bytes) -> None: ...
 
-    async def get(self, job_id: str) -> JobSnapshot | None: ...
+    async def progress(self, job_id: str) -> JobProgress | None: ...
 
-    async def wait(self, job_id: str, max_seconds: float) -> JobSnapshot | None:
-        """Czeka na zakończenie zadania najwyżej ``max_seconds`` sekund; zwraca aktualny stan."""
-        ...
+    async def state(self, job_id: str) -> QueueState: ...
 
     async def ping(self) -> bool: ...
 
@@ -88,22 +79,24 @@ class ArqJobQueue:
         except _QUEUE_ERRORS:
             logger.warning("Nie udało się usunąć %s — wygaśnie po TTL", key)
 
-    async def get(self, job_id: str) -> JobSnapshot | None:
+    async def progress(self, job_id: str) -> JobProgress | None:
         try:
-            return await self._snapshot(job_id)
+            raw = await self._redis.get(progress_key(job_id))
         except _QUEUE_ERRORS as exc:
             raise QueueUnavailableError(str(exc)) from exc
-
-    async def wait(self, job_id: str, max_seconds: float) -> JobSnapshot | None:
-        snapshot = await self.get(job_id)
+        if raw is None:
+            return None
         try:
-            async with asyncio.timeout(max_seconds):
-                while snapshot is not None and not snapshot.status.finished:
-                    await asyncio.sleep(_POLL_INTERVAL_SECONDS)
-                    snapshot = await self.get(job_id)
-        except TimeoutError:
-            pass
-        return snapshot
+            return JobProgress.model_validate_json(raw)
+        except ValidationError:
+            logger.warning("Nieprawidłowy zapis postępu zadania %s", job_id)
+            return None
+
+    async def state(self, job_id: str) -> QueueState:
+        try:
+            return await queue_state(self._redis, job_id)
+        except _QUEUE_ERRORS as exc:
+            raise QueueUnavailableError(str(exc)) from exc
 
     async def ping(self) -> bool:
         try:
@@ -113,77 +106,3 @@ class ArqJobQueue:
 
     async def close(self) -> None:
         await self._redis.aclose()
-
-    async def _snapshot(self, job_id: str) -> JobSnapshot | None:
-        job = Job(job_id, self._redis, _deserializer=deserialize)
-        status = await job.status()
-        if status is ArqJobStatus.not_found:
-            return None
-
-        if status is ArqJobStatus.complete:
-            info = await job.result_info()
-            if info is None:  # wynik wygasł między odczytami
-                return None
-            document = _document_from_args(info.args)
-            if document is None:
-                return None
-            return _finished_snapshot(document, info.success, info.result)
-
-        definition = await job.info()
-        document = _document_from_args(definition.args) if definition else None
-        if document is None:
-            return None
-        if status is ArqJobStatus.in_progress:
-            return JobSnapshot(
-                job_id=job_id,
-                status=JobStatus.IN_PROGRESS,
-                document=document,
-                progress=await self._progress(job_id),
-            )
-        return JobSnapshot(job_id=job_id, status=JobStatus.QUEUED, document=document)
-
-    async def _progress(self, job_id: str) -> JobProgress | None:
-        raw = await self._redis.get(progress_key(job_id))
-        if raw is None:
-            return None
-        try:
-            return JobProgress.model_validate_json(raw)
-        except ValidationError:
-            logger.warning("Nieprawidłowy zapis postępu zadania %s", job_id)
-            return None
-
-
-def _document_from_args(args: tuple[Any, ...]) -> DocumentRef | None:
-    try:
-        return DocumentRef.model_validate(args[0])
-    except IndexError, ValidationError:
-        logger.warning("Zadanie w kolejce ma nieoczekiwane argumenty")
-        return None
-
-
-def _finished_snapshot(document: DocumentRef, success: bool, result: Any) -> JobSnapshot:
-    job_id = document.job_id
-    if success:
-        try:
-            outcome = JobOutcome.model_validate(result)
-        except ValidationError:
-            logger.exception("Zadanie %s zwróciło wynik niezgodny z kontraktem", job_id)
-        else:
-            if outcome.status == "succeeded" and outcome.result is not None:
-                return JobSnapshot(
-                    job_id=job_id,
-                    status=JobStatus.SUCCEEDED,
-                    document=document,
-                    result=outcome.result,
-                )
-            if outcome.error is not None:
-                return JobSnapshot(
-                    job_id=job_id, status=JobStatus.FAILED, document=document, error=outcome.error
-                )
-    # Zadanie przerwane (timeout, awaria) albo wynik niezgodny z kontraktem.
-    return JobSnapshot(
-        job_id=job_id,
-        status=JobStatus.FAILED,
-        document=document,
-        error=JobError(code=JobErrorCode.JOB_FAILED, message="Analiza została przerwana"),
-    )
