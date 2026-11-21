@@ -9,6 +9,9 @@ Sygnały pola (0..1, nazwane w raporcie — urzędnik i ewaluacja widzą, skąd 
 - ``domain_rules``   — reguła dziedzinowa nadpisała decyzję modelu (0.4),
 - ``visual_match``   — element źródłowy pokrywa się z elementem wykrytym na obrazie strony.
 
+Pola informacyjne bez źródła (np. standardowy tekst strony końcowej COI) nie pochodzą
+z dokumentu — nie mają sygnałów źródła ani ostrzeżenia ``SOURCE_NOT_FOUND``.
+
 Wynik = średnia dostępnych sygnałów, z ograniczeniami:
 - brak kanału wizualnego → najwyżej MEDIUM (pole przeczytane tylko jednym kanałem),
 - tryb demonstracyjny → LOW (wynik nie pochodzi z modelu).
@@ -21,6 +24,7 @@ from collections.abc import Iterable
 from statistics import fmean
 from uuid import UUID
 
+from backend.shared.schemas.coi_form import INFORMATIONAL_FIELD_TYPES
 from backend.shared.schemas.quality import (
     BoundingBox,
     FieldAssessment,
@@ -89,9 +93,11 @@ def assess_fields(
         field_issues = list(issues_by_field.get(leaf.id, []))
 
         signals: dict[str, float] = {"rules": _rules_signal(field_issues)}
+        template_text = source is None and leaf.type in INFORMATIONAL_FIELD_TYPES
         found = bool(source and source.text and normalize_text(source.text) in document_text)
-        signals["source_found"] = 1.0 if found else 0.0
-        signals["source_element"] = 1.0 if element is not None else 0.0
+        if not template_text:
+            signals["source_found"] = 1.0 if found else 0.0
+            signals["source_element"] = 1.0 if element is not None else 0.0
         if element is not None and element.confidence is not None:
             signals["ocr"] = element.confidence
         for conflict in normalized.conflicts.get(leaf.id, []):
@@ -108,7 +114,7 @@ def assess_fields(
             )
         if visual is not None:
             signals["visual_match"] = _visual_signal(element, visual)
-        if not found:
+        if not found and not template_text:
             field_issues.append(
                 Issue(
                     code="SOURCE_NOT_FOUND",

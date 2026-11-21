@@ -2,6 +2,11 @@
 
 Pole zasilane z rejestru ma: ``readOnly: true``, ``defaultValue: "ŹRÓDŁO.atrybut"``,
 ``defaultValueType: "EXTERNAL_SYSTEM"``. Jedno pole = jedno źródło i jeden atrybut.
+
+Wyjątek z praktyki COI (oba referencyjne formularze od organizatora): dane kontaktowe
+i adresowe z profilu zalogowanego (MLPZ: adres, telefon, e-mail) są podpowiedzią, którą
+użytkownik może poprawić — ``readOnly: false``. Dane tożsamości (imię, nazwisko, PESEL)
+i dane z rejestrów pozostają tylko do odczytu.
 """
 
 from dataclasses import dataclass
@@ -25,10 +30,21 @@ class InitialDataAttribute:
     field_type: FieldType | None
 
     @property
+    def editable(self) -> bool:
+        """Czy pole może pozostać edytowalne (``readOnly: false``) — patrz opis modułu."""
+        return self.source is InitialDataSource.MLPZ and self.attribute in _MLPZ_EDITABLE
+
+    @property
     def reference(self) -> str:
         """Wartość do ``defaultValue``, np. ``PESEL.name``."""
         return f"{self.source}.{self.attribute}"
 
+
+#: Dane kontaktowe i adresowe z profilu — w formularzach COI edytowalne.
+_MLPZ_EDITABLE = frozenset(
+    {"phoneNumber", "email", "country", "voivodeship", "district", "community", "place",
+     "postCode", "street", "building", "apartment"}
+)  # fmt: skip
 
 _T = FieldType.TEXT_FIELD
 _D = FieldType.DATEPICKER

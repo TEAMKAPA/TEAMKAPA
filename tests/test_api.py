@@ -448,7 +448,7 @@ def test_approve_returns_warnings() -> None:
     with api_client(_queue("succeed")) as client:
         job_id = _submit(client)
         form = sample()
-        del form["tabs"][1]["questions"][0]["field"]["repetingSectionGrid"][1]["field"]["title"]
+        del form["tabs"][1]["questions"][0]["field"]["repeatingSectionGrid"][1]["field"]["title"]
         body = client.put(f"/api/v1/jobs/{job_id}/approval", json=form, headers=auth()).json()
     assert [w["code"] for w in body["warnings"]] == ["INPUT_WITHOUT_TITLE"]
 

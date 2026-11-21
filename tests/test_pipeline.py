@@ -252,10 +252,13 @@ class TestStep06StructureAndCOIRules:
         assert all(t["type"] == "MAIN" for t in tabs[:-1])
         assert tabs[-1]["type"] == "FINISH"
 
-        # FINISH tab must contain EXCLUSIVELY INFO_SECTION (zero input fields).
-        finish_fields = [q["field"] for q in tabs[-1]["questions"]]
-        assert len(finish_fields) >= 1
-        assert all(f["type"] == "INFO_SECTION" for f in finish_fields)
+        # FINISH = standard COI: „Strona końcowa” → sekcja podglądu → TEXT_BLOCK (bez pól).
+        assert tabs[-1]["title"] == "Strona końcowa"
+        (finish,) = [q["field"] for q in tabs[-1]["questions"]]
+        assert (finish["type"], finish["techName"]) == ("SECTION", "podglad_uzupelnionego_wniosku")
+        (block,) = [c["field"] for c in finish["repeatingSectionGrid"]]
+        assert (block["type"], block["techName"]) == ("TEXT_BLOCK", "podglad_1")
+        assert block["description"].startswith("Zanim")
 
         # Logical COI section ordering on Tab 1.
         tab1_techs = [q["field"]["techName"] for q in tabs[0]["questions"]]
@@ -283,7 +286,7 @@ class TestStep06StructureAndCOIRules:
                                 "type": "SECTION",
                                 "techName": "sec_outer",
                                 "title": "Outer",
-                                "repetingSectionGrid": [
+                                "repeatingSectionGrid": [
                                     {
                                         "x": 0,
                                         "y": 0,
@@ -324,7 +327,7 @@ class TestStep06StructureAndCOIRules:
         }
         errors = validate_coi_structure(bad_form)
         assert any("Nested section" in err for err in errors)
-        assert any("FINISH tab may only contain INFO_SECTION" in err for err in errors)
+        assert any("FINISH tab may only contain sections" in err for err in errors)
 
 
 class TestStep07FieldsAndStep08Dependencies:
@@ -338,18 +341,16 @@ class TestStep07FieldsAndStep08Dependencies:
         all_fields: list[dict[str, Any]] = []
         for tab in step07["tabs"]:
             if tab["type"] == "FINISH":
+                # Treść standardowa COI, nie z dokumentu — bez metadanych źródła.
                 for q in tab["questions"]:
-                    f = q["field"]
-                    assert f["type"] == "INFO_SECTION"
-                    assert f["source_text"]
-                    assert isinstance(f["page"], int) and f["page"] >= 1
-                    assert "element_id" in f
+                    children = q["field"]["repeatingSectionGrid"]
+                    assert {c["field"]["type"] for c in children} == {"TEXT_BLOCK"}
                 continue
 
             for q in tab["questions"]:
                 sec = q["field"]
                 assert sec["type"] in COI_SECTION_TYPES
-                for child in sec["repetingSectionGrid"]:
+                for child in sec["repeatingSectionGrid"]:
                     f = child["field"]
                     all_fields.append(f)
                     assert f["type"] in (COI_COMPONENT_TYPES - COI_SECTION_TYPES)
@@ -410,7 +411,7 @@ class TestStep07FieldsAndStep08Dependencies:
             for tab in step07["tabs"]
             if tab["type"] == "MAIN"
             for q in tab["questions"]
-            for child in q["field"]["repetingSectionGrid"]
+            for child in q["field"]["repeatingSectionGrid"]
         ]
         assert len(fields) == 1
         assert fields[0]["type"] == "CONSENT_SECTION"
@@ -440,7 +441,7 @@ class TestStep07FieldsAndStep08Dependencies:
 
         addr_fields = {
             c["field"]["techName"]: c["field"]
-            for c in tab1_sections["adres_zamieszkania"]["repetingSectionGrid"]
+            for c in tab1_sections["adres_zamieszkania"]["repeatingSectionGrid"]
         }
         woj_state = addr_fields["wojewodztwo"]["states"][0]
         assert woj_state["type"] == "SHOW"

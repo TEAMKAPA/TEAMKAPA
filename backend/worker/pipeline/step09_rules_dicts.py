@@ -509,7 +509,7 @@ def apply_rules_to_coi_form(form_data: dict[str, Any]) -> dict[str, Any]:
             continue
         for sec_q in tab.get("questions", []):
             sec_field = sec_q.get("field", {})
-            for child in sec_field.get("repetingSectionGrid", []):
+            for child in sec_field.get("repeatingSectionGrid", []):
                 field = child.get("field", {})
                 if field.get("type") in _COI_SKIP_TYPES:
                     continue

@@ -9,6 +9,7 @@ import pytest
 from pydantic import SecretStr
 
 from backend.shared.jobs import JobProgress
+from backend.shared.schemas.coi_form import FieldType
 from backend.shared.schemas.quality import ConfidenceLevel, Severity, StageStatus
 from backend.shared.validators.form_rules import has_errors, validate_form_rules
 from backend.worker.clients.llm_client import LLMClient, LLMConfig
@@ -101,9 +102,16 @@ async def test_normalization_and_uncertainty_are_reported(tmp_path: Path) -> Non
     assert "INITIAL_DATA_SOURCE_MISSING" in {i.code for i in imie.issues}
     assert imie.signals["rules"] == 0.6
     assert imie.level is not ConfidenceLevel.HIGH
-    # INFO_SECTION ze strony FINISH opakowana w sekcję — odnotowane w raporcie.
-    wrapped = [i for a in result.report.fields for i in a.issues if i.code == "WRAPPED_IN_SECTION"]
-    assert wrapped
+    # Strona końcowa według standardu COI: sekcja podglądu z blokiem tekstu (bez opakowywania).
+    finish = result.form.tabs[-1]
+    assert finish.title == "Strona końcowa"
+    block = finish.questions[0].field.repeating_section_grid[0].field
+    assert block.type is FieldType.TEXT_BLOCK
+    codes = {i.code for a in result.report.fields for i in a.issues}
+    assert "WRAPPED_IN_SECTION" not in codes
+    # Tekst standardowy nie pochodzi z dokumentu — bez ostrzeżenia o brakującym źródle.
+    (assessment,) = [a for a in result.report.fields if a.field_id == block.id]
+    assert "SOURCE_NOT_FOUND" not in {i.code for i in assessment.issues}
 
 
 async def test_visual_channel_raises_confidence(tmp_path: Path) -> None:

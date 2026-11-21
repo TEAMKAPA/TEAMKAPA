@@ -646,14 +646,14 @@ def run_step07(
         target_sec = sections_by_tech.get(sec_key) or first_main_section
         if target_sec is None:
             continue
-        grid = target_sec.setdefault("repetingSectionGrid", [])
+        grid = target_sec.setdefault("repeatingSectionGrid", [])
         grid.append(_to_coi_question_field(raw_field, order=len(grid) + 1))
 
     # Drop empty optional sections on MAIN tabs (keep every tab with >= 1 field).
     for tab in form.get("tabs", []):
         if tab.get("type") != "MAIN":
             continue
-        non_empty = [q for q in tab.get("questions", []) if q["field"].get("repetingSectionGrid")]
+        non_empty = [q for q in tab.get("questions", []) if q["field"].get("repeatingSectionGrid")]
         if non_empty:
             for idx, q in enumerate(non_empty):
                 q["y"] = idx

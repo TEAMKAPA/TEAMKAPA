@@ -166,30 +166,52 @@ def _detect_supports_proxy(text: str, template: dict[str, Any] | None) -> bool:
     return any(token in norm for token in ("pelnomocni", "w_imieniu", "podmiot", "reprezentan"))
 
 
+#: Standard strony końcowej z referencyjnych konfiguracji COI (identyczny w obu wzorcach).
+FINISH_TAB_TITLE = "Strona końcowa"
+FINISH_SECTION_TECH_NAME = "podglad_uzupelnionego_wniosku"
+FINISH_SECTION_TITLE = "Podgląd uzupełnionego wniosku"
+FINISH_TEXT_SIGNED = (
+    "Zanim przejdziesz do wyboru sposobu podpisu, sprawdź dane na podglądzie. "
+    "Jeśli zobaczysz błędy, wróć do edycji."
+)
+FINISH_TEXT_UNSIGNED = (
+    "Zanim wyślesz wniosek, sprawdź uzupełnione dane na podglądzie. "
+    "Jeśli zobaczysz błędy, wróć do edycji."
+)
+
+
 def _default_finish_info_question(tab_seed: str, has_signature: bool = True) -> dict[str, Any]:
-    preview_text = (
-        "Zanim przejdziesz do wyboru sposobu podpisu, sprawdź dane na podglądzie. "
-        "Jeśli zobaczysz błędy, wróć do edycji."
-        if has_signature
-        else "Zanim wyślesz formularz, sprawdź dane na podglądzie. "
-        "Jeśli zobaczysz błędy, wróć do edycji."
-    )
+    """Sekcja podglądu z blokiem tekstu — dokładnie jak strona końcowa w plikach COI."""
+    preview_text = FINISH_TEXT_SIGNED if has_signature else FINISH_TEXT_UNSIGNED
     return {
         "x": 0,
         "y": 0,
-        "rows": 1,
-        "cols": 12,
+        "rows": 2,
+        "cols": 3,
         "field": {
-            "id": make_uuid(f"{tab_seed}.podglad"),
-            "type": "INFO_SECTION",
-            "techName": "podsumowanie_i_podglad",
-            "title": "Podgląd",
-            "description": preview_text,
+            "id": make_uuid(f"{tab_seed}.{FINISH_SECTION_TECH_NAME}"),
+            "type": "SECTION",
+            "techName": FINISH_SECTION_TECH_NAME,
+            "title": FINISH_SECTION_TITLE,
             "states": [],
-            "questionOrder": 1,
-            "source_text": "Podsumowanie i podgląd formularza przed wysłaniem",
-            "page": 1,
-            "element_id": None,
+            "questionOrder": 0,
+            "repeatingSectionGrid": [
+                {
+                    "x": 0,
+                    "y": 0,
+                    "rows": 1,
+                    "cols": 3,
+                    "field": {
+                        "id": make_uuid(f"{tab_seed}.podglad_1"),
+                        "type": "TEXT_BLOCK",
+                        "techName": "podglad_1",
+                        "title": "",
+                        "description": preview_text,
+                        "states": [],
+                        "questionOrder": 0,
+                    },
+                }
+            ],
         },
     }
 
@@ -307,12 +329,11 @@ def _build_mock_structure(
     }
 
 
-def _to_coi_tabs(raw_structure: dict[str, Any]) -> dict[str, Any]:
+def _to_coi_tabs(raw_structure: dict[str, Any], *, has_signature: bool = True) -> dict[str, Any]:
     title = normalize_form_title(str(raw_structure.get("title", "")))
     raw_tabs = raw_structure.get("tabs", [])
 
     main_tabs = [t for t in raw_tabs if t.get("type") != "FINISH"]
-    finish_tabs = [t for t in raw_tabs if t.get("type") == "FINISH"]
 
     if not main_tabs:
         main_tabs = [
@@ -356,7 +377,7 @@ def _to_coi_tabs(raw_structure: dict[str, Any]) -> dict[str, Any]:
                 "type": sec_type,
                 "techName": sec_tech,
                 "title": sec_title,
-                "repetingSectionGrid": [],
+                "repeatingSectionGrid": [],
                 "states": [],
                 "questionOrder": q_idx + 1,
             }
@@ -382,54 +403,23 @@ def _to_coi_tabs(raw_structure: dict[str, Any]) -> dict[str, Any]:
             }
         )
 
-    finish_raw = finish_tabs[-1] if finish_tabs else {}
-    finish_title = str(finish_raw.get("title") or "Podsumowanie i podgląd").strip()
-    finish_seed = f"tab.finish.{slugify_tech_name(finish_title)}"
-    finish_questions: list[dict[str, Any]] = []
-
-    for q_idx, sec in enumerate(finish_raw.get("sections", [])):
-        if sec.get("type") != "INFO_SECTION":
-            continue
-        sec_title = str(sec.get("title") or "Podgląd").strip()
-        sec_tech = slugify_tech_name(str(sec.get("techName") or sec_title))
-        desc = str(
-            sec.get("description")
-            or ("Zanim przejdziesz do wyboru sposobu podpisu, sprawdź dane na podglądzie.")
-        )
-        finish_questions.append(
-            {
-                "x": 0,
-                "y": q_idx,
-                "rows": 1,
-                "cols": 12,
-                "field": {
-                    "id": make_uuid(f"{finish_seed}.{sec_tech}"),
-                    "type": "INFO_SECTION",
-                    "techName": sec_tech,
-                    "title": sec_title,
-                    "description": desc,
-                    "states": [],
-                    "questionOrder": q_idx + 1,
-                    "source_text": desc,
-                    "page": 1,
-                    "element_id": None,
-                },
-            }
-        )
-
-    if not finish_questions:
-        finish_questions.append(_default_finish_info_question(finish_seed))
+    # Strona końcowa zawsze według standardu COI (treść nie pochodzi z dokumentu).
+    finish_seed = "tab.finish.strona_koncowa"
+    finish_questions = [_default_finish_info_question(finish_seed, has_signature)]
 
     coi_tabs.append(
         {
             "id": make_uuid(finish_seed),
-            "title": finish_title,
+            "title": FINISH_TAB_TITLE,
             "type": "FINISH",
             "questions": finish_questions,
         }
     )
 
     return {"title": title, "tabs": coi_tabs, "flow": {"links": []}}
+
+
+_FINISH_TYPES = frozenset({"TEXT_BLOCK", "INFO_SECTION"})
 
 
 def validate_coi_structure(form_data: dict[str, Any]) -> list[str]:
@@ -461,9 +451,14 @@ def validate_coi_structure(form_data: dict[str, Any]) -> list[str]:
 
         if tab_type == "FINISH":
             for q in questions:
-                ftype = q.get("field", {}).get("type")
-                if ftype != "INFO_SECTION":
-                    errors.append(f"FINISH tab may only contain INFO_SECTION, found '{ftype}'.")
+                section = q.get("field", {})
+                children = [c.get("field", {}) for c in section.get("repeatingSectionGrid", [])]
+                bad = [c.get("type") for c in children if c.get("type") not in _FINISH_TYPES]
+                if section.get("type") not in COI_SECTION_TYPES or bad:
+                    errors.append(
+                        "FINISH tab may only contain sections with TEXT_BLOCK/INFO_SECTION, "
+                        f"found '{section.get('type')}' {bad}."
+                    )
         else:
             for q in questions:
                 field = q.get("field", {})
@@ -474,7 +469,7 @@ def validate_coi_structure(form_data: dict[str, Any]) -> list[str]:
                         f"REPEATING_SECTION, found '{ftype}'."
                     )
                     continue
-                for nested in field.get("repetingSectionGrid", []):
+                for nested in field.get("repeatingSectionGrid", []):
                     nested_type = nested.get("field", {}).get("type")
                     if nested_type in COI_SECTION_TYPES:
                         errors.append(
@@ -506,7 +501,9 @@ def run_step06(
         mock_response_fn=lambda _model: _build_mock_structure(document, template),
     )
 
-    form = _to_coi_tabs(deepcopy(llm_output))
+    # Formularz papierowy z miejscem na podpis → w e-usłudze krok wyboru sposobu podpisu.
+    has_signature = "podpis" in str(document.get("text", "")).lower()
+    form = _to_coi_tabs(deepcopy(llm_output), has_signature=has_signature)
     validation_errors = validate_coi_structure(form)
     if validation_errors:
         raise ValueError(f"Invalid COI structure: {'; '.join(validation_errors)}")

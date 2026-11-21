@@ -233,7 +233,7 @@ def _collect_form_fields(form: dict[str, Any]) -> list[dict[str, Any]]:
         if tab.get("type") != "MAIN":
             continue
         for q in tab.get("questions", []):
-            for child in q.get("field", {}).get("repetingSectionGrid", []):
+            for child in q.get("field", {}).get("repeatingSectionGrid", []):
                 collected.append(child["field"])
     return collected
 

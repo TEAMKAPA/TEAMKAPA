@@ -1,21 +1,29 @@
 """Normalizacja wyniku etapów 05–09 do pliku importu COI (``FormDefinition``).
 
-Etapy 06–09 zwracają słownik zbliżony do schematu COI, ale z dodatkami, które w pliku
+Etapy 06–09 zwracają słownik zbliżony do formatu COI, ale z dodatkami, które w pliku
 importu są niedozwolone. Normalizacja niczego nie gubi po cichu:
 
 - metadane źródeł pól (``source_text``, ``page``, ``element_id``) → raport jakości,
 - ``dictionary_proposals`` i ``conflicts`` z kroku 09 → raport jakości,
-- pole leżące bezpośrednio na stronie (np. INFO_SECTION na FINISH) → opakowane w sekcję,
+- pole leżące bezpośrednio na stronie (np. blok tekstu na FINISH) → opakowane w sekcję,
   bo według reguł COI każde pole musi być w sekcji,
-- klucze niedozwolone dla typu pola (wg reguł technicznych) → usunięte, odnotowane w raporcie,
+- klucze, opcje i walidatory niedozwolone dla typu pola → usunięte, odnotowane w raporcie,
 - ``defaultValueType: EXTERNAL_SYSTEM`` bez ``defaultValue`` → usunięte, ostrzeżenie
   (reguły wymagają wskazania ``ŹRÓDŁO.atrybut``; źródła nie zgadujemy),
 - nazwy techniczne niezgodne z COI (np. zaczynające się cyfrą) → poprawione razem
   z odwołaniami w warunkach JSONata.
 
+Kształt wyniku jak w plikach eksportowanych przez COI (``tests/fixtures/coi_reference``):
+- układ w jednej kolumnie: ``x=0``, ``cols=3``; pole zajmuje 1 wiersz, sekcja — liczbę pól
+  + 1; ``y`` i ``questionOrder`` rosną od 0 (kolejność z etapów zostaje zachowana),
+- opisy sekcji, bloków tekstu, pól tekstowych wielowierszowych i zgód w HTML,
+- identyfikator opcji = jej nazwa, opcja ma ``techName``,
+- komplet kluczy wspólnych w każdym polu (uzupełnia model ``FormDefinition``).
+
 Wynik, który mimo to nie spełnia modeli COI, kończy etap błędem ``PipelineStageError``.
 """
 
+import html
 import re
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -23,8 +31,11 @@ from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import BaseModel, ValidationError
+from pydantic.alias_generators import to_camel
 
 from backend.shared.schemas.coi_form import (
+    EMPTY_HTML,
+    GRID_KEY,
     SECTION_TYPES,
     CheckboxField,
     ConsentSectionField,
@@ -40,6 +51,7 @@ from backend.shared.schemas.coi_form import (
     TextareaField,
     TextBlockField,
     TextField,
+    Validator,
 )
 from backend.shared.schemas.quality import (
     DictionaryEntry,
@@ -48,11 +60,16 @@ from backend.shared.schemas.quality import (
     Severity,
 )
 from backend.worker.pipeline.errors import PipelineStageError
+from backend.worker.pipeline.step06_structure import slugify_tech_name
 
 STAGE = "normalizacja do schematu COI"
 
 SOURCE_KEYS = ("source_text", "page", "element_id")
 _TECH_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_LEGACY_GRID_KEY = "repetingSectionGrid"  # pisownia ze schematu importu
+
+#: Układ COI: jedna kolumna o szerokości 3.
+GRID_COLS = 3
 
 _MODELS: dict[FieldType, type[BaseModel]] = {
     FieldType.SECTION: SectionField,
@@ -70,9 +87,22 @@ _MODELS: dict[FieldType, type[BaseModel]] = {
     FieldType.INFO_SECTION: InfoSectionField,
 }
 
+_CHOICE_TYPES = frozenset({FieldType.CHECKBOX, FieldType.RADIO, FieldType.SELECT})
+#: Typy bez walidatorów (sekcje, informacje, zgody — obligatoryjność zgód jest w consents).
+_NO_VALIDATION = frozenset(
+    {*SECTION_TYPES, FieldType.TEXT_BLOCK, FieldType.INFO_SECTION, FieldType.CONSENT_SECTION}
+)
+#: Typy, których opis COI zapisuje jako dokument HTML (treść widoczna na formularzu).
+_HTML_DESCRIPTION = frozenset(
+    {*SECTION_TYPES, FieldType.TEXT_BLOCK, FieldType.TEXTAREA, FieldType.INFO_SECTION}
+)
+
 
 def _allowed_keys(model: type[BaseModel]) -> frozenset[str]:
-    return frozenset(info.alias or name for name, info in model.model_fields.items())
+    return frozenset(
+        info.serialization_alias or info.alias or to_camel(name)
+        for name, info in model.model_fields.items()
+    )
 
 
 ALLOWED_KEYS: dict[FieldType, frozenset[str]] = {t: _allowed_keys(m) for t, m in _MODELS.items()}
@@ -107,6 +137,59 @@ def _field_uuid(raw: dict[str, Any]) -> UUID | None:
         return None
 
 
+def to_html(text: str) -> str:
+    """Tekst → dokument HTML jak w edytorze COI (akapity z pustych linii, wiersze z ``<br>``).
+
+    Tekst, który już jest HTML-em, zostaje bez zmian (opakowany w dokument, jeśli trzeba).
+    """
+    stripped = text.strip()
+    if not stripped:
+        return EMPTY_HTML
+    if stripped.lower().startswith("<html"):
+        return stripped
+    if re.match(r"^<(p|div|ul|ol|strong|a|span|h\d)\b", stripped, re.IGNORECASE):
+        body = stripped
+    else:
+        paragraphs = [p for p in re.split(r"\n\s*\n", stripped) if p.strip()]
+        body = "".join(
+            "<p>" + "<br>".join(html.escape(line.strip()) for line in p.splitlines()) + "</p>"
+            for p in paragraphs
+        )
+    return f"<html><head></head><body>{body}</body></html>"
+
+
+def _grid(section: dict[str, Any]) -> list[dict[str, Any]]:
+    """Lista pól sekcji pod kluczem COI (pisownia ze schematu jest przenoszona)."""
+    if _LEGACY_GRID_KEY in section:
+        legacy = section.pop(_LEGACY_GRID_KEY) or []
+        section[GRID_KEY] = [*(section.get(GRID_KEY) or []), *legacy]
+    grid = section.get(GRID_KEY)
+    if not isinstance(grid, list):
+        grid = section[GRID_KEY] = []
+    return grid
+
+
+def _position_key(index: int, item: dict[str, Any]) -> tuple[int, int, int, int]:
+    def number(key: str, source: dict[str, Any]) -> int:
+        value = source.get(key)
+        return value if isinstance(value, int) else 10**6
+
+    field_ = item.get("field") or {}
+    return (number("y", item), number("x", item), number("questionOrder", field_), index)
+
+
+def _layout(items: list[dict[str, Any]], rows_of: Any) -> None:
+    """Układ COI: elementy jeden pod drugim w kolejności z etapów (y, x, questionOrder)."""
+    ordered = [item for _, item in sorted(enumerate(items), key=lambda p: _position_key(*p))]
+    items[:] = ordered
+    y = 0
+    for item in items:
+        rows = rows_of(item)
+        item.update(x=0, y=y, rows=rows, cols=GRID_COLS)
+        item["field"]["questionOrder"] = y
+        y += rows
+
+
 class _Normalizer:
     def __init__(self, raw: dict[str, Any]) -> None:
         self.raw = deepcopy(raw)
@@ -134,7 +217,7 @@ class _Normalizer:
         name = str(field.get("techName") or "")
         if _TECH_NAME_RE.match(name):
             return
-        cleaned = re.sub(r"[^A-Za-z0-9_]", "_", name).strip("_") or "x"
+        cleaned = slugify_tech_name(name or str(field.get("title") or ""), fallback="x")
         new = cleaned if _TECH_NAME_RE.match(cleaned) else f"{prefix}_{cleaned}"
         field["techName"] = new
         if name:
@@ -152,9 +235,45 @@ class _Normalizer:
             for old, new in self.renamed.items():
                 for template in ("'{}' in field.techName", "'{}' in fieldTechName"):
                     query = query.replace(template.format(old), template.format(new))
-            state["query"] = query
+            state["query"] = query.replace(_LEGACY_GRID_KEY, GRID_KEY)
 
     # ------------------------------------------------------------ pola
+
+    def clean_options(self, field: dict[str, Any]) -> None:
+        for option in field.get("options") or []:
+            if not isinstance(option, dict):
+                continue
+            name = str(option.get("name") or "").strip()
+            if name:
+                option["id"] = name  # konwencja COI: identyfikator opcji = nazwa
+            tech = str(option.get("techName") or "")
+            if not _TECH_NAME_RE.match(tech):
+                slug = slugify_tech_name(tech or name, fallback="opcja")
+                option["techName"] = slug if _TECH_NAME_RE.match(slug) else f"opcja_{slug}"
+
+    def clean_validation(self, field: dict[str, Any], field_type: FieldType, path: str) -> None:
+        raw = field.get("validation")
+        if raw is None or raw == {}:
+            field["validation"] = []
+            return
+        values = raw if isinstance(raw, list) else [raw]
+        if field_type in _NO_VALIDATION:
+            allowed: set[str] = set()
+        elif field_type is FieldType.TEXT_FIELD:
+            allowed = {v.value for v in Validator}
+        else:
+            allowed = {Validator.REQUIRED.value}
+        kept = list(dict.fromkeys(str(v) for v in values if str(v) in allowed))
+        dropped = [str(v) for v in values if str(v) not in allowed]
+        field["validation"] = kept
+        if dropped:
+            self.note(
+                "VALIDATOR_NOT_ALLOWED_REMOVED",
+                f"Usunięto walidatory niedozwolone dla typu {field_type}: {', '.join(dropped)}",
+                f"{path}/validation",
+                field,
+                warn=True,
+            )
 
     def clean_field(self, field: dict[str, Any], path: str) -> None:
         uuid = _field_uuid(field)
@@ -174,14 +293,33 @@ class _Normalizer:
             return  # nieznany typ — zgłosi go walidacja modeli
         if field_type in SECTION_TYPES:
             self.fix_tech_name(field, path, prefix="sekcja")
+            _grid(field)
         else:
             self.fix_tech_name(field, path)
-            for option in field.get("options") or []:
-                if isinstance(option, dict) and not _TECH_NAME_RE.match(
-                    str(option.get("techName"))
-                ):
-                    old = str(option.get("techName") or "")
-                    option["techName"] = f"opcja_{re.sub(r'[^A-Za-z0-9_]', '_', old).strip('_')}"
+            if _is_empty(field.get(GRID_KEY)) and _is_empty(field.get(_LEGACY_GRID_KEY)):
+                field.pop(_LEGACY_GRID_KEY, None)
+
+        if field_type in _CHOICE_TYPES:
+            self.clean_options(field)
+            if field.get("dictionaryName") and field.get("options"):
+                field["options"] = []  # słownik ma pierwszeństwo przed opcjami
+        elif field.get("options"):
+            self.note(
+                "KEY_NOT_ALLOWED_REMOVED",
+                f"Usunięto opcje z pola typu {field_type} (opcje mają tylko pola wyboru)",
+                path,
+                field,
+            )
+            field["options"] = []
+        self.clean_validation(field, field_type, path)
+
+        if (
+            field_type is FieldType.SELECT
+            and isinstance(field.get("defaultValue"), str)
+            and field.get("defaultValueType") != "EXTERNAL_SYSTEM"
+        ):
+            # Wybór ze słownika COI zapisuje jako listę (np. ["Polska"]).
+            field["defaultValue"] = [field["defaultValue"]] if field["defaultValue"] else []
 
         if field.get("defaultValueType") == "EXTERNAL_SYSTEM" and not field.get("defaultValue"):
             field.pop("defaultValueType")
@@ -193,6 +331,16 @@ class _Normalizer:
                 field,
                 warn=True,
             )
+
+        if field_type in _HTML_DESCRIPTION:
+            field["description"] = to_html(str(field.get("description") or ""))
+        elif field.get("description"):
+            field["description"] = to_html(str(field["description"]))
+        config = field.get("consentSectionConfig")
+        if isinstance(config, dict):
+            for consent in config.get("consents") or []:
+                if isinstance(consent, dict) and consent.get("description"):
+                    consent["description"] = to_html(str(consent["description"]))
 
         allowed = ALLOWED_KEYS[field_type]
         removed = sorted(k for k in field if k not in allowed and not _is_empty(field[k]))
@@ -217,9 +365,7 @@ class _Normalizer:
             "type": "SECTION",
             "techName": f"{leaf.get('techName') or 'pole'}_sekcja",
             "title": title,
-            "repetingSectionGrid": [
-                {"x": 0, "y": 0, "rows": 1, "cols": question.get("cols", 1), "field": leaf}
-            ],
+            GRID_KEY: [{"x": 0, "y": 0, "rows": 1, "cols": GRID_COLS, "field": leaf}],
         }
         self.note(
             "WRAPPED_IN_SECTION",
@@ -236,22 +382,24 @@ class _Normalizer:
 
         for t, tab in enumerate(form.get("tabs") or []):
             self.tab_index = t
-            for q, question in enumerate(tab.get("questions") or []):
+            questions = tab.get("questions") or []
+            for q, question in enumerate(questions):
                 if question.get("field", {}).get("type") not in {s.value for s in SECTION_TYPES}:
                     self.wrap_leaf(tab, q, question)
                 section = question["field"]
                 section_path = f"/tabs/{t}/questions/{q}/field"
                 self.clean_field(section, section_path)
-                for f, child in enumerate(section.get("repetingSectionGrid") or []):
-                    self.clean_field(
-                        child["field"], f"{section_path}/repetingSectionGrid/{f}/field"
-                    )
-        if self.renamed:
-            for tab in form.get("tabs") or []:
-                for question in tab.get("questions") or []:
-                    self.rewrite_state_queries(question["field"])
-                    for child in question["field"].get("repetingSectionGrid") or []:
-                        self.rewrite_state_queries(child["field"])
+                children = _grid(section)
+                for f, child in enumerate(children):
+                    self.clean_field(child["field"], f"{section_path}/{GRID_KEY}/{f}/field")
+                _layout(children, lambda _: 1)
+            _layout(questions, lambda q: len(q["field"].get(GRID_KEY) or []) + 1)
+
+        for tab in form.get("tabs") or []:
+            for question in tab.get("questions") or []:
+                self.rewrite_state_queries(question["field"])
+                for child in question["field"].get(GRID_KEY) or []:
+                    self.rewrite_state_queries(child["field"])
 
         try:
             definition = FormDefinition.model_validate(form)

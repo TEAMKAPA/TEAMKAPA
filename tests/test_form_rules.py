@@ -117,19 +117,27 @@ def test_last_tab_must_be_finish() -> None:
 def test_only_one_finish() -> None:
     data = sample()
     data["tabs"][1]["type"] = "FINISH"
-    assert {"FINISH_TAB_SINGLE", "FINISH_ONLY_INFO_SECTION"} <= rule_codes(data)
+    assert {"FINISH_TAB_SINGLE", "FINISH_ONLY_INFORMATIONAL"} <= rule_codes(data)
 
 
-def test_finish_only_info_section() -> None:
+def test_finish_only_informational_fields() -> None:
     data = sample()
-    grid = section(data, 3, 0)["repetingSectionGrid"]
-    grid.append({"x": 0, "y": 1, "rows": 1, "cols": 1, "field": leaf(data, 1, 0, 1)})
-    assert "FINISH_ONLY_INFO_SECTION" in rule_codes(data)
+    grid = section(data, 3, 0)["repeatingSectionGrid"]
+    grid.append({"x": 0, "y": 1, "rows": 1, "cols": 3, "field": leaf(data, 1, 0, 1)})
+    assert "FINISH_ONLY_INFORMATIONAL" in rule_codes(data)
+
+
+def test_finish_with_text_block_like_coi() -> None:
+    """Strona końcowa w plikach COI: sekcja „Podgląd uzupełnionego wniosku” z TEXT_BLOCK."""
+    data = sample()
+    info = leaf(data, 3, 0, 0)
+    info["type"] = "TEXT_BLOCK"
+    assert rule_codes(data) == set()
 
 
 def test_tab_without_fields() -> None:
     data = sample()
-    section(data, 1, 0)["repetingSectionGrid"] = []
+    section(data, 1, 0)["repeatingSectionGrid"] = []
     assert {"TAB_EMPTY", "SECTION_EMPTY"} <= rule_codes(data)
 
 
@@ -197,6 +205,23 @@ def test_initial_data_must_be_read_only() -> None:
     assert "INITIAL_DATA_NOT_READONLY" in rule_codes(data)
 
 
+@pytest.mark.parametrize("reference", ["MLPZ.email", "MLPZ.phoneNumber", "MLPZ.postCode"])
+def test_contact_and_address_initial_data_may_stay_editable(reference: str) -> None:
+    """W obu referencyjnych formularzach COI adres i kontakt z MLPZ mają readOnly: false."""
+    data = sample()
+    field = leaf(data, 2, 0, 0)
+    field.update(defaultValue=reference, defaultValueType="EXTERNAL_SYSTEM", readOnly=False)
+    assert "INITIAL_DATA_NOT_READONLY" not in rule_codes(data)
+
+
+@pytest.mark.parametrize("reference", ["MLPZ.name", "MLPZ.surname", "PESEL.pesel"])
+def test_identity_initial_data_must_be_read_only(reference: str) -> None:
+    data = sample()
+    field = leaf(data, 2, 0, 0)
+    field.update(defaultValue=reference, defaultValueType="EXTERNAL_SYSTEM", readOnly=False)
+    assert "INITIAL_DATA_NOT_READONLY" in rule_codes(data)
+
+
 def test_initial_data_type_mismatch() -> None:
     data = sample()
     leaf(data, 0, 2, 0)["defaultValue"] = "PESEL.birthDate"
@@ -232,7 +257,7 @@ def test_input_without_title_is_warning() -> None:
 
 def test_grid_overlap_is_warning() -> None:
     data = sample()
-    section(data, 1, 0)["repetingSectionGrid"][1]["y"] = 0
+    section(data, 1, 0)["repeatingSectionGrid"][1]["y"] = 0
     assert "GRID_OVERLAP" in rule_codes(data)
 
 
@@ -244,4 +269,4 @@ def test_issue_paths_point_into_coi_json() -> None:
         for i in validate_form_rules(FormDefinition.model_validate(data))
         if i.code == "INITIAL_DATA_NOT_READONLY"
     )
-    assert issue.path == "/tabs/0/questions/2/field/repetingSectionGrid/0/field/readOnly"
+    assert issue.path == "/tabs/0/questions/2/field/repeatingSectionGrid/0/field/readOnly"

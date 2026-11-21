@@ -93,7 +93,7 @@ def _index_form_elements(
             if not sec_tech:
                 continue
             sections[sec_tech] = sec_field
-            for child in sec_field.get("repetingSectionGrid", []):
+            for child in sec_field.get("repeatingSectionGrid", []):
                 child_field = child.get("field", {})
                 child_tech = child_field.get("techName")
                 if child_tech:
@@ -219,7 +219,7 @@ def validate_form_definition(form: dict[str, Any]) -> list[str]:
                 if not st.get("query"):
                     errors.append(f"Section '{sec.get('techName')}' state is missing query.")
 
-            grid = sec.get("repetingSectionGrid", [])
+            grid = sec.get("repeatingSectionGrid", [])
             if not grid:
                 errors.append(f"Section '{sec.get('techName')}' must contain at least 1 field.")
             for child in grid:
@@ -274,7 +274,7 @@ def run_step08(
     field_locations, sections = _index_form_elements(form)
     fields_by_tech: dict[str, dict[str, Any]] = {}
     for sec in sections.values():
-        for child in sec.get("repetingSectionGrid", []):
+        for child in sec.get("repeatingSectionGrid", []):
             cf = child.get("field", {})
             if cf.get("techName"):
                 fields_by_tech[cf["techName"]] = cf

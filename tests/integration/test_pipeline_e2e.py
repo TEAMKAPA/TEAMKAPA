@@ -73,7 +73,9 @@ async def test_representative_form_through_whole_system(
                 assert report["fields"]
                 for assessment in report["fields"]:
                     assert assessment["level"] in {"HIGH", "MEDIUM", "LOW"}
-                    assert set(assessment["signals"]) >= {"rules", "source_found"}
+                    assert "rules" in assessment["signals"]
+                # Poza standardowym tekstem strony końcowej każde pole ma sygnał źródła.
+                assert sum("source_found" not in a["signals"] for a in report["fields"]) == 1
                 with_source = [a for a in report["fields"] if a["sources"]]
                 assert with_source
                 assert {"page", "bbox", "text", "element_id"} <= set(with_source[0]["sources"][0])

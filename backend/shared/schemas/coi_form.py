@@ -1,31 +1,44 @@
 """Modele konfiguracji e-formularza COI (``FormDefinition``).
 
-Źródła (materiały organizatora):
-- ``importowanyPlikJsonSchemat.json`` — schemat importu (nazwy i typy kluczy),
-- „OpisImportowanegoPlikuJSON” — znaczenie kluczy,
-- „Reguły techniczne konfiguracji formularzy i pól” — typy pól, dozwolone klucze per typ,
-  walidatory, stany dynamiczne,
-- „Dane inicjalne” — pola zasilane z rejestrów.
+Źródła, w kolejności ważności przy sprzecznościach (patrz docs/coi-specyfikacja.md):
+1. referencyjne konfiguracje od organizatora (``tests/fixtures/coi_reference/``) — tak
+   wygląda plik, który system COI faktycznie eksportuje i importuje,
+2. „Reguły techniczne konfiguracji formularzy i pól” — typy pól, walidatory, stany,
+3. ``importowanyPlikJsonSchemat.json`` i „OpisImportowanegoPlikuJSON” — nazwy i typy kluczy,
+4. „Dane inicjalne” — pola zasilane z rejestrów.
 
-Decyzje przy niespójnościach materiałów (patrz docs/coi-specyfikacja.md):
-- klucz pól w sekcji ma pisownię ze schematu: ``repetingSectionGrid``,
-- ``defaultValue`` jest zawsze stringiem (jak w schemacie),
-- dodatkowo modelujemy tylko klucze wprost wymienione w regułach technicznych:
-  ``searchEnabled``, ``selectAllEnabled``, ``consents[].required``.
+Format zgodny z plikami referencyjnymi COI:
+- klucz pól sekcji to ``repeatingSectionGrid`` (schemat ma literówkę ``repetingSectionGrid`` —
+  przyjmujemy ją na wejściu, nigdy nie zapisujemy),
+- każde pole, także sekcja, ma komplet kluczy wspólnych (``title``, ``description``,
+  ``options``, ``validation``, ``readOnly``, ``repeatingSectionGrid``, ``states``,
+  ``questionOrder``, ``tooltipMessage``) — puste, gdy nie dotyczą typu,
+- ``defaultValue`` to tekst albo lista (np. ``["Polska"]`` dla słownika „Kraje”),
+- identyfikator opcji to jej nazwa; identyfikator przejścia ``flow`` jest dowolnym tekstem.
 
 Reguły strukturalne wyrażone typami (nie da się ich złamać poprawnym obiektem):
 - strona zawiera wyłącznie sekcje, a sekcja wyłącznie pola — bez zagnieżdżania sekcji,
-- każdy typ pola przyjmuje tylko klucze dozwolone dla niego w regułach,
+- opcje mają tylko pola wyboru, walidatory poza REQUIRED tylko TEXT_FIELD, sekcja nie ma
+  walidatorów, stany sekcji i bloku tekstu to wyłącznie SHOW,
 - pola wejściowe mają jawnie określoną obligatoryjność (klucz ``validation``).
 Reguły dotyczące całego formularza (strony, przepływ, JSONata, unikalność) sprawdza
 ``backend.shared.validators.form_rules``.
 """
 
+from collections.abc import Sequence
 from enum import StrEnum
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, ClassVar, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 from pydantic.alias_generators import to_camel
 
 MAX_FORM_TITLE_LENGTH = 255
@@ -33,6 +46,23 @@ MAX_FORM_TITLE_LENGTH = 255
 # Nazwa techniczna trafia do zapytań JSONata w apostrofach — bez spacji i cudzysłowów.
 TechName = Annotated[str, StringConstraints(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$", max_length=100)]
 NonEmptyStr = Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
+#: Wartość domyślna: tekst (np. ``"PESEL.name"``) albo lista (wybór ze słownika: ``["Polska"]``).
+DefaultValue = str | list[str]
+
+#: Pusty opis sekcji i opisy w HTML — tak zapisuje je edytor COI.
+EMPTY_HTML = "<html><head></head><body></body></html>"
+
+GRID_KEY = "repeatingSectionGrid"
+_GRID_ALIASES = AliasChoices(GRID_KEY, "repetingSectionGrid", "repeating_section_grid")
+
+#: Kolejność kluczy pola jak w plikach eksportowanych przez COI (ułatwia porównanie).
+FIELD_KEY_ORDER = (
+    "id", "type", "techName", "title", "description", "dictionaryName", "options",
+    "multiLevelTree", "validation", "searchEnabled", "selectAllEnabled", "readOnly", GRID_KEY,
+    "defaultValue", "defaultValueType", "consentSectionConfig", "states", "questionOrder",
+    "tooltipMessage",
+)  # fmt: skip
+QUESTION_KEY_ORDER = ("x", "y", "rows", "cols", "minItemRows", "field")
 
 
 class TabType(StrEnum):
@@ -91,13 +121,15 @@ INPUT_FIELD_TYPES = frozenset(
     }
 )
 SECTION_TYPES = frozenset({FieldType.SECTION, FieldType.REPEATING_SECTION})
+#: Pola wyłącznie informacyjne (dozwolone na stronie FINISH).
+INFORMATIONAL_FIELD_TYPES = frozenset({FieldType.TEXT_BLOCK, FieldType.INFO_SECTION})
 
 # Pola wyboru poza TEXT_FIELD mogą mieć wyłącznie walidator wymagalności.
 RequiredOnly = list[Literal[Validator.REQUIRED]]
 
 
 class CoiModel(BaseModel):
-    """Baza: klucze JSON w camelCase dokładnie jak w schemacie COI, nieznane klucze odrzucane."""
+    """Baza: klucze JSON w camelCase dokładnie jak w plikach COI, nieznane klucze odrzucane."""
 
     model_config = ConfigDict(
         alias_generator=to_camel,
@@ -112,9 +144,19 @@ class CoiModel(BaseModel):
 
 
 class Option(CoiModel):
-    id: NonEmptyStr = Field(default_factory=lambda: str(uuid4()))
+    """Opcja pola wyboru. W COI identyfikatorem opcji jest jej nazwa."""
+
+    id: NonEmptyStr
     name: NonEmptyStr
-    tech_name: TechName
+    # COI toleruje brak (zdarza się w eksporcie); generator zawsze ją ustawia.
+    tech_name: TechName | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _id_defaults_to_name(cls, data: Any) -> Any:
+        if isinstance(data, dict) and not data.get("id") and data.get("name"):
+            return {**data, "id": data["name"]}
+        return data
 
 
 class State(CoiModel):
@@ -124,14 +166,13 @@ class State(CoiModel):
     query: NonEmptyStr
 
 
-class SectionState(State):
-    """Sekcje mają wyłącznie stan SHOW."""
-
-    type: Literal[StateType.SHOW]
-
-
 class ShowState(State):
+    """Sekcje i bloki tekstu mają wyłącznie stan SHOW."""
+
     type: Literal[StateType.SHOW]
+
+
+SectionState = ShowState
 
 
 class Consent(CoiModel):
@@ -146,16 +187,49 @@ class ConsentSectionConfig(CoiModel):
 
 
 class BaseField(CoiModel):
+    """Klucze wspólne wszystkich pól — COI zapisuje je w każdym polu, także pustym."""
+
+    #: Czy typ przyjmuje opcje (pola wyboru).
+    _choice: ClassVar[bool] = False
+
     id: UUID = Field(default_factory=uuid4)
     tech_name: TechName
-    question_order: Annotated[int, Field(ge=0)] | None = None
-    tooltip_message: str | None = None
+    title: str = ""
+    description: str = ""
+    options: list[Option] = Field(default_factory=list)
+    # Sequence: typy pól zawężają dozwolone walidatory/stany (np. tylko REQUIRED, tylko SHOW).
+    validation: Sequence[Validator] = Field(default_factory=list)
+    read_only: bool = False
+    # Pole (liść) nie zawiera innych pól — COI zapisuje tu pustą listę.
+    repeating_section_grid: Annotated[list[Any], Field(max_length=0)] = Field(
+        default_factory=list, validation_alias=_GRID_ALIASES, serialization_alias=GRID_KEY
+    )
+    states: Sequence[State] = Field(default_factory=list)
+    question_order: Annotated[int, Field(ge=0)] = 0
+    tooltip_message: str = ""
+
+    @field_validator("validation", mode="before")
+    @classmethod
+    def _empty_object_means_none(cls, value: Any) -> Any:
+        # Eksport COI zawiera czasem "validation": {} zamiast [] — znaczy to samo.
+        return [] if value == {} else value
+
+    @field_validator("title", "description", "tooltip_message", mode="before")
+    @classmethod
+    def _null_text_is_empty(cls, value: Any) -> Any:
+        return "" if value is None else value
+
+    @model_validator(mode="after")
+    def _options_only_for_choice(self) -> BaseField:
+        if self.options and not self._choice:
+            raise ValueError(f"pole typu {getattr(self, 'type', '?')} nie może mieć opcji")
+        return self
 
 
-class _ChoiceMixin(CoiModel):
+class _ChoiceMixin(BaseField):
     """Opcje własne albo słownik — przy słowniku tablica opcji musi być pusta."""
 
-    options: list[Option]
+    _choice: ClassVar[bool] = True
     dictionary_name: NonEmptyStr | None = None
 
     @model_validator(mode="after")
@@ -167,13 +241,15 @@ class _ChoiceMixin(CoiModel):
         return self
 
 
-class _DefaultValueMixin(CoiModel):
-    default_value: str | None = None
+class _DefaultValueMixin(BaseField):
+    default_value: DefaultValue | None = None
     default_value_type: DefaultValueType | None = None
 
     @model_validator(mode="after")
     def _external_requires_value(self) -> _DefaultValueMixin:
-        if self.default_value_type is DefaultValueType.EXTERNAL_SYSTEM and not self.default_value:
+        if self.default_value_type is DefaultValueType.EXTERNAL_SYSTEM and not (
+            isinstance(self.default_value, str) and self.default_value
+        ):
             raise ValueError(
                 "defaultValueType EXTERNAL_SYSTEM wymaga defaultValue 'ŹRÓDŁO.atrybut'"
             )
@@ -183,86 +259,55 @@ class _DefaultValueMixin(CoiModel):
 # ---------------------------------------------------------------- pola (liście)
 
 
-class TextField(_DefaultValueMixin, BaseField):
+class TextField(_DefaultValueMixin):
     type: Literal[FieldType.TEXT_FIELD]
-    title: str | None = None
-    description: str | None = None
-    read_only: bool | None = None
     validation: list[Validator]
-    states: list[State] | None = None
 
 
-class CheckboxField(_ChoiceMixin, BaseField):
+class CheckboxField(_ChoiceMixin):
     type: Literal[FieldType.CHECKBOX]
-    title: str | None = None
-    description: str | None = None
-    read_only: bool | None = None
     validation: RequiredOnly
-    states: list[State] | None = None
 
 
 class NumberField(BaseField):
     type: Literal[FieldType.NUMBER]
-    title: str | None = None
-    description: str | None = None
-    read_only: bool | None = None
     validation: RequiredOnly
-    states: list[State] | None = None
 
 
-class SelectField(_ChoiceMixin, _DefaultValueMixin, BaseField):
+class SelectField(_ChoiceMixin, _DefaultValueMixin):
     type: Literal[FieldType.SELECT]
-    title: str | None = None
-    description: str | None = None
-    read_only: bool | None = None
+    multi_level_tree: bool | None = None
     search_enabled: bool | None = None
     validation: RequiredOnly
-    states: list[State] | None = None
 
 
-class TextareaField(_DefaultValueMixin, BaseField):
+class TextareaField(_DefaultValueMixin):
     type: Literal[FieldType.TEXTAREA]
-    title: str | None = None
-    description: str | None = None
-    read_only: bool | None = None
     validation: RequiredOnly
-    states: list[State] | None = None
 
 
 class FileUploaderField(BaseField):
     type: Literal[FieldType.FILE_UPLOADER]
-    title: str | None = None
-    description: str | None = None
     default_value: str | None = None
     validation: RequiredOnly
-    states: list[State] | None = None
 
 
-class RadioField(_ChoiceMixin, BaseField):
+class RadioField(_ChoiceMixin):
     type: Literal[FieldType.RADIO]
-    title: str | None = None
-    description: str | None = None
-    read_only: bool | None = None
     validation: RequiredOnly
-    states: list[State] | None = None
 
 
-class DatepickerField(_DefaultValueMixin, BaseField):
+class DatepickerField(_DefaultValueMixin):
     """defaultValue dopuszczone, bo „Dane inicjalne” zasilają datepicker (PESEL.birthDate)."""
 
     type: Literal[FieldType.DATEPICKER]
-    title: str | None = None
-    description: str | None = None
-    read_only: bool | None = None
     validation: RequiredOnly
-    states: list[State] | None = None
 
 
 class TextBlockField(BaseField):
     type: Literal[FieldType.TEXT_BLOCK]
-    title: str | None = None
-    description: str | None = None
-    states: list[ShowState] | None = None
+    validation: Annotated[list[Validator], Field(max_length=0)] = Field(default_factory=list)
+    states: list[ShowState] = Field(default_factory=list)
 
 
 class ConsentSectionField(BaseField):
@@ -274,6 +319,7 @@ class ConsentSectionField(BaseField):
 class InfoSectionField(BaseField):
     type: Literal[FieldType.INFO_SECTION]
     description: NonEmptyStr
+    validation: Annotated[list[Validator], Field(max_length=0)] = Field(default_factory=list)
 
 
 LeafField = Annotated[
@@ -296,7 +342,11 @@ LeafField = Annotated[
 
 
 class _GridPosition(CoiModel):
-    """Pozycja w siatce CSS: ``grid-area: {y+1} / {x+1} / span {rows} / span {cols}``."""
+    """Pozycja w siatce CSS: ``grid-area: {y+1} / {x+1} / span {rows} / span {cols}``.
+
+    COI układa elementy w jednej kolumnie: ``x=0``, ``cols=3``; pole zajmuje 1 wiersz,
+    sekcja — liczbę swoich pól + 1 (nagłówek).
+    """
 
     x: Annotated[int, Field(ge=0)]
     y: Annotated[int, Field(ge=0)]
@@ -313,16 +363,18 @@ class FieldQuestion(_GridPosition):
 class SectionField(BaseField):
     type: Literal[FieldType.SECTION, FieldType.REPEATING_SECTION]
     title: NonEmptyStr
-    states: list[SectionState] | None = None
-    # Pisownia jak w schemacie importu COI (sic!).
-    repeting_section_grid: list[FieldQuestion] = Field(
-        default_factory=list, alias="repetingSectionGrid"
+    description: str = EMPTY_HTML
+    validation: Annotated[list[Validator], Field(max_length=0)] = Field(default_factory=list)
+    states: list[ShowState] = Field(default_factory=list)
+    repeating_section_grid: list[FieldQuestion] = Field(
+        default_factory=list, validation_alias=_GRID_ALIASES, serialization_alias=GRID_KEY
     )
 
 
 class SectionQuestion(_GridPosition):
     """Sekcja umieszczona na stronie."""
 
+    min_item_rows: Annotated[int, Field(ge=0)] | None = None
     field: SectionField
 
 
@@ -334,13 +386,29 @@ class Tab(CoiModel):
 
 
 class FlowLink(CoiModel):
-    id: UUID = Field(default_factory=uuid4)
+    # Edytor COI nadaje krótkie identyfikatory przejść (np. "a16ec") — nie zawsze UUID.
+    id: NonEmptyStr = Field(default_factory=lambda: str(uuid4()))
     source: UUID
     target: UUID
 
 
 class Flow(CoiModel):
     links: list[FlowLink]
+
+
+def _ordered(data: Any) -> Any:
+    """Porządkuje klucze pól i pozycji jak w eksporcie COI (rekurencyjnie)."""
+    if isinstance(data, list):
+        return [_ordered(item) for item in data]
+    if not isinstance(data, dict):
+        return data
+    order: tuple[str, ...] = ()
+    if "techName" in data and "type" in data:
+        order = FIELD_KEY_ORDER
+    elif "field" in data and "x" in data:
+        order = QUESTION_KEY_ORDER
+    keys = [k for k in order if k in data] + [k for k in data if k not in order]
+    return {k: _ordered(data[k]) for k in keys}
 
 
 class FormDefinition(CoiModel):
@@ -351,8 +419,11 @@ class FormDefinition(CoiModel):
     flow: Flow
 
     def to_coi_json(self) -> dict[str, Any]:
-        """Słownik gotowy do zapisu jako plik importu COI (camelCase, bez pustych kluczy)."""
-        return self.model_dump(mode="json", by_alias=True, exclude_none=True)
+        """Słownik gotowy do zapisu jako plik importu COI (kształt i kolejność kluczy jak w COI)."""
+        result: dict[str, Any] = _ordered(
+            self.model_dump(mode="json", by_alias=True, exclude_none=True)
+        )
+        return result
 
     def iter_fields(self) -> list[tuple[Tab, SectionField, LeafField | None]]:
         """Płaska lista (strona, sekcja, pole); sekcja bez pól daje wpis z polem None."""
@@ -360,7 +431,7 @@ class FormDefinition(CoiModel):
         for tab in self.tabs:
             for section_q in tab.questions:
                 section = section_q.field
-                if not section.repeting_section_grid:
+                if not section.repeating_section_grid:
                     out.append((tab, section, None))
-                out.extend((tab, section, fq.field) for fq in section.repeting_section_grid)
+                out.extend((tab, section, fq.field) for fq in section.repeating_section_grid)
         return out

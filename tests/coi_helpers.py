@@ -11,6 +11,8 @@ from backend.shared.validators.form_rules import validate_form_rules
 ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_FORM_PATH = ROOT / "tests" / "fixtures" / "sample_form.json"
 OFFICIAL_SCHEMA_PATH = ROOT / "docs" / "coi" / "importowanyPlikJsonSchemat.json"
+#: Konfiguracje wyeksportowane z systemu COI (materiał referencyjny organizatora).
+REFERENCE_DIR = ROOT / "tests" / "fixtures" / "coi_reference"
 
 _SAMPLE: dict[str, Any] = json.loads(SAMPLE_FORM_PATH.read_text(encoding="utf-8"))
 
@@ -18,6 +20,14 @@ _SAMPLE: dict[str, Any] = json.loads(SAMPLE_FORM_PATH.read_text(encoding="utf-8"
 def sample() -> dict[str, Any]:
     """Świeża kopia przykładowego formularza (wolno ją mutować w teście)."""
     return copy.deepcopy(_SAMPLE)
+
+
+def reference_forms() -> dict[str, dict[str, Any]]:
+    """Świeże kopie referencyjnych konfiguracji COI: nazwa pliku → JSON."""
+    return {
+        path.stem: json.loads(path.read_text(encoding="utf-8"))
+        for path in sorted(REFERENCE_DIR.glob("*.json"))
+    }
 
 
 def official_schema() -> dict[str, Any]:
@@ -35,5 +45,5 @@ def section(data: dict[str, Any], tab: int, idx: int) -> dict[str, Any]:
 
 
 def leaf(data: dict[str, Any], tab: int, sec: int, idx: int) -> dict[str, Any]:
-    result: dict[str, Any] = section(data, tab, sec)["repetingSectionGrid"][idx]["field"]
+    result: dict[str, Any] = section(data, tab, sec)["repeatingSectionGrid"][idx]["field"]
     return result
