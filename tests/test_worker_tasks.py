@@ -101,12 +101,20 @@ def _patch_pipeline(monkeypatch: pytest.MonkeyPatch, behaviour: Any) -> None:
 # ------------------------------------------------------------------ wynik i błędy ostateczne
 
 
-async def test_missing_text_extractor_reported_as_not_implemented() -> None:
+async def test_missing_text_extractor_reported_as_not_implemented(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from backend.worker.pipeline import orchestrator
+    from backend.worker.pipeline.stages import PipelineStages
+
+    monkeypatch.setattr(
+        orchestrator, "default_stages", lambda _: PipelineStages(None, None, lambda: None)
+    )  # type: ignore[arg-type, return-value]
     env = Env()
     raw = await env.run(await env.add_job())
     assert raw["status"] == "failed"
     assert raw["error"]["code"] == "PIPELINE_NOT_IMPLEMENTED"
-    assert "#7" in raw["error"]["message"]  # brak etapu ekstrakcji tekstu
+    assert "ekstrakcji tekstu" in raw["error"]["message"]
     assert env.job().status is JobStatus.FAILED
     assert env.job().error.code is JobErrorCode.PIPELINE_NOT_IMPLEMENTED
     assert env.job().attempts == 1
