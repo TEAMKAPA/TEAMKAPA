@@ -113,6 +113,35 @@ class SkippedElement(ReportModel):
     source: FieldSource
 
 
+class StageStatus(StrEnum):
+    OK = "OK"
+    SKIPPED = "SKIPPED"  # etap niedostępny (np. kanał wizualny przed #10/#11)
+    DEGRADED = "DEGRADED"  # etap zawiódł, analiza kontynuowana z obniżoną pewnością
+
+
+class StageReport(ReportModel):
+    """Przebieg jednego etapu pipeline'u — jawna informacja, co zadziałało, a co nie."""
+
+    name: str
+    status: StageStatus
+    duration_seconds: Annotated[float, Field(ge=0)] = 0.0
+    detail: str | None = None
+
+
+class DictionaryEntry(ReportModel):
+    code: str
+    label: str
+
+
+class DictionaryProposal(ReportModel):
+    """Propozycja nowego słownika dla pola z zamkniętą listą wartości (rozszerzenie COI)."""
+
+    tech_name: str = Field(description="techName pola, którego dotyczy propozycja")
+    name: str
+    entries: list[DictionaryEntry]
+    usage: str | None = None
+
+
 class QualityReport(ReportModel):
     document_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
     document_type: str | None = None
@@ -123,6 +152,12 @@ class QualityReport(ReportModel):
     skipped_elements: list[SkippedElement] = Field(default_factory=list)
     repair_iterations: Annotated[int, Field(ge=0)] = 0
     models: dict[str, str] = Field(default_factory=dict, description="rola -> nazwa modelu")
+    stages: list[StageReport] = Field(default_factory=list)
+    dictionary_proposals: list[DictionaryProposal] = Field(default_factory=list)
+    demo_mode: bool = Field(
+        default=False,
+        description="Wynik z trybu demonstracyjnego (bez modelu językowego) — nie do importu",
+    )
 
     @property
     def needs_review(self) -> int:

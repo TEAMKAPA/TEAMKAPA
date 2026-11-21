@@ -3,3 +3,9 @@ fastapi==0.165.0            # MIT
 uvicorn==0.54.0             # BSD-3-Clause
 pydantic==2.14.4            # MIT
 pydantic-settings==2.16.3   # MIT
+python-multipart==0.0.34    # Apache-2.0 — upload plików (multipart/form-data)
+python-magic==0.4.27        # MIT — wykrywanie MIME z treści (libmagic, BSD)
+pyjwt==2.15.1               # MIT — weryfikacja tokenów JWT
+arq==0.28.0                 # MIT — kolejka zadań (klient Valkey: redis-py, MIT)
+msgpack==1.2.4              # Apache-2.0 — serializacja zadań zamiast pickle
+asyncpg==0.32.0             # Apache-2.0 — PostgreSQL (psycopg odpada: LGPL)

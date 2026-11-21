@@ -1,0 +1,69 @@
+{
+  "form_id": "02_ceidg_firma",
+  "title": "Wniosek o wpis do CEIDG",
+  "fields": [
+    {
+      "id": "nazwa_firmy",
+      "label": "Nazwa firmy",
+      "type": "text"
+    },
+    {
+      "id": "nip",
+      "label": "NIP",
+      "type": "number",
+      "box_count": 10
+    },
+    {
+      "id": "regon",
+      "label": "Numer REGON",
+      "type": "number",
+      "box_count": 9
+    },
+    {
+      "id": "data_rozpoczecia",
+      "label": "Data rozpoczęcia działalności",
+      "type": "text"
+    },
+    {
+      "id": "wojewodztwo",
+      "label": "Województwo siedziby",
+      "type": "checkbox"
+    },
+    {
+      "id": "gmina",
+      "label": "Gmina siedziby",
+      "type": "dropdown"
+    },
+    {
+      "id": "miasto",
+      "label": "Miasto",
+      "type": "text"
+    },
+    {
+      "id": "kod_pocztowy",
+      "label": "Kod pocztowy siedziby",
+      "type": "text",
+      "box_count": 6
+    },
+    {
+      "id": "telefon_sluzbowy",
+      "label": "Telefon służbowy",
+      "type": "phone"
+    },
+    {
+      "id": "email_firmowy",
+      "label": "E-mail firmowy",
+      "type": "email"
+    },
+    {
+      "id": "forma_opodatkowania",
+      "label": "Forma opodatkowania",
+      "type": "dropdown",
+      "options": [
+        "Skala podatkowa",
+        "Podatek liniowy",
+        "Ryczałt od przychodów ewidencjonowanych"
+      ]
+    }
+  ]
+}
