@@ -30,6 +30,14 @@ class DocumentFormat(StrEnum):
     DOC = "DOC"
 
 
+class OcrWord(PipelineModel):
+    """Pojedyncze słowo rozpoznane przez OCR wraz z pewnością i współrzędnymi 0..1."""
+
+    text: str
+    confidence: Fraction
+    bbox: BoundingBox | None = None
+
+
 class ExtractedTextBlock(PipelineModel):
     """Pojedynczy blok tekstowy wyekstrahowany z dokumentu."""
 
@@ -88,7 +96,32 @@ class ExtractedPage(PipelineModel):
     needs_ocr: bool = False
     ocr_applied: bool = False
     ocr_confidence: Fraction | None = None
+    ocr_words: list[OcrWord] = Field(default_factory=list)
     source_channels: list[SourceChannel] = Field(default_factory=list)
+
+    # Wyrenderowany obraz PNG strony przekazywany w pamięci do kroku 03 (analiza wizualna).
+    # Pomijany podczas serializacji JSON / dict (exclude=True).
+    image_png: bytes | None = Field(
+        default=None,
+        exclude=True,
+        repr=False,
+        description="Wyrenderowany obraz strony w formacie PNG (pomijany w JSON).",
+    )
+    image_width: Annotated[int, Field(gt=0)] | None = Field(
+        default=None,
+        exclude=True,
+        description="Szerokość wyrenderowanego obrazu PNG w pikselach (pomijana w JSON).",
+    )
+    image_height: Annotated[int, Field(gt=0)] | None = Field(
+        default=None,
+        exclude=True,
+        description="Wysokość wyrenderowanego obrazu PNG w pikselach (pomijana w JSON).",
+    )
+    image_dpi: Annotated[int, Field(gt=0)] | None = Field(
+        default=None,
+        exclude=True,
+        description="Rozdzielczość DPI wyrenderowanego obrazu PNG (pomijana w JSON).",
+    )
 
 
 class ExtractedDocument(PipelineModel):

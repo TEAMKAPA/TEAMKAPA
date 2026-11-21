@@ -31,7 +31,22 @@ plugins = ["pydantic.mypy"]
 packages = ["backend"]
 
 [[tool.mypy.overrides]]
-module = ["arq.*"]
+module = [
+    "arq.*",
+    "cv2",
+    "cv2.*",
+    "docling",
+    "docling.*",
+    "docling_core.*",
+    "odfdo",
+    "odfdo.*",
+    "olefile",
+    "olefile.*",
+    "pypdfium2",
+    "pypdfium2.*",
+    "pytesseract",
+    "pytesseract.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
