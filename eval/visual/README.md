@@ -19,14 +19,14 @@ więc trafiają do niego tylko kod, manifest bez ścieżek i liczby zbiorcze.
 - **Źródło:** materiały konkursowe COI, foldery `1.`–`9.` w `dane/coi/` (jeden folder = jeden rodzaj
   wniosku = dokument `f01`–`f09`). Folder `Materiały do zadania…` nie należy do zbioru.
 - **Renderowanie:** renderer z Etapu A (`backend/worker/vision/render`), 200 DPI, tryb izolowany,
-  LibreOffice wyłączony. Wersje komponentów i commit zapisuje manifest.
+  bez formatów biurowych. Wersje komponentów i commit zapisuje manifest.
 - **Strony do oznaczania:** wszystkie strony natywnych PDF (33 strony). Strony PNG, JPG i JPEG
   (w folderze 7 także JPE) mają geometrię PDF z dokładnością do 1 px, więc są **wariantami** strony PDF
   i korzystają z jej etykiet. Warunek sprawdza `geometry.compare_pages`: rozmiar identyczny, przesunięcie
   treści ≤ 1 px, tusz każdego obrazu w odległości ≤ 1 px od tuszu drugiego w co najmniej 97%
   (zmierzone minimum: 0,9786). Strona, która warunku nie spełnia (3 skany w folderze 5: 130 DPI,
   inna geometria), dostaje własny zestaw etykiet. Razem **36 zestawów etykiet obsługuje 132 strony oceny**.
-- **Wykluczone:** formaty biurowe (DOC, DOCX, ODS, XLSX: `OFFICE_CONVERSION_DISABLED`, bo zespół
+- **Wykluczone:** formaty biurowe (DOC, DOCX, ODS, XLSX: `OFFICE_FORMAT_NOT_RENDERED`; zespół
   odrzucił LibreOffice, więc nie przechodzą przez kanał wizualny), wizualizacje
   formularza po cyfryzacji (`NOT_A_FORM`). Oczekiwane JSON-y (foldery 1 i 5) są w manifeście jako
   materiał referencyjny (`REFERENCE_JSON`).
@@ -194,7 +194,7 @@ Szacunek: około 7,3 h oznaczania, 30 min pilotu i 1 h kontroli nakładek. Najle
   format (PDF, obraz cyfrowy, skan).
 - Prawdziwe skany są tylko w jednym dokumencie (`dev`), zdjęć z aparatu nie ma. Pomiar na `holdout`
   wymaga własnych skanów i zdjęć wydruków.
-- Formaty biurowe są poza zbiorem (LibreOffice odrzucony; ich pola dostają w Etapie E kod
+- Formaty biurowe są poza zbiorem (brak kanału wizualnego; ich pola dostają w Etapie E kod
   `NO_VISUAL_CHANNEL`, `docs/vision.md`).
 - Etykiety wariantów nie są korygowane o przesunięcie ≤ 1 px (około 0,0004 wysokości strony).
 - Folder 9 to około 60% elementów `dev`, a folder 8 około 2/3 `holdout` (szacunek przed oznaczeniem),

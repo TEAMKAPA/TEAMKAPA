@@ -58,7 +58,6 @@ _OFFICE_KINDS = frozenset(
 
 class PageSource(StrEnum):
     NATIVE_PDF = "native_pdf"  # strona PDF dostarczonego wprost
-    CONVERTED = "converted"  # strona PDF powstałego z konwersji dokumentu biurowego
     IMAGE = "image"  # strona z pliku graficznego (całość lub część zszytego obrazu)
 
 

@@ -7,9 +7,9 @@ Uruchomienie z katalogu repozytorium (``dane/coi`` tylko do odczytu, wyniki w ``
 Kroki:
 
 1. Każdy folder ``dane/coi/<n>. …`` to dokument ``f<nn>`` (rodzaj wniosku). Wszystkie jego
-   pliki przechodzą przez renderer z Etapu A (200 DPI, tryb izolowany, LibreOffice wyłączony),
-   a wynik trafia do manifestu: plik wyrenderowany, wykluczony (kod błędu renderera albo
-   ``NOT_A_FORM``) lub referencyjny (oczekiwany JSON).
+   pliki przechodzą przez renderer z Etapu A (200 DPI, tryb izolowany; formaty biurowe nie są
+   renderowane), a wynik trafia do manifestu: plik wyrenderowany, wykluczony (kod błędu renderera
+   albo ``NOT_A_FORM``) lub referencyjny (oczekiwany JSON).
 2. Strony natywnego PDF to strony do oznaczania (``f<nn>-p<mm>``). Strona obrazu, której
    geometria zgadza się ze stroną PDF (``geometry.compare_pages``), jest jej wariantem i korzysta
    z tych samych etykiet. Pozostałe strony obrazów (np. skany) dostają własne zestawy etykiet

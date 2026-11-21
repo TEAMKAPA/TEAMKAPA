@@ -305,7 +305,7 @@ def png_claiming_size(width: int, height: int) -> bytes:
 
 
 def make_minimal_docx(text: str = "Synthetic") -> bytes:
-    """Najmniejszy poprawny DOCX (dla testu integracyjnego z LibreOffice)."""
+    """Najmniejszy poprawny DOCX (rozpoznanie formatu i odrzucenie dokumentów biurowych)."""
     w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
     return make_zip(
         {

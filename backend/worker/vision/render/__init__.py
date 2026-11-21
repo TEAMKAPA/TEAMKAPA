@@ -20,7 +20,6 @@ from backend.worker.vision.models import (
 )
 from backend.worker.vision.render.detect import declared_kind_issues, detect_kind
 from backend.worker.vision.render.image import render_image
-from backend.worker.vision.render.office import OfficeConverter, default_office_converter
 from backend.worker.vision.render.pdf import render_pdf
 
 __all__ = ["render_document"]
@@ -31,13 +30,13 @@ def render_document(
     declared_kind: DocumentKind | None,
     cfg: RenderConfig,
     *,
-    office: OfficeConverter | None = None,
     isolated: bool = True,
 ) -> RenderedDocument:
     """Renderuje dokument do stron RGB z metadanymi.
 
     ``declared_kind``: rodzaj z kroku 1 (np. z rozszerzenia) albo ``None``.
-    ``office``: konwerter dokumentów biurowych; domyślnie według ``cfg.office_enabled``.
+    Dokumenty biurowe (DOC, DOCX, ODS, XLSX) nie są renderowane: zespół odrzucił LibreOffice, więc
+    zgłaszany jest ``OFFICE_FORMAT_NOT_RENDERED`` (brak kanału wizualnego, ``docs/vision.md``).
     Błędy dokumentu zgłasza jako ``RenderError`` z kodem; nie ma wyniku częściowego. Błąd zawsze
     niesie w ``detail`` rodzaj deklarowany i wykryty, a w ``issues`` problemy zebrane przed błędem
     (np. ``DECLARED_KIND_MISMATCH``).
@@ -51,7 +50,7 @@ def render_document(
     kind = detection.kind
     issues: list[RenderIssue] = declared_kind_issues(declared_kind, detection)
     try:
-        return _render_detected(data, declared_kind, kind, issues, cfg, office, isolated)
+        return _render_detected(data, declared_kind, kind, issues, cfg, isolated)
     except RenderError as exc:
         context = f"declared={declared} detected={kind.value}"
         detail = f"{exc.detail} {context}" if exc.detail else context
@@ -64,7 +63,6 @@ def _render_detected(
     kind: DocumentKind,
     issues: list[RenderIssue],
     cfg: RenderConfig,
-    office: OfficeConverter | None,
     isolated: bool,
 ) -> RenderedDocument:
     if kind is DocumentKind.PDF:
@@ -76,11 +74,10 @@ def _render_detected(
         source_pages = 1  # jeden obraz (pierwsza klatka), niezależnie od liczby stron po cięciu
         issues.extend(image.info.issues)
     else:
-        converter = office if office is not None else default_office_converter(cfg)
-        converted = converter.convert_to_pdf(data, kind)
-        pdf = render_pdf(converted, cfg, PageSource.CONVERTED, isolated=isolated)
-        pages, source_pages = pdf.pages, pdf.info.page_count
-        versions = {**pdf.info.renderer_versions, **converter.versions()}
+        raise RenderError(
+            IssueCode.OFFICE_FORMAT_NOT_RENDERED,
+            f"kind={kind.value}: office formats are not rendered",
+        )
 
     meta = DocumentMeta(
         sha256=hashlib.sha256(data).hexdigest(),

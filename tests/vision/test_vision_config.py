@@ -14,17 +14,16 @@ def test_defaults_match_accepted_plan() -> None:
         40_000_000,
         100_000_000,
     )
-    assert (cfg.page_timeout_s, cfg.office_timeout_s) == (30.0, 120.0)
+    assert cfg.page_timeout_s == 30.0
     assert cfg.render_forms is True
-    assert cfg.office_enabled is False  # LibreOffice domyślnie wyłączony
 
 
 def test_environment_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("RENDER_DPI", "300")
     monkeypatch.setenv("VISION_MAX_PAGES", "7")
-    monkeypatch.setenv("VISION_OFFICE_ENABLED", "true")
+    monkeypatch.setenv("VISION_PAGE_TIMEOUT_S", "12.5")
     cfg = load_render_config()
-    assert (cfg.dpi, cfg.max_pages, cfg.office_enabled) == (300, 7, True)
+    assert (cfg.dpi, cfg.max_pages, cfg.page_timeout_s) == (300, 7, 12.5)
 
 
 def test_invalid_environment_value_fails(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -39,5 +38,7 @@ def test_render_config_is_frozen_and_strict() -> None:
         cfg.dpi = 300  # type: ignore[misc]
     with pytest.raises(ValidationError):
         RenderConfig(unknown_option=1)  # type: ignore[call-arg]
+    with pytest.raises(ValidationError):  # konwersja LibreOffice usunięta
+        RenderConfig(office_enabled=True)  # type: ignore[call-arg]
     with pytest.raises(ValidationError):
         RenderConfig(dpi=1000)

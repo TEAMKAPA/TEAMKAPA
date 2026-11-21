@@ -1,7 +1,8 @@
 # Kanał wizualny: renderowanie stron i układ współrzędnych (#10, część 1)
 
-Moduł `backend/worker/vision/render` zamienia dokument wejściowy (PDF, DOC, DOCX, ODS, XLSX, JPEG,
-PNG) na obrazy stron z metadanymi. Wszystkie dalsze elementy kanału wizualnego (detektory OpenCV,
+Moduł `backend/worker/vision/render` zamienia dokument wejściowy (PDF, JPEG, PNG) na obrazy stron
+z metadanymi. Dokumenty biurowe (DOC, DOCX, ODS, XLSX) są rozpoznawane, ale nie są renderowane
+([Formaty biurowe poza kanałem wizualnym](#formaty-biurowe-poza-kanałem-wizualnym)). Wszystkie dalsze elementy kanału wizualnego (detektory OpenCV,
 VLM, oznaczenia, fuzja z tekstem) opisują położenie w jednym, wspólnym układzie współrzędnych.
 
 Dokument nie zawiera treści formularzy COI. Liczby dotyczące materiałów są wyłącznie zbiorcze.
@@ -15,7 +16,7 @@ Dokument nie zawiera treści formularzy COI. Liczby dotyczące materiałów są 
 5. [Cięcie zszytych obrazów A4](#cięcie-zszytych-obrazów-a4)
 6. [Kody błędów i ostrzeżeń](#kody-błędów-i-ostrzeżeń)
 7. [Wpływ na pewność w Etapie E](#wpływ-na-pewność-w-etapie-e)
-8. [LibreOffice: odrzucony przez zespół](#libreoffice-odrzucony-przez-zespół)
+8. [Formaty biurowe poza kanałem wizualnym](#formaty-biurowe-poza-kanałem-wizualnym)
 9. [Analiza stron przez Eden AI (Etap D)](#analiza-stron-przez-eden-ai-etap-d)
 10. [Konfiguracja i limity](#konfiguracja-i-limity)
 11. [Bezpieczeństwo](#bezpieczeństwo)
@@ -114,7 +115,7 @@ Modele tymczasowe w `backend/worker/vision/models.py` (`TODO(#17)`):
 | `dpi_estimate`, `dpi_estimate_source` | estymata z szerokości A4 (`a4_width`), tylko gdy `dpi = None` |
 | `rotation` | obrót wyświetlania: `/Rotate` albo kąt zawarty w orientacji EXIF |
 | `exif_orientation` | orientacja EXIF 1–8 (tylko obrazy); 2, 4, 5, 7 zawierają też odbicie lustrzane |
-| `source` | `native_pdf`, `converted` (PDF z konwersji dokumentu biurowego), `image` |
+| `source` | `native_pdf` (strona PDF), `image` (strona z pliku graficznego) |
 | `geometry` | `PageGeometry` (MediaBox, CropBox, `/Rotate` w punktach); tylko PDF |
 | `origin` | `PageOrigin`; tylko strony wycięte ze zszytego obrazu |
 | `issues` | problemy strony (`RenderIssue`: kod, poziom, szczegóły bez treści dokumentu) |
@@ -133,7 +134,7 @@ libjpeg-turbo, zlib; potrzebne do manifestu zbioru oznaczeń #12) oraz `issues` 
 |---|---|---|
 | PDF | `render/pdf.py`: pypdfium2, `scale = dpi / 72`, RGB, białe tło, wygląd pól AcroForm (`render_forms`) | `native_pdf` |
 | JPEG, PNG | `render/image.py`: Pillow, orientacja EXIF, normalizacja trybów, ewentualne cięcie | `image` |
-| DOC, DOCX, ODS, XLSX | `render/office.py` → PDF → `render/pdf.py` | `converted` |
+| DOC, DOCX, ODS, XLSX | nie są renderowane: `RenderError` z kodem `OFFICE_FORMAT_NOT_RENDERED` | – |
 
 Normalizacja obrazów do RGB uint8: przezroczystość (RGBA, LA, paleta z przezroczystością) nakładana
 na białe tło; 16 bit (`I;16`) skalowane do 8 bit; tryby `1`, `L`, `P`, `CMYK` konwertowane. Z obrazów
@@ -182,9 +183,7 @@ techniczne: liczby, rodzaje, nazwy typów wyjątków, nigdy treść dokumentu.
 | `IMAGE_TOO_LARGE` | obraz ponad `max_image_pixels` (sprawdzane przed dekodowaniem) albo strona PDF wymagałaby DPI < 36 |
 | `PAGE_RENDER_TIMEOUT` | przekroczony `page_timeout_s` (proces potomny zabity) |
 | `PAGE_RENDER_CRASHED` | proces renderowania zakończył się nagle (np. awaria biblioteki C) lub zgłosił nieoczekiwany wyjątek |
-| `OFFICE_CONVERSION_DISABLED` | dokument biurowy przy wyłączonej konwersji (domyślnie) |
-| `OFFICE_CONVERSION_FAILED` | brak `soffice`, kod wyjścia ≠ 0 albo brak wynikowego PDF |
-| `OFFICE_CONVERSION_TIMEOUT` | przekroczony `office_timeout_s` (drzewo procesów zabite) |
+| `OFFICE_FORMAT_NOT_RENDERED` | dokument biurowy (DOC, DOCX, ODS, XLSX): brak kanału wizualnego |
 
 **Issues strony lub dokumentu** (renderowanie kontynuowane):
 
@@ -210,35 +209,32 @@ Ustalenia:
   (sposób uwzględnienia ustalimy w Etapie C).
 - `DECLARED_KIND_MISMATCH` i `MULTI_FRAME_IMAGE` trafiają do raportu przeglądu na poziomie dokumentu.
 
-## LibreOffice: odrzucony przez zespół
+## Formaty biurowe poza kanałem wizualnym
 
-Konwersja DOC, DOCX, ODS i XLSX do PDF wymagałaby LibreOffice (MPL 2.0). **Zespół odrzucił LibreOffice
-(2026-11-21)**, więc konwersja pozostaje wyłączona (`VISION_OFFICE_ENABLED=false`) i nie jest
-częścią obrazu workera.
+Renderowanie DOC, DOCX, ODS i XLSX wymagałoby konwersji do PDF przez LibreOffice (MPL 2.0), który
+**zespół odrzucił (2026-11-21)**. Moduł konwersji został usunięty, a `render_document` zgłasza dla tych
+formatów `OFFICE_FORMAT_NOT_RENDERED` (czytelny błąd, nie awaria). Rozpoznawanie formatów z zawartości
+(`render/detect.py`) zostaje: dzięki niemu dokument biurowy dostaje ten kod, a warianty z makrami
+(DOCM, XLSM) są odrzucane jako `UNSUPPORTED_FORMAT`.
 
 Skutki:
 
-- **pliki DOC, DOCX, ODS i XLSX nie przechodzą przez kanał wizualny**: `render_document` zgłasza
-  `OFFICE_CONVERSION_DISABLED` (czytelny błąd, nie awaria). W materiałach COI to **40 z 81 plików**
-  (w folderach formularzy 33 z 69 plików formularzy; pozostałe to wizualizacje formularza po
-  cyfryzacji i materiały do zadania),
+- **pliki DOC, DOCX, ODS i XLSX nie przechodzą przez kanał wizualny.** W materiałach COI to
+  **40 z 81 plików** (w folderach formularzy 33 z 69 plików formularzy; pozostałe to wizualizacje
+  formularza po cyfryzacji i materiały do zadania),
 - pola takich dokumentów pochodzą wyłącznie z kanału tekstowego (#7, #8): **nie mają elementów
   OpenCV, bbox, potwierdzenia wizualnego ani podwójnego odczytu VLM**,
 - zbiór oznaczeń #12 nie obejmuje tych formatów (`eval/visual/README.md`).
 
-**Kod powodu w Etapie E (propozycja): `NO_VISUAL_CHANNEL`.**
+**Kod powodu w Etapie E: `NO_VISUAL_CHANNEL`** (zaakceptowany 2026-11-21).
 
 | Kod | Gdzie | Kiedy | Skutek |
 |---|---|---|---|
-| `NO_VISUAL_CHANNEL` | `confidence_reasons` każdego pola | kanał wizualny nie przetworzył strony ani dokumentu, z którego pochodzi pole: `OFFICE_CONVERSION_DISABLED` albo inny `RenderError` | obniżona pewność pola; propozycja: najwyżej poziom MEDIUM, czyli pole zawsze trafia do przejrzenia (wielkość obniżenia kalibrowana na `dev`) |
+| `NO_VISUAL_CHANNEL` | `confidence_reasons` każdego pola | kanał wizualny nie przetworzył strony ani dokumentu, z którego pochodzi pole: `OFFICE_FORMAT_NOT_RENDERED` albo inny `RenderError` | obniżona pewność pola: **najwyżej poziom MEDIUM**, więc pole zawsze trafia do przejrzenia (wielkość obniżenia kalibrowana na `dev`) |
 
 Kod jest jeden dla wszystkich przyczyn braku kanału wizualnego, a przyczyna jest zapisana osobno:
-w raporcie przebiegu etap 3 ma `StageReport(status=SKIPPED, detail="OFFICE_CONVERSION_DISABLED")`
+w raporcie przebiegu etap 3 ma `StageReport(status=SKIPPED, detail="OFFICE_FORMAT_NOT_RENDERED")`
 (albo inny kod błędu renderera). Dzięki temu urzędnik widzi, dlaczego pole nie ma potwierdzenia wizualnego.
-
-Konwerter (`render/office.py`) zostaje w kodzie wyłączony i nieużywany: profil bez makr, katalog
-tymczasowy usuwany w `finally`, limit czasu i zabicie drzewa procesów. Ewentualne usunięcie modułu
-to osobna decyzja zespołu.
 
 ## Analiza stron przez Eden AI (Etap D)
 
@@ -271,9 +267,6 @@ DPI pochodzi z `RENDER_DPI` (`backend/shared/config.py`), pozostałe parametry z
 | `VISION_PAGE_TIMEOUT_S` | 30 | limit czasu na stronę (proces potomny) |
 | `VISION_WORKER_STARTUP_TIMEOUT_S` | 60 | limit czasu startu procesu potomnego |
 | `VISION_RENDER_FORMS` | true | rysowanie wyglądu pól AcroForm |
-| `VISION_OFFICE_ENABLED` | false | konwersja dokumentów biurowych (LibreOffice) |
-| `VISION_OFFICE_TIMEOUT_S` | 120 | limit czasu konwersji |
-| `VISION_SOFFICE_PATH` | `soffice` | ścieżka do LibreOffice |
 | `VISION_SPLIT_SEAM_MARGIN_PX` | 20 | pas wokół granicy stron, który musi być pusty |
 | `VISION_SPLIT_HEIGHT_TOLERANCE_PX` | 2 | tolerancja wysokości zszytego obrazu |
 | `VISION_SPLIT_INK_THRESHOLD` | 200 | piksel ciemniejszy (w dowolnym kanale) to tusz |
@@ -294,8 +287,7 @@ Niepoprawna wartość zmiennej kończy start procesu błędem walidacji (fail fa
 - **Dekoder Pillow ograniczony do wykrytego formatu**; limit pikseli sprawdzany przed dekodowaniem,
   a ostrzeżenie o bombie dekompresyjnej traktowane jako błąd. Globalny limit Pillow jest zmieniany
   pod blokadą i zawsze przywracany.
-- **Pliki tylko w pamięci**: PDF i obrazy są przetwarzane z bajtów. Jedyny zapis na dysk to katalog
-  tymczasowy konwersji LibreOffice, usuwany w `finally`.
+- **Pliki tylko w pamięci**: PDF i obrazy są przetwarzane z bajtów; renderer nic nie zapisuje na dysk.
 - **Logi i szczegóły błędów bez treści dokumentów**: wyjątki z procesu potomnego przekazują tylko nazwę typu.
 
 ## Testy
@@ -309,11 +301,9 @@ uruchamiają się w CI bez dostępu do `dane/`:
   300) × 4 obroty × 4 układy MediaBox/CropBox. Bbox zmierzony z pikseli zgadza się z
   `pdf_rect_to_norm` w tolerancji 1,5 px (zmierzony maksymalny błąd krawędzi: 1,0 px na 192 prostokątach),
 - `test_coords.py`: przeliczenia z wartościami wyliczonymi ręcznie,
-- `test_render_pdf.py`, `test_render_image.py`, `test_office.py`, `test_render_document.py`,
+- `test_render_pdf.py`, `test_render_image.py`, `test_render_document.py`,
   `test_isolation.py`, `test_detect.py`: determinizm (identyczny hash pikseli), błędy, limity,
   EXIF 1–8, tryby kolorów, cięcie, izolacja i sprzątanie.
-
-Test integracyjny z prawdziwym LibreOffice jest pomijany, gdy `soffice` nie jest dostępny.
 
 ## Sprawdzenie na materiałach COI (A.8)
 
@@ -327,11 +317,11 @@ Jednorazowe sprawdzenie lokalne na materiałach COI (2026-11-21; renderer z comm
 | PDF wyrenderowane | 11 | 65 |
 | PNG wyrenderowane | 9 | 33 |
 | JPEG wyrenderowane | 18 | 66 |
-| DOC/DOCX/ODS/XLSX: `OFFICE_CONVERSION_DISABLED` (zgodnie z flagą) | 40 | – |
+| DOC/DOCX/ODS/XLSX: `OFFICE_CONVERSION_DISABLED` (kod z A.8; obecnie `OFFICE_FORMAT_NOT_RENDERED`) | 40 | – |
 | JSON (pominięte) | 3 | – |
 | **Razem** | **81** | **164** |
 
-Żadnego błędu renderowania poza zamierzonym `OFFICE_CONVERSION_DISABLED`.
+Żadnego błędu renderowania poza zamierzonym odrzuceniem formatów biurowych.
 
 **PDF**: 0 formularzy AcroForm i XFA, 0 widgetów; warstwa tekstu na każdej stronie każdego
 formularza; `/Rotate` = 0 i CropBox = MediaBox na wszystkich stronach; każda strona w 200 DPI ma
@@ -368,7 +358,7 @@ a kreski tekstu mają 1–3 px), nie z różnic geometrii.
 - **Skany obrócone bez `/Rotate` lub bez orientacji EXIF** (np. kartka zeskanowana bokiem) nie są
   prostowane w Etapie A. Wykrycie orientacji treści i prostowanie (deskew) to preprocessing w Etapie C.
   Wtedy bbox będzie przeliczany z powrotem do układu strony wyrenderowanej.
-- **DOC, DOCX, ODS i XLSX nie mają kanału wizualnego** (LibreOffice odrzucony): pola tych dokumentów
+- **DOC, DOCX, ODS i XLSX nie mają kanału wizualnego** (`OFFICE_FORMAT_NOT_RENDERED`): pola tych dokumentów
   dostają w Etapie E kod `NO_VISUAL_CHANNEL` i obniżoną pewność.
 - **Perspektywa i zniekształcenia zdjęć** nie są korygowane; w materiałach COI nie ma zdjęć z aparatu.
 - **Profile kolorów ICC** nie są stosowane przy konwersji do RGB.

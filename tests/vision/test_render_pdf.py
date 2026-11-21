@@ -60,13 +60,6 @@ def test_image_is_rgb_uint8_with_white_background() -> None:
     assert int(page.image.min()) == 255
 
 
-def test_converted_source_is_kept() -> None:
-    result = render_pdf(TWO_PAGES, RenderConfig(dpi=72), PageSource.CONVERTED, isolated=False)
-    assert {p.meta.source for p in result.pages} == {PageSource.CONVERTED}
-    with pytest.raises(ValueError, match="image"):
-        render_pdf(TWO_PAGES, RenderConfig(dpi=72), PageSource.IMAGE, isolated=False)
-
-
 def test_render_without_forms_works() -> None:
     result = render_pdf(TWO_PAGES, RenderConfig(dpi=72, render_forms=False), isolated=False)
     assert len(result.pages) == 2

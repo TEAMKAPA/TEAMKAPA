@@ -26,18 +26,6 @@ CFG = RenderConfig(dpi=72)
 PDF = make_pdf([SynthPage(), SynthPage(rotate=90)])
 
 
-class FakeConverter:
-    def __init__(self) -> None:
-        self.kinds: list[DocumentKind] = []
-
-    def convert_to_pdf(self, data: bytes, kind: DocumentKind) -> bytes:
-        self.kinds.append(kind)
-        return make_pdf([SynthPage()])
-
-    def versions(self) -> dict[str, str]:
-        return {"fake-office": "1"}
-
-
 def test_pdf_document() -> None:
     doc = render_document(PDF, DocumentKind.PDF, CFG, isolated=False)
     assert doc.meta.sha256 == hashlib.sha256(PDF).hexdigest()
@@ -70,22 +58,37 @@ def test_stacked_image_document() -> None:
     assert "pillow" in doc.meta.renderer_versions
 
 
-def test_office_document_disabled_by_default() -> None:
+OFFICE_SAMPLES = {
+    DocumentKind.DOC: make_ole2(["WordDocument"]),
+    DocumentKind.DOCX: make_ooxml(DOCX_TYPE),
+    DocumentKind.ODS: make_odf("application/vnd.oasis.opendocument.spreadsheet"),
+    DocumentKind.XLSX: make_ooxml(
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"
+    ),
+}
+
+
+@pytest.mark.parametrize("kind", list(OFFICE_SAMPLES))
+def test_office_documents_are_not_rendered(kind: DocumentKind) -> None:
+    """LibreOffice odrzucony: formaty biurowe nie przechodzą przez kanał wizualny."""
     with pytest.raises(RenderError) as info:
-        render_document(make_ooxml(DOCX_TYPE), DocumentKind.DOCX, CFG, isolated=False)
-    assert info.value.code is IssueCode.OFFICE_CONVERSION_DISABLED
-    assert info.value.detail.endswith("declared=docx detected=docx")
+        render_document(OFFICE_SAMPLES[kind], kind, CFG, isolated=False)
+    assert info.value.code is IssueCode.OFFICE_FORMAT_NOT_RENDERED
+    assert info.value.detail == (
+        f"kind={kind.value}: office formats are not rendered "
+        f"declared={kind.value} detected={kind.value}"
+    )
     assert info.value.issues == ()
 
 
 def test_error_keeps_declared_kind_mismatch() -> None:
-    """Obserwacja z A.8: ".DOC" z zawartością DOCX przy wyłączonym LibreOffice."""
+    """Obserwacja z A.8: ".DOC" z zawartością DOCX."""
     with pytest.raises(RenderError) as info:
         render_document(make_ooxml(DOCX_TYPE), DocumentKind.DOC, CFG, isolated=False)
     err = info.value
-    assert err.code is IssueCode.OFFICE_CONVERSION_DISABLED
+    assert err.code is IssueCode.OFFICE_FORMAT_NOT_RENDERED
     assert err.detail.endswith("declared=doc detected=docx")
-    assert "VISION_OFFICE_ENABLED=false" in err.detail  # szczegóły pierwotnego błędu zostają
+    assert "kind=docx" in err.detail  # szczegóły pierwotnego błędu zostają
     [issue] = err.issues
     assert issue.code is IssueCode.DECLARED_KIND_MISMATCH
     assert issue.detail == "declared=doc detected=docx"
@@ -103,33 +106,6 @@ def test_render_failure_keeps_issues_and_kinds(isolated: bool) -> None:
     assert [i.code for i in err.issues] == [IssueCode.DECLARED_KIND_MISMATCH]
 
 
-def test_office_document_with_converter_uses_detected_kind() -> None:
-    converter = FakeConverter()
-    # plik ".DOC" z zawartością DOCX (jak w części materiałów): konwerter dostaje DOCX
-    doc = render_document(
-        make_ooxml(DOCX_TYPE), DocumentKind.DOC, CFG, office=converter, isolated=False
-    )
-    assert converter.kinds == [DocumentKind.DOCX]
-    assert doc.meta.detected_kind is DocumentKind.DOCX
-    assert [i.code for i in doc.meta.issues] == [IssueCode.DECLARED_KIND_MISMATCH]
-    assert {p.meta.source for p in doc.pages} == {PageSource.CONVERTED}
-    assert doc.meta.renderer_versions["fake-office"] == "1"
-
-
-@pytest.mark.parametrize("kind", [DocumentKind.DOC, DocumentKind.ODS, DocumentKind.XLSX])
-def test_each_office_kind_goes_through_converter(kind: DocumentKind) -> None:
-    data = {
-        DocumentKind.DOC: make_ole2(["WordDocument"]),
-        DocumentKind.ODS: make_odf("application/vnd.oasis.opendocument.spreadsheet"),
-        DocumentKind.XLSX: make_ooxml(
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"
-        ),
-    }[kind]
-    converter = FakeConverter()
-    render_document(data, kind, CFG, office=converter, isolated=False)
-    assert converter.kinds == [kind]
-
-
 @pytest.mark.parametrize(
     ("data", "detail"),
     [
@@ -141,7 +117,7 @@ def test_each_office_kind_goes_through_converter(kind: DocumentKind) -> None:
 )
 def test_unsupported_formats(data: bytes, detail: str) -> None:
     with pytest.raises(RenderError) as info:
-        render_document(data, None, CFG, office=FakeConverter(), isolated=False)
+        render_document(data, None, CFG, isolated=False)
     assert (info.value.code, info.value.detail) == (IssueCode.UNSUPPORTED_FORMAT, detail)
 
 

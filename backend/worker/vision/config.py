@@ -24,9 +24,6 @@ class _RenderLimits(BaseModel):
     page_timeout_s: PositiveSeconds = 30.0
     worker_startup_timeout_s: PositiveSeconds = 60.0
     render_forms: bool = True
-    office_enabled: bool = False
-    office_timeout_s: PositiveSeconds = 120.0
-    soffice_path: str = "soffice"
     split_seam_margin_px: int = Field(default=20, ge=0, le=500)
     split_height_tolerance_px: int = Field(default=2, ge=0, le=50)
     split_ink_threshold: int = Field(default=200, ge=1, le=255)
@@ -43,7 +40,7 @@ class RenderConfig(_RenderLimits):
 
 
 class VisionSettings(_RenderLimits, BaseSettings):
-    """Zmienne środowiskowe ``VISION_*`` (np. ``VISION_MAX_PAGES``, ``VISION_OFFICE_ENABLED``)."""
+    """Zmienne środowiskowe ``VISION_*`` (np. ``VISION_MAX_PAGES``, ``VISION_PAGE_TIMEOUT_S``)."""
 
     model_config = SettingsConfigDict(
         env_prefix="VISION_", env_file=None, case_sensitive=False, extra="ignore", frozen=True

@@ -106,7 +106,7 @@ def test_prepare_builds_label_pages_variants_and_tasks(dane: Path, tmp_path: Pat
     files = {f.file_id: f for f in first.files}
     assert files["f01-pdf"].status is FileStatus.RENDERED and files["f01-pdf"].page_count == 2
     assert files["f01-png"].page_count == 2  # obraz zszyty pocięty na strony
-    assert files["f01-docx"].code == "OFFICE_CONVERSION_DISABLED"
+    assert files["f01-docx"].code == "OFFICE_FORMAT_NOT_RENDERED"
     assert files["f01-docx-2"].code == "NOT_A_FORM"  # formularz dostaje ID przed wizualizacją
     assert files["f01-json"].status is FileStatus.REFERENCE
     assert files["f01-pdf"].path == f"coi/{FIRST}/Formularz.pdf"

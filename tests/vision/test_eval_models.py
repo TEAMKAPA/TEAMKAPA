@@ -342,7 +342,7 @@ def _document(**overrides: Any) -> dict[str, Any]:
                 declared_kind=DocumentKind.DOCX,
                 detected_kind=DocumentKind.DOCX,
                 status=FileStatus.EXCLUDED,
-                code="OFFICE_CONVERSION_DISABLED",
+                code="OFFICE_FORMAT_NOT_RENDERED",
                 page_count=None,
                 page_source=None,
             ),
