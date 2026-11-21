@@ -28,7 +28,8 @@ ignore = [
 python_version = "3.14"
 strict = true
 plugins = ["pydantic.mypy"]
-packages = ["backend"]
+# Kod aplikacji i skrypty ewaluacji (eval/ nie jest pakietem — sprawdzany jako pliki).
+files = ["backend", "eval"]
 
 [[tool.mypy.overrides]]
 module = [
