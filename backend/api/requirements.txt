@@ -1,0 +1,5 @@
+# Zależności runtime obrazu API. Wersje przypięte; licencje sprawdza CI (pip-licenses).
+fastapi==0.165.0            # MIT
+uvicorn==0.54.0             # BSD-3-Clause
+pydantic==2.14.4            # MIT
+pydantic-settings==2.16.3   # MIT
