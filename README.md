@@ -37,4 +37,4 @@ Parametry konfiguracyjne definiowane są w pliku `.env` (szablon: `.env.example`
 
 ## 4. Opis REST API
 
-Dokumentacja endpointów REST API oraz interaktywna specyfikacja OpenAPI/Swagger zostaną uzupełnione po zaimplementowaniu warstwy aplikacji FastAPI w katalogu `app/api/`.
+Dokumentacja endpointów REST API oraz interaktywna specyfikacja OpenAPI/Swagger zostaną uzupełnione po zaimplementowaniu warstwy aplikacji FastAPI w katalogu `backend/api/`.

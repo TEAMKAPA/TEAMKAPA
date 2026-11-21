@@ -60,3 +60,8 @@ checkpoints/
 *.pb
 .cache/
 huggingface/
+
+# Frontend / Node
+node_modules/
+frontend/dist/
+.vite/
