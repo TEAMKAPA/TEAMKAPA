@@ -1,0 +1,11 @@
+# Pliki trafiają do obrazów Dockera (Linux) — wymuszamy LF niezależnie od core.autocrlf.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.pdf binary
+*.doc binary
+*.docx binary
+*.ods binary
+*.xlsx binary

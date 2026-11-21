@@ -1,0 +1,8 @@
+# Narzędzia deweloperskie i CI (nie trafiają do obrazów).
+-r backend/api/requirements.txt
+-r backend/worker/requirements.txt
+pytest==9.2.0
+httpx2==2.16.2              # TestClient FastAPI (BSD-3-Clause)
+ruff==0.17.6
+mypy==2.4.1
+pip-licenses==5.5.5

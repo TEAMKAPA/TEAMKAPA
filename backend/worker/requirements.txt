@@ -1,0 +1,5 @@
+# Zależności runtime obrazu workera. Wersje przypięte; licencje sprawdza CI (pip-licenses).
+# Biblioteki pipeline'u (Docling, OpenCV, pypdfium2, Tesseract...) dochodzą w zadaniach #7, #10.
+arq==0.28.0                 # MIT
+pydantic==2.14.4            # MIT
+pydantic-settings==2.16.3   # MIT
