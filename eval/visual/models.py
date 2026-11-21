@@ -295,7 +295,7 @@ class GeometryCheck(EvalModel):
     """Zgodność wariantu strony z obrazem oznaczanym (``geometry.compare_pages``)."""
 
     size_equal: bool
-    shift_px: tuple[int, int]  # (dx, dy) wariantu względem obrazu oznaczanego
+    shift_px: tuple[int, int]  # przesunięcie treści wariantu (dx, dy), dodatnie: w prawo, w dół
     variant_ink_near_base: Fraction  # tusz wariantu w tolerancji od tuszu obrazu oznaczanego
     base_ink_near_variant: Fraction
     passed: bool

@@ -63,3 +63,16 @@ Warunek utrzymania statusu: bibliotek z `numpy.libs/` nie modyfikujemy ani nie l
 3. Licencje: `dist-info/licenses/**`, sekcje `Name/Files/License` w `LICENSE.txt` numpy,
    SBOM CycloneDX Pillow, `PIL.features.check(...)`.
 4. Linkowanie statyczne: wyszukanie symboli (`liq_*`, `fribidi_*`) i nazw `lib*.so` w plikach `.so`.
+
+## Narzędzia pomocnicze (nie są zależnościami rozwiązania)
+
+| Narzędzie | Wersja | Licencja | Użycie |
+|---|---|---|---|
+| Label Studio (Community) | 1.23.2, obraz `heartexlabs/label-studio` przypięty digestem | Apache-2.0 (`LICENSE` w tagu `1.23.2`) | ręczne oznaczanie stron zbioru #12 przez człowieka |
+
+- Label Studio **nie występuje** w `requirements*.txt` ani w obrazach projektu i nie jest
+  rozpowszechniane z rozwiązaniem. Działa lokalnie w osobnym kontenerze (instrukcja, digest i ustawienia
+  prywatności: `eval/visual/README.md`, `eval/visual/labelstudio/ls.env`).
+- Składników obrazu Dockera (system bazowy, nginx, biblioteki Pythona) nie audytujemy pod kątem copyleftu,
+  bo nie są częścią rozwiązania ani nie są z nim łączone. Do repozytorium trafia tylko konfiguracja
+  oznaczania (`config.xml`) i ustawienia serwera.
