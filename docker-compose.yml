@@ -127,7 +127,7 @@ services:
     <<: *hardening
     build:
       context: frontend
-    image: teamkapa/frontend:0.1.0
+    image: teamkapa/frontend:0.2.0
     profiles: [frontend]
     ports:
       - "${FRONTEND_PORT:-8080}:8080"

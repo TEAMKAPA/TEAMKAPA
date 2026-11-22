@@ -354,7 +354,28 @@ export interface InitialDataEntry {
   attribute: string;
   label: string;
   fieldType: 'TEXT_FIELD' | 'DATEPICKER' | null;
+  /** Czy pole może pozostać edytowalne (`readOnly: false`) — patrz `MLPZ_EDITABLE`. */
+  editable: boolean;
 }
+
+/**
+ * Dane kontaktowe i adresowe z profilu zalogowanego (MLPZ) są w formularzach COI podpowiedzią,
+ * którą użytkownik może poprawić (`readOnly: false`) — jak w backendzie
+ * (`backend/shared/schemas/initial_data.py`). Dane tożsamości i z rejestrów: tylko do odczytu.
+ */
+const MLPZ_EDITABLE: ReadonlySet<string> = new Set([
+  'phoneNumber',
+  'email',
+  'country',
+  'voivodeship',
+  'district',
+  'community',
+  'place',
+  'postCode',
+  'street',
+  'building',
+  'apartment',
+]);
 
 const RAW_INITIAL_DATA: readonly [
   InitialDataSource,
@@ -422,6 +443,7 @@ export const INITIAL_DATA_LIST: readonly InitialDataEntry[] = RAW_INITIAL_DATA.m
     attribute,
     label,
     fieldType,
+    editable: source === 'MLPZ' && MLPZ_EDITABLE.has(attribute),
   }),
 );
 

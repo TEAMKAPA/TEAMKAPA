@@ -491,7 +491,12 @@ export function FieldEditorDrawer({
                           onUpdateField({
                             ...field,
                             defaultValueType: 'EXTERNAL_SYSTEM',
-                            defaultValue: ('defaultValue' in field && field.defaultValue) || 'MLPZ.name',
+                            // Dane inicjalne to zawsze tekst „ŹRÓDŁO.atrybut” — nie lista ze słownika.
+                            defaultValue:
+                              ('defaultValue' in field &&
+                                typeof field.defaultValue === 'string' &&
+                                field.defaultValue) ||
+                              'MLPZ.name',
                             readOnly: true,
                           } as LeafField);
                         } else {
