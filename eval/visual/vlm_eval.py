@@ -17,6 +17,7 @@ przeglądu i liczniki wywołań w ``eval/vlm-dev-<tryb>.json`` i ``.md``.
 
 import argparse
 import json
+import logging
 import math
 import sys
 import time
@@ -34,8 +35,10 @@ from backend.worker.vision.render import render_document
 from backend.worker.vision.vlm.cache import CachedVlmClient, VlmStats
 from backend.worker.vision.vlm.client import (
     VlmClient,
+    VlmError,
     VlmRequest,
     VlmResponse,
+    VlmUnavailable,
     VlmUsage,
     build_client,
     generation_params,
@@ -51,6 +54,7 @@ from eval.visual.models import (
     FileStatus,
     Manifest,
     ManifestDocument,
+    ManifestPage,
     PagePredictions,
     Split,
     System,
@@ -84,6 +88,7 @@ class Document:
     pages: list[tuple[str, RenderedPage]]  # (label_id, strona bazowa)
     blocks: list[Any]
     text_fields: list[FormField] | None
+    labeled: set[str]  # label_id stron z etykietami (metryki)
 
 
 def _reference_fields(document: ManifestDocument, dane: Path) -> list[FormField] | None:
@@ -94,21 +99,31 @@ def _reference_fields(document: ManifestDocument, dane: Path) -> list[FormField]
     return None
 
 
-def load_documents(manifest: Manifest, labels: Path, dane: Path) -> list[Document]:
+def load_documents(
+    manifest: Manifest, labels: Path, dane: Path, extra: Sequence[str] = ()
+) -> list[Document]:
+    """Oznaczone strony dev oraz ``extra`` (nieoznaczone strony dev: etap VLM bez metryk)."""
     dataset = load_dataset(manifest, labels, Split.DEV)
-    by_doc: dict[str, list[Any]] = {}
+    wanted: dict[str, list[tuple[ManifestDocument, ManifestPage, bool]]] = {}
     for item in dataset.labeled:
-        by_doc.setdefault(item.document.doc_id, []).append(item)
+        wanted.setdefault(item.document.doc_id, []).append((item.document, item.page, True))
+    for label_id in extra:
+        document, page = manifest.find_page(label_id)
+        if document.split is not Split.DEV:
+            raise ValueError(f"{label_id}: tylko strony części dev")
+        if label_id not in {p.label_id for _, p, _ in wanted.get(document.doc_id, [])}:
+            wanted.setdefault(document.doc_id, []).append((document, page, False))
     documents = []
-    for doc_id in sorted(by_doc):
-        items = by_doc[doc_id]
-        manifest_doc = items[0].document
+    for doc_id in sorted(wanted):
+        items = sorted(wanted[doc_id], key=lambda item: item[1].page)
+        manifest_doc = items[0][0]
         files = {f.file_id: f for f in manifest_doc.files}
         pages: list[tuple[str, RenderedPage]] = []
+        labeled: set[str] = set()
         blocks: list[Any] = []
         rendered_cache: dict[str, Any] = {}
-        for item in sorted(items, key=lambda i: i.page.page):
-            file = files[item.page.base_file_id]
+        for _, manifest_page, is_labeled in items:
+            file = files[manifest_page.base_file_id]
             if file.path is None:
                 raise ValueError("manifest bez ścieżek: użyj manifest.full.json")
             data = (dane / file.path).read_bytes()
@@ -116,16 +131,37 @@ def load_documents(manifest: Manifest, labels: Path, dane: Path) -> list[Documen
                 rendered_cache[file.file_id] = render_document(
                     data, file.declared_kind, RenderConfig(dpi=manifest.renderer.dpi)
                 )
-            page = rendered_cache[file.file_id].pages[item.page.page - 1]
-            if image_sha256(page.image) != item.page.image_sha256:
-                raise ValueError(f"{item.page.label_id}: obraz różni się od manifestu")
-            pages.append((item.page.label_id, page))
+            page = rendered_cache[file.file_id].pages[manifest_page.page - 1]
+            if image_sha256(page.image) != manifest_page.image_sha256:
+                raise ValueError(f"{manifest_page.label_id}: obraz różni się od manifestu")
+            pages.append((manifest_page.label_id, page))
+            if is_labeled:
+                labeled.add(manifest_page.label_id)
             if file.format == "pdf":
-                blocks.extend(pdf_text_blocks(data, item.page.page))
+                blocks.extend(pdf_text_blocks(data, manifest_page.page))
         documents.append(
-            Document(manifest_doc, pages, blocks, _reference_fields(manifest_doc, dane))
+            Document(manifest_doc, pages, blocks, _reference_fields(manifest_doc, dane), labeled)
         )
     return documents
+
+
+class StopAfterError:
+    """Bezpiecznik: po pierwszym błędzie VLM kolejne wywołania nie idą do sieci."""
+
+    def __init__(self, inner: VlmClient) -> None:
+        self._inner = inner
+        self.name = inner.name
+        self.model = inner.model
+        self.error: VlmError | None = None
+
+    def complete(self, request: VlmRequest) -> VlmResponse:
+        if self.error is not None:
+            raise VlmUnavailable(f"przerwane po wcześniejszym błędzie ({self.error.detail})")
+        try:
+            return self._inner.complete(request)
+        except VlmError as error:
+            self.error = error
+            raise
 
 
 class RecordingClient:
@@ -190,6 +226,8 @@ def _cases(
 
     cases = []
     for label_id, page in document.pages:
+        if label_id not in document.labeled:
+            continue
         gt = read_json(labels / f"{label_id}.json", PageLabels)
         cases.append(
             PageCase(
@@ -211,7 +249,7 @@ def run(args: argparse.Namespace) -> int:
     mode = AccuracyMode(args.mode) if args.mode else None
     settings = load_vlm_settings(**({"accuracy_mode": mode} if mode else {}))
     manifest = read_json(args.manifest, Manifest)
-    documents = load_documents(manifest, args.labels, args.dane)
+    documents = load_documents(manifest, args.labels, args.dane, args.extra)
     dataset = load_dataset(manifest, args.labels, Split.DEV)
 
     if args.dry_run:
@@ -237,8 +275,9 @@ def run(args: argparse.Namespace) -> int:
         return 0
 
     stats = VlmStats()
+    guard = StopAfterError(build_client(settings))
     client: VlmClient = CachedVlmClient(
-        build_client(settings),
+        guard,
         generation_params(settings),
         settings.cache_dir if settings.cache_enabled else None,
         stats=stats,
@@ -322,6 +361,9 @@ def run(args: argparse.Namespace) -> int:
         )
     )
     print(f"Raport: {args.out / (stem + '.json')}")
+    if guard.error is not None:
+        print(f"BŁĄD VLM: {guard.error.code}: {guard.error.detail} (dalsze wywołania wstrzymane)")
+        return 1
     return 0
 
 
@@ -332,8 +374,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument("--labels", type=Path, default=DEFAULT_LABELS)
     parser.add_argument("--dane", type=Path, default=DEFAULT_DANE)
+    parser.add_argument(
+        "--extra", nargs="*", default=[], help="nieoznaczone strony dev (etap VLM bez metryk)"
+    )
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     args = parser.parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # adresy żądań bez znaczenia w logu
     return run(args)
 
 

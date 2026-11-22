@@ -9,8 +9,10 @@ Walidacja deterministyczna odpowiedzi:
 - etykieta to wyłącznie ID istniejącego bloku tekstu (tekst etykiety pochodzi ze źródła, nie z VLM),
 - rola niezgodna z kategorią (np. ``choice`` dla komórki) jest odrzucana; brak roli → ``NO_ROLE``,
 - element z rolą od VLM ma ``source=both``; bez roli zostaje ``opencv``,
-- dodane elementy: najwyżej ``max_added_per_page``, poprawny bbox, nie pokrywają się z elementem
-  OpenCV (IoU < 0,5), ID ``vlm-p{n}-{nnn}``, pewność 0,3, kod ``VLM_ONLY_ELEMENT``,
+- dodane elementy: najwyżej ``max_added_per_page``, poprawny bbox, rola do wypełnienia (``input``,
+  ``choice``, ``e_signature``), nie powtarzają elementu OpenCV (IoU ramek rozszerzonych pionowo do
+  1% strony ≥ 0,3 albo środek w ramce), ID ``vlm-p{n}-{nnn}``, pewność 0,3, ``VLM_ONLY_ELEMENT``,
+- komórka zawierająca inny element do wypełnienia dostaje rolę ``skip`` (kontener, LABELING.md),
 - błąd API (``VLM_UNAVAILABLE``) albo odpowiedź niezgodna ze schematem po ponowieniu
   (``VLM_INVALID_RESPONSE``): elementy bez zmian, z kodem powodu; pipeline działa dalej.
 """
@@ -45,7 +47,10 @@ from backend.worker.vision.vlm.structured import ask
 TASK = "roles"
 PROMPT = "roles_v1"
 ADDED_CONFIDENCE = 0.3
-DUPLICATE_IOU = 0.5
+DUPLICATE_IOU = 0.3
+MIN_LINE_HEIGHT = 0.01  # ułamek wysokości strony (jak w ewaluacji #12)
+CONTAIN_FRACTION = 0.9
+FILLABLE_ROLES = frozenset({ElementRole.INPUT, ElementRole.CHOICE, ElementRole.E_SIGNATURE})
 MAX_BLOCK_TEXT = 200
 
 FILL = frozenset({ElementRole.INPUT, ElementRole.SKIP, ElementRole.E_SIGNATURE})
@@ -118,6 +123,52 @@ def _iou(a: BoundingBox, b: BoundingBox) -> float:
     return inter / union if union > 0 else 0.0
 
 
+def _expanded(b: BoundingBox) -> BoundingBox:
+    """Ramka rozszerzona pionowo do ``MIN_LINE_HEIGHT`` (cienkie linie, niedokładny bbox VLM)."""
+    if b.y1 - b.y0 >= MIN_LINE_HEIGHT:
+        return b
+    center, half = (b.y0 + b.y1) / 2, MIN_LINE_HEIGHT / 2
+    return BoundingBox(x0=b.x0, y0=max(0.0, center - half), x1=b.x1, y1=min(1.0, center + half))
+
+
+def _duplicate(box: BoundingBox, other: BoundingBox) -> bool:
+    """Czy dodany element powtarza istniejący: IoU ramek rozszerzonych albo środek w ramce."""
+    a, b = _expanded(box), _expanded(other)
+    if _iou(a, b) >= DUPLICATE_IOU:
+        return True
+    cx, cy = (box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2
+    return b.x0 <= cx <= b.x1 and b.y0 <= cy <= b.y1
+
+
+def _contains(outer: BoundingBox, inner: BoundingBox) -> bool:
+    w = min(outer.x1, inner.x1) - max(outer.x0, inner.x0)
+    h = min(outer.y1, inner.y1) - max(outer.y0, inner.y0)
+    area = (inner.x1 - inner.x0) * (inner.y1 - inner.y0)
+    smaller = area < (outer.x1 - outer.x0) * (outer.y1 - outer.y0)
+    return w > 0 and h > 0 and smaller and w * h >= CONTAIN_FRACTION * area
+
+
+def container_cells_skip(elements: Sequence[VisualElement]) -> list[VisualElement]:
+    """Komórka zawierająca inny element do wypełnienia dostaje rolę ``skip`` (LABELING.md).
+
+    Polem jest element wewnątrz (kropki, kratki, checkbox), a komórka jest tylko kontenerem; ta sama
+    reguła tworzy etykiety zbioru #12 (``eval/visual/convert_ls.py``).
+    """
+    fillable = [
+        e for e in elements if e.role in FILLABLE_ROLES and e.kind is not ElementKind.SECTION_FRAME
+    ]
+    result = []
+    for element in elements:
+        if (
+            element.kind is ElementKind.TABLE_CELL
+            and element.role is ElementRole.INPUT
+            and any(o is not element and _contains(element.bbox, o.bbox) for o in fillable)
+        ):
+            element = element.model_copy(update={"role": ElementRole.SKIP})
+        result.append(element)
+    return result
+
+
 def _with_reason(element: VisualElement, code: str) -> VisualElement:
     if code in element.confidence_reasons:
         return element
@@ -148,8 +199,10 @@ def _added(
             )
             continue
         box = BoundingBox(x0=x0, y0=y0, x1=x1, y1=y1)
-        if any(_iou(box, e.bbox) >= DUPLICATE_IOU for e in existing) or any(
-            _iou(box, other) >= DUPLICATE_IOU for other, _ in accepted
+        if ElementRole(answer.role) not in FILLABLE_ROLES:
+            continue  # dodany element ma sens tylko jako miejsce do wypełnienia
+        if any(_duplicate(box, e.bbox) for e in existing) or any(
+            _duplicate(box, other) for other, _ in accepted
         ):
             continue  # element już wykryty: VLM nie dubluje OpenCV
         if answer.kind == "char_boxes" and not answer.cells:
@@ -275,7 +328,7 @@ def assign_roles(
 
     added, added_review = _added(page, answer.value.added, updated, set(by_block), settings)
     return RolesResult(
-        elements=tuple(updated + added),
+        elements=tuple(container_cells_skip(updated + added)),
         review=tuple(review + added_review),
         status="ok",
         attempts=answer.attempts,

@@ -196,3 +196,54 @@ def test_prompt_version_tracks_template() -> None:
     assert load_prompt("roles_v1").version.startswith("roles_v1:")
     with pytest.raises(KeyError, match="SCHEMA"):
         Prompt("x", "{{SCHEMA}}").render({})
+
+
+def test_container_cell_and_added_element_rules(tmp_path: Path) -> None:
+    from backend.worker.vision.models import ElementKind, ElementSource, VisualElement
+    from backend.worker.vision.vlm.roles import container_cells_skip
+
+    def element(
+        id_: str, kind: ElementKind, box: tuple[float, ...], role: ElementRole
+    ) -> VisualElement:
+        x0, y0, x1, y1 = box
+        return VisualElement(
+            id=id_,
+            page=1,
+            kind=kind,
+            bbox=BoundingBox(x0=x0, y0=y0, x1=x1, y1=y1),
+            role=role,
+            source=ElementSource.BOTH,
+            confidence=0.9,
+        )
+
+    cell = element("cv-p1-001", ElementKind.TABLE_CELL, (0.1, 0.1, 0.9, 0.2), ElementRole.INPUT)
+    dots = element("cv-p1-002", ElementKind.DOTTED_LINE, (0.2, 0.18, 0.8, 0.182), ElementRole.INPUT)
+    lone = element("cv-p1-003", ElementKind.TABLE_CELL, (0.1, 0.3, 0.9, 0.4), ElementRole.INPUT)
+    roles = {e.id: e.role for e in container_cells_skip([cell, dots, lone])}
+    assert roles == {
+        "cv-p1-001": ElementRole.SKIP,
+        "cv-p1-002": ElementRole.INPUT,
+        "cv-p1-003": ElementRole.INPUT,
+    }
+
+    detected = vlm_synth.detected()
+    line = next(e for e in detected if e.kind.value == "dotted_line")
+    b = line.bbox
+    near = [
+        b.x0 + 0.005,
+        b.y0 + 0.003,
+        b.x1 - 0.01,
+        b.y1 + 0.003,
+    ]  # ten sam wiersz, bbox VLM niedokładny
+    base = {"kind": "dotted_line", "label_block_id": None, "cells": None}
+    content = _response(
+        [],
+        [
+            {**base, "bbox": near, "role": "input"},  # duplikat linii OpenCV
+            {**base, "bbox": [0.1, 0.95, 0.4, 0.952], "role": "skip"},  # rola bez wypełnienia
+            {**base, "bbox": [0.1, 0.97, 0.4, 0.972], "role": "input"},  # nowe miejsce
+        ],
+    )
+    result, _ = run(tmp_path, {"roles": content})
+    added = [e for e in result.elements if e.id.startswith("vlm-")]
+    assert [(e.id, e.bbox.y0) for e in added] == [("vlm-p1-001", 0.97)]
