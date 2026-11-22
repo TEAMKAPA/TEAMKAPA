@@ -128,3 +128,14 @@ def test_synthetic_form_rectangles(seed: int) -> None:
             for k, b2, c in got
         ), (kind, box)
     assert len(got) == len(expected | office)
+
+
+def test_thin_lines_with_missing_corner_pixel() -> None:
+    """Linie 1 px z przerwą w narożniku (antyaliasing w obrazach PNG z COI) zamykają komórkę."""
+    ink = np.zeros((300, 600), dtype=bool)
+    ink[100, 100:500] = True  # góra
+    ink[101:159, 100] = True  # lewa: kończy się piksel przed dolną linią
+    ink[101:159, 499] = True
+    ink[160, 101:500] = True  # dół: zaczyna się piksel na prawo od lewej linii
+    ink[159, 499] = True
+    assert _kinds(_detect(ink)) == [(ElementKind.TABLE_CELL, (100, 100, 500, 161), None)]

@@ -1,6 +1,8 @@
 """Prostokąty: checkboxy, kratki znakowe, komórki tabeli, ramki sekcji (C.4).
 
-1. **Wnętrza:** składowe spójne tła (4-sąsiedztwo) na masce struktury (``lines.find_lines``), które
+1. **Wnętrza:** składowe spójne tła (4-sąsiedztwo) na masce struktury (``lines.find_lines``)
+   pogrubionej o ``gap_close_mm`` (domyka przerwy na złączach linii 1 px; ramka jest potem zwężana
+   o tyle samo), które
    nie dotykają krawędzi strony i mają boki ≥ ``rect_min_mm``. Po wypełnieniu dziur (tekst,
    checkbox w komórce) wypełniają swoją ramkę w ≥ ``rect_fill`` (pętle liter są zaokrąglone), a bez
    wypełnienia w ≥ ``rect_open`` (pierścień tła między ramką sekcji a tabelą to nie komórka).
@@ -71,11 +73,11 @@ def _fractions(labels: np.ndarray, label: int, box: PixelBox) -> tuple[float, fl
 
 
 def _expand(
-    structure: Mask, interior: PixelBox, cfg: DetectConfig, scale: Scale
+    structure: Mask, interior: PixelBox, cfg: DetectConfig, scale: Scale, grow_px: int = 0
 ) -> PixelBox | None:
     """Rozszerza wnętrze do zewnętrznej krawędzi obramowania; ``None``, gdy bok nie ma linii."""
     height, width = structure.shape
-    limit = scale.ipx(cfg.border_max_mm)
+    limit = scale.ipx(cfg.border_max_mm) + 2 * grow_px
     x0, y0, x1, y1 = interior
 
     def coverage_col(x: int) -> float:
@@ -103,10 +105,15 @@ def _expand(
 
 def find_rects(structure: Mask, cfg: DetectConfig, scale: Scale) -> list[Rect]:
     """Zamknięte prostokąty strony (kolejność: góra, potem lewo)."""
-    background = (~structure).astype(np.uint8)
+    # Struktura pogrubiona o r px domyka przerwy na złączach cienkich linii (także w zewnętrznych
+    # narożnikach, których nie domyka zamknięcie morfologiczne); ramka jest potem zwężana o r px.
+    r = scale.ipx(cfg.gap_close_mm, minimum=1)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2 * r + 1, 2 * r + 1))
+    grown: Mask = np.asarray(cv2.dilate(structure.astype(np.uint8), kernel), dtype=np.uint8) > 0
+    background = (~grown).astype(np.uint8)
     count, labels, stats, _ = cv2.connectedComponentsWithStats(background, connectivity=4)
     height, width = structure.shape
-    min_side = scale.px(cfg.rect_min_mm)
+    min_side = scale.px(cfg.rect_min_mm) - 2 * r
     rects = []
     for label in range(1, count):
         x, y, w, h = (int(v) for v in stats[label, :4])
@@ -120,9 +127,11 @@ def find_rects(structure: Mask, cfg: DetectConfig, scale: Scale) -> list[Rect]:
         open_part, filled_part = _fractions(labels, label, interior)
         if filled_part < cfg.rect_fill or open_part < cfg.rect_open:
             continue
-        box = _expand(structure, interior, cfg, scale)
-        if box is not None:
-            rects.append(Rect(box=box, interior=interior))
+        grown_box = _expand(grown, interior, cfg, scale, r)
+        if grown_box is not None:
+            box = (grown_box[0] + r, grown_box[1] + r, grown_box[2] - r, grown_box[3] - r)
+            inner = (x - r, y - r, x + w + r, y + h + r)
+            rects.append(Rect(box=box, interior=inner))
     rects.sort(key=lambda r: (r.box[1], r.box[0], r.box[3], r.box[2]))
     return rects
 

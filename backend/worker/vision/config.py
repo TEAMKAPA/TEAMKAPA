@@ -93,6 +93,9 @@ class DetectConfig(BaseModel):
     # Linie (C.3)
     line_min_mm: Mm = 8.0  # jądro morfologii: najkrótszy odcinek linii
     line_bridge_mm: Mm = 0.8  # domykanie przerw w liniach (skany, kreski przerywane)
+    gap_close_mm: Mm = (
+        0.15  # pogrubienie struktury przy szukaniu wnętrz (przerwy na złączach linii)
+    )
     text_line_min_mm: Mm = 15.0
     # Grubsze poziome paski to separatory sekcji, a nie linie do pisania.
     text_line_max_thickness_mm: Mm = 0.6
