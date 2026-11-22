@@ -1,0 +1,158 @@
+{
+  "fields": [
+    {
+      "label": "Opis",
+      "kind": "text",
+      "bbox": [
+        0.6131,
+        0.0885,
+        0.8948,
+        0.0894
+      ],
+      "cells": null
+    },
+    {
+      "label": "Pole tekstowe",
+      "kind": "text",
+      "bbox": [
+        0.4154,
+        0.2334,
+        0.8984,
+        0.2638
+      ],
+      "cells": null
+    },
+    {
+      "label": "Pole tekstowe",
+      "kind": "text",
+      "bbox": [
+        0.4154,
+        0.2638,
+        0.8984,
+        0.2941
+      ],
+      "cells": null
+    },
+    {
+      "label": "Pole tekstowe",
+      "kind": "text",
+      "bbox": [
+        0.4154,
+        0.2941,
+        0.8984,
+        0.3245
+      ],
+      "cells": null
+    },
+    {
+      "label": "Numer identyfikacyjny",
+      "kind": "char_boxes",
+      "bbox": [
+        0.2527,
+        0.3698,
+        0.5133,
+        0.3873
+      ],
+      "cells": 11
+    },
+    {
+      "label": "Numer identyfikacyjny",
+      "kind": "char_boxes",
+      "bbox": [
+        0.2527,
+        0.41,
+        0.3011,
+        0.4275
+      ],
+      "cells": 2
+    },
+    {
+      "label": "Numer identyfikacyjny",
+      "kind": "char_boxes",
+      "bbox": [
+        0.3295,
+        0.41,
+        0.4015,
+        0.4275
+      ],
+      "cells": 3
+    },
+    {
+      "label": "Wybór wariantu",
+      "kind": "choice",
+      "bbox": [
+        0.11,
+        0.4639,
+        0.5429,
+        0.4758
+      ],
+      "cells": null
+    },
+    {
+      "label": "Zgoda",
+      "kind": "choice",
+      "bbox": [
+        0.11,
+        0.5041,
+        0.127,
+        0.516
+      ],
+      "cells": null
+    },
+    {
+      "label": "Uwagi",
+      "kind": "text",
+      "bbox": [
+        0.11,
+        0.5579,
+        0.8984,
+        0.5588
+      ],
+      "cells": null
+    },
+    {
+      "label": "Opis",
+      "kind": "text",
+      "bbox": [
+        0.11,
+        0.5883,
+        0.8948,
+        0.5891
+      ],
+      "cells": null
+    },
+    {
+      "label": "Opis",
+      "kind": "text",
+      "bbox": [
+        0.11,
+        0.6186,
+        0.8948,
+        0.6195
+      ],
+      "cells": null
+    },
+    {
+      "label": "Opis",
+      "kind": "text",
+      "bbox": [
+        0.11,
+        0.649,
+        0.8948,
+        0.6499
+      ],
+      "cells": null
+    },
+    {
+      "label": "Podpis",
+      "kind": "signature",
+      "bbox": [
+        0.5653,
+        0.7499,
+        0.8954,
+        0.7507
+      ],
+      "cells": null
+    }
+  ]
+}

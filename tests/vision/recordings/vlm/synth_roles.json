@@ -1,0 +1,133 @@
+{
+  "elements": [
+    {
+      "id": "cv-p1-001",
+      "role": "skip",
+      "label_block_id": "p1-b1"
+    },
+    {
+      "id": "cv-p1-002",
+      "role": "unknown",
+      "label_block_id": "p1-b2"
+    },
+    {
+      "id": "cv-p1-003",
+      "role": "section",
+      "label_block_id": "p1-b4"
+    },
+    {
+      "id": "cv-p1-004",
+      "role": "skip",
+      "label_block_id": "p1-b3"
+    },
+    {
+      "id": "cv-p1-005",
+      "role": "skip",
+      "label_block_id": "p1-b4"
+    },
+    {
+      "id": "cv-p1-006",
+      "role": "input",
+      "label_block_id": "p1-b3"
+    },
+    {
+      "id": "cv-p1-007",
+      "role": "skip",
+      "label_block_id": "p1-b4"
+    },
+    {
+      "id": "cv-p1-008",
+      "role": "input",
+      "label_block_id": "p1-b3"
+    },
+    {
+      "id": "cv-p1-009",
+      "role": "skip",
+      "label_block_id": "p1-b6"
+    },
+    {
+      "id": "cv-p1-010",
+      "role": "input",
+      "label_block_id": "p1-b5"
+    },
+    {
+      "id": "cv-p1-011",
+      "role": "input",
+      "label_block_id": "p1-b7"
+    },
+    {
+      "id": "cv-p1-012",
+      "role": "input",
+      "label_block_id": "p1-b8"
+    },
+    {
+      "id": "cv-p1-013",
+      "role": "input",
+      "label_block_id": "p1-b9"
+    },
+    {
+      "id": "cv-p1-014",
+      "role": "choice",
+      "label_block_id": "p1-b10"
+    },
+    {
+      "id": "cv-p1-015",
+      "role": "choice",
+      "label_block_id": "p1-b10"
+    },
+    {
+      "id": "cv-p1-016",
+      "role": "choice",
+      "label_block_id": "p1-b10"
+    },
+    {
+      "id": "cv-p1-017",
+      "role": "choice",
+      "label_block_id": "p1-b11"
+    },
+    {
+      "id": "cv-p1-018",
+      "role": "choice",
+      "label_block_id": "p1-b10"
+    },
+    {
+      "id": "cv-p1-019",
+      "role": "input",
+      "label_block_id": "p1-b14"
+    },
+    {
+      "id": "cv-p1-020",
+      "role": "unknown",
+      "label_block_id": "p1-b14"
+    },
+    {
+      "id": "cv-p1-021",
+      "role": "unknown",
+      "label_block_id": null
+    },
+    {
+      "id": "cv-p1-022",
+      "role": "unknown",
+      "label_block_id": null
+    },
+    {
+      "id": "cv-p1-023",
+      "role": "unknown",
+      "label_block_id": null
+    }
+  ],
+  "added": [
+    {
+      "kind": "text_line",
+      "bbox": [
+        0.1,
+        0.92,
+        0.5,
+        0.925
+      ],
+      "role": "input",
+      "label_block_id": null,
+      "cells": null
+    }
+  ]
+}

@@ -103,6 +103,7 @@ class VlmSettings(BaseSettings):
     image_max_side_px: int = Field(default=1600, ge=256, le=4096)
     draw_marks: bool = True  # numery elementów cv-* na obrazie (tryb 1)
     max_added_per_page: int = Field(default=10, ge=0, le=100)
+    low_ocr_confidence: float = Field(default=0.6, ge=0, le=1)  # etykieta z OCR poniżej: przegląd
     accuracy_mode: AccuracyMode = Field(
         default=AccuracyMode.MAX,
         validation_alias=AliasChoices("ACCURACY_MODE", "VLM_ACCURACY_MODE"),
