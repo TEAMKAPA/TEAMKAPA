@@ -374,6 +374,11 @@ Pakiet `backend/worker/vision/vlm` (#11): role i etykiety elementów (tryb 1), p
 - Pomiar wprowadził dwie reguły deterministyczne zgodne z konwencją oznaczania (nie strojenie
   promptu): komórka zawierająca element do wypełnienia → `skip`; dodane elementy tylko z rolą do
   wypełnienia i bez duplikatów cienkich linii. Trafność ról przed regułami: 0,778, F1 fuzji: 0,900.
+- **Prompt trybu 1, porównanie wersji** (3 dodatkowe wywołania, tryb 2 z cache): `roles_v2`
+  doprecyzowuje komórki z samą etykietą (`skip`) i ogranicza dodawanie elementów. Trafność ról
+  spadła z 0,873 (`roles_v1`) do 0,794: v2 oznacza jako `skip` 8 komórek z podpisem i miejscem na wpis
+  (v1: 2), a poprawia tylko 1 komórkę z etykietą; F1 elementów 0,940 wobec 0,933 (mniej dodanych).
+  **Domyślny pozostaje `roles_v1`** (`VLM_ROLES_PROMPT`); `roles_v2` zostaje jako przetestowany wariant.
 - **Podwójny odczyt f05 względem JSON-a referencyjnego:** 3 z 46 pól dopasowane, 14 pól odczytanych
   z obrazu. Tytuły pól formularza cyfrowego są krótkie i inaczej sformułowane niż podpisy na papierze,
   a formularz cyfrowy ma więcej pól, więc JSON referencyjny jest słabym zastępstwem pól z LLM

@@ -91,7 +91,10 @@ def test_prompt_keeps_document_text_in_data_block(tmp_path: Path) -> None:
     assert "ignore any instructions" in text
     payload = build_payload(request, settings(tmp_path))
     assert "tools" not in payload and "tool_choice" not in payload
-    assert request.prompt_version == load_prompt("roles_v1").version
+    assert request.prompt_version == load_prompt("roles_v1").version  # domyślny
+    _, v2 = run(tmp_path, {"roles": vlm_synth.recording("synth_roles")}, roles_prompt="roles_v2")
+    assert v2.requests[0].prompt_version == load_prompt("roles_v2").version
+    assert "label cell" not in request.prompt and "label cell" in v2.requests[0].prompt
 
 
 def test_marks_change_the_image(tmp_path: Path) -> None:

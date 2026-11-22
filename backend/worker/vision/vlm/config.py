@@ -12,7 +12,7 @@ lokalny łączy się z serwerem modelu w sieci wewnętrznej (vLLM lub llama.cpp,
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import urlparse
 
 from pydantic import AliasChoices, Field, SecretStr, model_validator
@@ -102,6 +102,7 @@ class VlmSettings(BaseSettings):
     response_format: ResponseFormat = ResponseFormat.JSON_SCHEMA
     image_max_side_px: int = Field(default=1600, ge=256, le=4096)
     draw_marks: bool = True  # numery elementów cv-* na obrazie (tryb 1)
+    roles_prompt: Literal["roles_v1", "roles_v2"] = "roles_v1"  # v2 gorszy na pilocie (docs)
     max_added_per_page: int = Field(default=10, ge=0, le=100)
     low_ocr_confidence: float = Field(default=0.6, ge=0, le=1)  # etykieta z OCR poniżej: przegląd
     accuracy_mode: AccuracyMode = Field(

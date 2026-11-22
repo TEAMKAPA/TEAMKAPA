@@ -45,7 +45,6 @@ from backend.worker.vision.vlm.schemas import AddedElement, RolesResponse
 from backend.worker.vision.vlm.structured import ask
 
 TASK = "roles"
-PROMPT = "roles_v1"
 ADDED_CONFIDENCE = 0.3
 DUPLICATE_IOU = 0.3
 MIN_LINE_HEIGHT = 0.01  # ułamek wysokości strony (jak w ewaluacji #12)
@@ -263,7 +262,7 @@ def assign_roles(
         answer = ask(
             client,
             TASK,
-            load_prompt(PROMPT),
+            load_prompt(settings.roles_prompt),
             prompt_values(page, elements, blocks, settings),
             picture,
             RolesResponse,
