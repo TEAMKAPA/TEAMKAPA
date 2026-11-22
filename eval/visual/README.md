@@ -15,6 +15,7 @@ więc trafiają do niego tylko kod, manifest bez ścieżek i liczby zbiorcze.
 | `convert_ls.py`, `preview.py` | eksport Label Studio → etykiety stron, kontrola zgodności z `LABELING.md`, nakładki |
 | `match.py`, `metrics.py`, `report.py`, `run.py` | dopasowanie, metryki, raport, ewaluacja z bazą i ochroną `holdout` |
 | `selfcheck.py` | kontrola miernika na oznaczonych stronach `dev` (etykiety jako predykcje z zaburzeniami) |
+| `predict.py` | predykcje detektora (OpenCV) dla stron zbioru: render z `dane/`, pliki `PagePredictions` |
 | `LABELING.md` | konwencje oznaczania (kategorie, ramki, role, przypadki graniczne) |
 
 ## Pochodzenie zbioru
@@ -240,9 +241,14 @@ Szacunek przeliczam po `holdout`. Zmęczenie pogarsza dokładność ramek, więc
 ## Metryki i ewaluacja
 
 ```powershell
-.venv\Scripts\python.exe -m eval.visual.run --system opencv --predictions <katalog>
+.venv\Scripts\python.exe -m eval.visual.predict --system opencv
+.venv\Scripts\python.exe -m eval.visual.run --system opencv --predictions daneobocze\predictions\opencv-dev
 .venv\Scripts\python.exe -m eval.visual.selfcheck
 ```
+
+`predict` renderuje pliki wariantów z `dane/` (ścieżki z `manifest.full.json`), sprawdza zgodność
+obrazu strony oznaczanej z manifestem i zapisuje predykcje oznaczonych stron `dev` (`--all-pages`:
+wszystkich stron części; `holdout` tylko z `--split holdout --final`, z wpisem w `holdout_runs.log`).
 
 - **Predykcje:** plik `<file_id>-p<NN>.json` (`teamkapa.vision.predictions/1`: system, strona,
   rozmiar, lista `VisualElement` z kontraktu 7.5) dla każdej ocenianej strony pliku, czyli każdego
