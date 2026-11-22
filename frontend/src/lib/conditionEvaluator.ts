@@ -1,13 +1,3 @@
-/**
- * Parser i ewaluator warunków dynamicznych JSONata z formularzy COI (`SHOW` i `READ_ONLY`).
- *
- * Obsługuje oba warianty składni ze specyfikacji COI (por. backend/shared/validators/form_rules.py):
- * - `"Opcja" in tabs['Strona' in title].questions['sekcja' in field.techName].field.repeatingSectionGrid['pole' in field.techName].field.__userAnswer`
- *   (oraz pisownię `repetingSectionGrid`)
- * - `"Opcja" in tabs['Strona' in title].questions['sekcja' in field.techName].field.__userAnswer[$repeatingSectionIndex]['pole' in fieldTechName].answers`
- * oraz operatory logiczne `and`, `or`, `not`.
- */
-
 import type { State } from '../types/coiForm';
 
 export interface StateReference {
@@ -19,11 +9,6 @@ export interface StateReference {
 }
 
 export type AnswerValue = string | string[] | boolean | number | null | undefined;
-
-/**
- * Mapa odpowiedzi z interaktywnego podglądu formularza.
- * Klucz: `makeAnswerKey(tabTitle, sectionTechName, fieldTechName, repeatingIndex?)`.
- */
 export type FormAnswers = Record<string, AnswerValue>;
 
 const REF_PATTERN =
@@ -58,20 +43,14 @@ export function extractStateReferences(query: string): StateReference[] {
 }
 
 function answerMatchesValue(answer: AnswerValue, expected: string | null): boolean {
-  if (answer === null || answer === undefined) {
-    return false;
-  }
+  if (answer === null || answer === undefined) return false;
   if (expected === null) {
     if (Array.isArray(answer)) return answer.length > 0;
     if (typeof answer === 'boolean') return answer;
     return String(answer).trim().length > 0;
   }
-  if (Array.isArray(answer)) {
-    return answer.includes(expected);
-  }
-  if (typeof answer === 'boolean') {
-    return expected.toLowerCase() === String(answer);
-  }
+  if (Array.isArray(answer)) return answer.includes(expected);
+  if (typeof answer === 'boolean') return expected.toLowerCase() === String(answer);
   return String(answer) === expected;
 }
 
@@ -84,18 +63,14 @@ function evaluateAtom(atom: string, answers: FormAnswers, repeatingIndex?: numbe
     return !evaluateJsonataCondition(inner, answers, repeatingIndex);
   }
   if (/^not\s+/i.test(trimmed)) {
-    const inner = trimmed.replace(/^not\s+/i, '');
-    return !evaluateAtom(inner, answers, repeatingIndex);
+    return !evaluateAtom(trimmed.replace(/^not\s+/i, ''), answers, repeatingIndex);
   }
   if (trimmed.startsWith('!')) {
     return !evaluateAtom(trimmed.slice(1), answers, repeatingIndex);
   }
 
   const refs = extractStateReferences(trimmed);
-  if (refs.length === 0) {
-    // Nieznane lub niestandardowe wyrażenie JSONata — nie ukrywamy pola domyślnie.
-    return true;
-  }
+  if (refs.length === 0) return true;
 
   return refs.every((ref) => {
     const key = ref.isRepeating
@@ -113,7 +88,6 @@ function splitTopLevel(expr: string, keyword: 'or' | 'and'): string[] {
   let inSingle = false;
   let inDouble = false;
   let current = '';
-
   const kwRegex = new RegExp(`^\\s+${keyword}\\s+`, 'i');
 
   for (let i = 0; i < expr.length; i += 1) {
@@ -131,10 +105,8 @@ function splitTopLevel(expr: string, keyword: 'or' | 'and'): string[] {
     if (!inSingle && !inDouble) {
       if (ch === '(' || ch === '[') depth += 1;
       else if (ch === ')' || ch === ']') depth = Math.max(0, depth - 1);
-
       if (depth === 0) {
-        const rest = expr.slice(i);
-        const match = kwRegex.exec(rest);
+        const match = kwRegex.exec(expr.slice(i));
         if (match) {
           parts.push(current.trim());
           current = '';
@@ -145,9 +117,7 @@ function splitTopLevel(expr: string, keyword: 'or' | 'and'): string[] {
     }
     current += ch;
   }
-  if (current.trim()) {
-    parts.push(current.trim());
-  }
+  if (current.trim()) parts.push(current.trim());
   return parts;
 }
 
@@ -175,12 +145,10 @@ export function evaluateJsonataCondition(
   if (orParts.length > 1) {
     return orParts.some((part) => evaluateJsonataCondition(part, answers, repeatingIndex));
   }
-
   const andParts = splitTopLevel(cleaned, 'and');
   if (andParts.length > 1) {
     return andParts.every((part) => evaluateJsonataCondition(part, answers, repeatingIndex));
   }
-
   return evaluateAtom(cleaned, answers, repeatingIndex);
 }
 
@@ -205,37 +173,26 @@ export function evaluateStates(
       hasReadOnlyCondition: false,
     };
   }
-
   const showStates = states.filter((s) => s.type === 'SHOW');
   const readOnlyStates = states.filter((s) => s.type === 'READ_ONLY');
 
-  const visible =
-    showStates.length === 0 ||
-    showStates.every((s) => evaluateJsonataCondition(s.query, answers, repeatingIndex));
-
-  const dynamicReadOnly =
-    readOnlyStates.length > 0 &&
-    readOnlyStates.some((s) => evaluateJsonataCondition(s.query, answers, repeatingIndex));
-
   return {
-    visible,
-    readOnly: baseReadOnly || dynamicReadOnly,
+    visible:
+      showStates.length === 0 ||
+      showStates.every((s) => evaluateJsonataCondition(s.query, answers, repeatingIndex)),
+    readOnly:
+      baseReadOnly ||
+      (readOnlyStates.length > 0 &&
+        readOnlyStates.some((s) => evaluateJsonataCondition(s.query, answers, repeatingIndex))),
     hasShowCondition: showStates.length > 0,
     hasReadOnlyCondition: readOnlyStates.length > 0,
   };
 }
 
-/** Zwraca skrócony, czytelny dla urzędnika opis warunku JSONata. */
 export function describeStateQuery(query: string): string {
   const refs = extractStateReferences(query);
-  if (refs.length === 0) {
-    return query.length > 80 ? `${query.slice(0, 77)}…` : query;
-  }
+  if (refs.length === 0) return query.length > 80 ? `${query.slice(0, 77)}…` : query;
   return refs
-    .map((ref) =>
-      ref.value !== null
-        ? `${ref.field} = „${ref.value}”`
-        : `${ref.field} wypełnione`,
-    )
+    .map((ref) => (ref.value !== null ? `${ref.field} = „${ref.value}”` : `${ref.field} wypełnione`))
     .join(' oraz ');
 }

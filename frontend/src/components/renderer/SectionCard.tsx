@@ -1,5 +1,4 @@
-import { Eye, Plus, Repeat, Trash2 } from 'lucide-react';
-import type { FieldQuestion, SectionField } from '../../types/coiForm';
+import type { FieldQuestion, LeafField, SectionField } from '../../types/coiForm';
 import type { FieldAssessment, Issue } from '../../types/auditReport';
 import {
   describeStateQuery,
@@ -8,8 +7,6 @@ import {
   type AnswerValue,
   type FormAnswers,
 } from '../../lib/conditionEvaluator';
-import { Badge } from '../ui/Badge';
-import { Button } from '../ui/Button';
 import { FieldFactory } from './FieldFactory';
 
 interface SectionCardProps {
@@ -23,6 +20,8 @@ interface SectionCardProps {
   reviewedIds: ReadonlySet<string>;
   modifiedIds: ReadonlySet<string>;
   onSelectField: (fieldId: string) => void;
+  onOpenDetails: (fieldId: string) => void;
+  onUpdateField: (updated: LeafField) => void;
   onToggleReviewed: (fieldId: string) => void;
   answers: FormAnswers;
   onAnswerChange: (key: string, value: AnswerValue) => void;
@@ -42,6 +41,8 @@ export function SectionCard({
   reviewedIds,
   modifiedIds,
   onSelectField,
+  onOpenDetails,
+  onUpdateField,
   onToggleReviewed,
   answers,
   onAnswerChange,
@@ -51,13 +52,8 @@ export function SectionCard({
 }: SectionCardProps) {
   const sectionEval = evaluateStates(section.states, answers, false);
 
-  if (mode === 'interactive' && !sectionEval.visible) {
-    return null;
-  }
-
-  if (visibleQuestions.length === 0) {
-    return null;
-  }
+  if (mode === 'interactive' && !sectionEval.visible) return null;
+  if (visibleQuestions.length === 0) return null;
 
   const isRepeating = section.type === 'REPEATING_SECTION';
   const rowIndices =
@@ -66,29 +62,28 @@ export function SectionCard({
       : [undefined];
 
   return (
-    <section className="rounded-2xl border border-slate-200/90 bg-slate-50/70 p-5">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <h3 className="text-base font-semibold text-slate-900">{section.title}</h3>
+    <section className="border-t border-[#E5E7EB] pt-4 first:border-t-0 first:pt-0">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-[17px] font-normal leading-6 text-[#0D0E0E]">{section.title}</h3>
           {isRepeating && (
-            <Badge variant="info">
-              <Repeat className="h-3 w-3" />
-              Sekcja powtarzalna
-            </Badge>
+            <span className="text-[13px] font-normal text-[#374151]">(sekcja powtarzalna)</span>
           )}
           {section.states && section.states.length > 0 && (
-            <Badge variant="purple" title={section.states.map((s) => s.query).join('\n')}>
-              <Eye className="h-3 w-3" />
-              Warunkowa: {describeStateQuery(section.states[0].query)}
-            </Badge>
+            <span className="text-[13px] font-normal text-[#374151]">
+              Warunek: {describeStateQuery(section.states[0].query)}
+            </span>
           )}
         </div>
 
         {mode === 'interactive' && isRepeating && onChangeRepeatingCount && (
-          <Button variant="secondary" size="xs" onClick={() => onChangeRepeatingCount(1)}>
-            <Plus className="h-3.5 w-3.5" />
+          <button
+            type="button"
+            onClick={() => onChangeRepeatingCount(1)}
+            className="rounded-lg border border-[#E5E7EB] bg-[#FFFFFF] px-3 py-1.5 text-sm font-normal text-[#0D0E0E] hover:bg-[#F3F3F4]"
+          >
             Dodaj wpis
-          </Button>
+          </button>
         )}
       </div>
 
@@ -96,20 +91,21 @@ export function SectionCard({
         {rowIndices.map((repIdx) => (
           <div
             key={repIdx ?? 'single'}
-            className={`space-y-3 ${
-              repIdx !== undefined ? 'rounded-xl border border-slate-200 bg-white p-4' : ''
-            }`}
+            className={
+              repIdx !== undefined
+                ? 'rounded-lg border border-[#E5E7EB] p-4'
+                : 'divide-y divide-[#E5E7EB]'
+            }
           >
             {repIdx !== undefined && (
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2 text-sm font-medium text-slate-700">
+              <div className="mb-2 flex items-center justify-between border-b border-[#E5E7EB] pb-2 text-sm font-normal text-[#52555A]">
                 <span>Pozycja #{repIdx + 1}</span>
                 {repeatingCount > 1 && onChangeRepeatingCount && (
                   <button
                     type="button"
                     onClick={() => onChangeRepeatingCount(-1)}
-                    className="inline-flex items-center gap-1 text-xs font-medium text-rose-600 hover:underline"
+                    className="text-xs font-normal text-[#CA0049] hover:underline"
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
                     Usuń pozycję
                   </button>
                 )}
@@ -122,9 +118,7 @@ export function SectionCard({
               const baseReadOnly = 'readOnly' in leaf ? Boolean(leaf.readOnly) : false;
               const evalState = evaluateStates(fieldStates, answers, baseReadOnly, repIdx);
 
-              if (mode === 'interactive' && !evalState.visible) {
-                return null;
-              }
+              if (mode === 'interactive' && !evalState.visible) return null;
 
               const answerKey = makeAnswerKey(tabTitle, section.techName, leaf.techName, repIdx);
 
@@ -139,6 +133,8 @@ export function SectionCard({
                   isReviewed={reviewedIds.has(leaf.id)}
                   isModified={modifiedIds.has(leaf.id)}
                   onSelect={onSelectField}
+                  onOpenDetails={onOpenDetails}
+                  onUpdateField={onUpdateField}
                   onToggleReviewed={onToggleReviewed}
                   value={answers[answerKey]}
                   onChangeValue={(val) => onAnswerChange(answerKey, val)}

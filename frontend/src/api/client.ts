@@ -1,7 +1,3 @@
-/**
- * Bazowy klient HTTP dla REST API TEAMKAPA (obsługa JWT Bearer i jednolitego formatu błędów).
- */
-
 import type { ApiErrorBody, ApiErrorResponse } from '../types/auditReport';
 
 const TOKEN_STORAGE_KEY = 'teamkapa_jwt_token';
@@ -42,7 +38,7 @@ export function setStoredToken(token: string): void {
       window.sessionStorage.removeItem(TOKEN_STORAGE_KEY);
     }
   } catch {
-    // Środowisko bez sessionStorage (np. tryb prywatny z blokadą)
+    // Brak dostępu do sessionStorage
   }
 }
 
@@ -94,7 +90,7 @@ export async function apiRequestRaw(
     }
     throw new ApiClientError(0, {
       code: 'NETWORK_ERROR',
-      message: 'Brak połączenia z serwerem API. Sprawdź czy backend działa lub przełącz na tryb Demo.',
+      message: 'Brak połączenia z serwerem API. Sprawdź backend lub użyj trybu demonstracyjnego.',
     });
   }
 
@@ -103,7 +99,7 @@ export async function apiRequestRaw(
     try {
       parsed = await response.json();
     } catch {
-      // Odpowiedź nie jest JSON-em (np. 502 z nginx)
+      // Odpowiedź nie jest JSON-em
     }
 
     if (isApiErrorResponse(parsed)) {

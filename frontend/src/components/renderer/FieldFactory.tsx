@@ -1,13 +1,4 @@
 import {
-  AlertCircle,
-  AlertTriangle,
-  Check,
-  ChevronRight,
-  Lock,
-  MapPin,
-  Upload,
-} from 'lucide-react';
-import {
   FIELD_TYPE_LABELS,
   VALIDATOR_LABELS,
   getFieldTitle,
@@ -16,9 +7,8 @@ import {
   type Validator,
 } from '../../types/coiForm';
 import type { FieldAssessment, Issue } from '../../types/auditReport';
-import { describeStateQuery, type AnswerValue } from '../../lib/conditionEvaluator';
-import { Badge } from '../ui/Badge';
-import { CONFIDENCE_STYLES, ConfidenceBadge } from '../audit/ConfidenceBadge';
+import { type AnswerValue } from '../../lib/conditionEvaluator';
+import { Input, Select, Textarea } from '../ui/Input';
 
 interface FieldFactoryProps {
   field: LeafField;
@@ -29,6 +19,8 @@ interface FieldFactoryProps {
   isReviewed?: boolean;
   isModified?: boolean;
   onSelect?: (fieldId: string) => void;
+  onOpenDetails?: (fieldId: string) => void;
+  onUpdateField?: (updated: LeafField) => void;
   onToggleReviewed?: (fieldId: string) => void;
   value?: AnswerValue;
   onChangeValue?: (val: AnswerValue) => void;
@@ -38,14 +30,7 @@ interface FieldFactoryProps {
 
 const SAMPLE_DICT_VALUES: Record<string, string[]> = {
   Kraje: ['Polska', 'Niemcy', 'Czechy', 'Słowacja', 'Ukraina', 'Litwa'],
-  Województwo: [
-    'mazowieckie',
-    'małopolskie',
-    'dolnośląskie',
-    'pomorskie',
-    'śląskie',
-    'wielkopolskie',
-  ],
+  Województwo: ['mazowieckie', 'małopolskie', 'dolnośląskie', 'pomorskie', 'śląskie', 'wielkopolskie'],
   Powiat: ['m. st. Warszawa', 'krakowski', 'wrocławski', 'gdański', 'poznański'],
   Gmina: ['Warszawa', 'Kraków', 'Wrocław', 'Gdańsk', 'Poznań'],
   Miejscowość: ['Warszawa', 'Kraków', 'Wrocław', 'Gdańsk', 'Poznań'],
@@ -61,7 +46,8 @@ export function FieldFactory({
   isReviewed = false,
   isModified = false,
   onSelect,
-  onToggleReviewed,
+  onOpenDetails,
+  onUpdateField,
   value,
   onChangeValue,
   dynamicReadOnly = false,
@@ -72,30 +58,19 @@ export function FieldFactory({
   const validators: readonly Validator[] = 'validation' in field ? field.validation : [];
   const isRequired = validators.includes('REQUIRED');
 
-  // ---------------------------------------------------------------- Tryb interaktywnego wypełniania
+  // ---------------------------------------------------------------- Tryb podglądu wypełniania
   if (mode === 'interactive') {
-    const inputClass =
-      'w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15 focus:outline-none disabled:bg-slate-100 disabled:text-slate-500';
-
     return (
-      <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4">
+      <div className="space-y-2 py-4">
         {field.type !== 'INFO_SECTION' && field.type !== 'CONSENT_SECTION' && (
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <label className="text-sm font-semibold text-slate-900">
+            <label className="text-[15px] font-normal leading-6 text-[#0D0E0E]">
               {title}
-              {isRequired && <span className="ml-1 text-rose-600">*</span>}
+              {isRequired && <span className="ml-1 text-[#CA0049]">*</span>}
             </label>
-            <div className="flex items-center gap-1.5">
-              {readOnly && (
-                <Badge variant="neutral">
-                  <Lock className="h-3 w-3" />
-                  Tylko do odczytu
-                </Badge>
-              )}
-              {'defaultValueType' in field && field.defaultValueType === 'EXTERNAL_SYSTEM' && (
-                <Badge variant="info">{field.defaultValue}</Badge>
-              )}
-            </div>
+            {readOnly && (
+              <span className="text-xs font-normal text-[#52555A]">Tylko do odczytu</span>
+            )}
           </div>
         )}
 
@@ -103,58 +78,58 @@ export function FieldFactory({
           field.description &&
           field.type !== 'INFO_SECTION' &&
           field.type !== 'TEXT_BLOCK' && (
-            <p className="text-xs text-slate-500">{field.description}</p>
+            <p className="text-sm font-normal text-[#52555A]">{field.description}</p>
           )}
 
         {field.type === 'TEXT_FIELD' && (
-          <input
+          <Input
             type="text"
             value={String(value ?? field.defaultValue ?? '')}
             disabled={readOnly}
+            hasError={Boolean(validationError)}
             onChange={(e) => onChangeValue?.(e.target.value)}
-            placeholder={field.tooltipMessage ?? `Wpisz: ${title}`}
-            className={inputClass}
+            placeholder={field.tooltipMessage ?? title}
           />
         )}
 
         {field.type === 'NUMBER' && (
-          <input
+          <Input
             type="number"
             value={String(value ?? '')}
             disabled={readOnly}
+            hasError={Boolean(validationError)}
             onChange={(e) => onChangeValue?.(e.target.value)}
-            className={inputClass}
           />
         )}
 
         {field.type === 'TEXTAREA' && (
-          <textarea
+          <Textarea
             rows={3}
             value={String(value ?? field.defaultValue ?? '')}
             disabled={readOnly}
+            hasError={Boolean(validationError)}
             onChange={(e) => onChangeValue?.(e.target.value)}
-            className={inputClass}
           />
         )}
 
         {field.type === 'DATEPICKER' && (
-          <input
+          <Input
             type="date"
             value={String(value ?? '')}
             disabled={readOnly}
+            hasError={Boolean(validationError)}
             onChange={(e) => onChangeValue?.(e.target.value)}
-            className={inputClass}
           />
         )}
 
         {field.type === 'SELECT' && (
-          <select
+          <Select
             value={String(value ?? field.defaultValue ?? '')}
             disabled={readOnly}
+            hasError={Boolean(validationError)}
             onChange={(e) => onChangeValue?.(e.target.value)}
-            className={inputClass}
           >
-            <option value="">— Wybierz z listy —</option>
+            <option value="">Wybierz z listy</option>
             {field.dictionaryName
               ? (SAMPLE_DICT_VALUES[field.dictionaryName] ?? [field.dictionaryName]).map((opt) => (
                   <option key={opt} value={opt}>
@@ -166,7 +141,7 @@ export function FieldFactory({
                     {opt.name}
                   </option>
                 ))}
-          </select>
+          </Select>
         )}
 
         {field.type === 'RADIO' && (
@@ -176,10 +151,10 @@ export function FieldFactory({
               return (
                 <label
                   key={opt.id}
-                  className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3.5 py-2.5 text-sm transition-colors ${
+                  className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3.5 py-2.5 text-[15px] font-normal text-[#0D0E0E] ${
                     checked
-                      ? 'border-blue-600 bg-blue-50/70 font-medium text-blue-950'
-                      : 'border-slate-200 text-slate-800 hover:bg-slate-50'
+                      ? 'border-[#08255E] bg-[#EEF2FA]'
+                      : 'border-[#E5E7EB] bg-[#FFFFFF] hover:bg-[#F3F3F4]'
                   }`}
                 >
                   <input
@@ -189,7 +164,7 @@ export function FieldFactory({
                     checked={checked}
                     disabled={readOnly}
                     onChange={() => onChangeValue?.(opt.name)}
-                    className="h-4 w-4 text-blue-700"
+                    className="h-4 w-4 accent-[#08255E]"
                   />
                   <span>{opt.name}</span>
                 </label>
@@ -206,7 +181,7 @@ export function FieldFactory({
               return (
                 <label
                   key={opt.id}
-                  className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-800 hover:bg-slate-50"
+                  className="flex cursor-pointer items-center gap-3 rounded-lg border border-[#E5E7EB] bg-[#FFFFFF] px-3.5 py-2.5 text-[15px] font-normal text-[#0D0E0E] hover:bg-[#F3F3F4]"
                 >
                   <input
                     type="checkbox"
@@ -218,7 +193,7 @@ export function FieldFactory({
                         : currentList.filter((v) => v !== opt.name);
                       onChangeValue?.(next);
                     }}
-                    className="h-4 w-4"
+                    className="h-4 w-4 accent-[#08255E]"
                   />
                   <span>{opt.name}</span>
                 </label>
@@ -228,9 +203,8 @@ export function FieldFactory({
         )}
 
         {field.type === 'FILE_UPLOADER' && (
-          <label className="flex cursor-pointer items-center justify-center gap-2.5 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-600 hover:border-blue-500">
-            <Upload className="h-5 w-5 text-slate-400" />
-            <span>{value ? String(value) : 'Wybierz przykładowy plik załącznika…'}</span>
+          <label className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-[#9FA1A5] bg-[#F3F3F4] px-4 py-3 text-sm font-normal text-[#52555A] hover:border-[#08255E]">
+            <span>{value ? String(value) : 'Wybierz plik załącznika'}</span>
             <input
               type="file"
               className="hidden"
@@ -243,19 +217,19 @@ export function FieldFactory({
         )}
 
         {field.type === 'TEXT_BLOCK' && (
-          <div className="rounded-xl bg-slate-50 p-3.5 text-sm leading-relaxed text-slate-700">
+          <div className="rounded-lg border border-[#E5E7EB] bg-[#F3F3F4] p-3.5 text-[15px] font-normal text-[#0D0E0E]">
             {field.description ?? field.title}
           </div>
         )}
 
         {field.type === 'INFO_SECTION' && (
-          <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 text-sm leading-relaxed text-blue-950">
+          <div className="rounded-lg border border-[#E5E7EB] bg-[#EEF2FA] p-3.5 text-[15px] font-normal text-[#0D0E0E]">
             {field.description}
           </div>
         )}
 
         {field.type === 'CONSENT_SECTION' && (
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {field.consentSectionConfig.consents.map((consent, idx) => {
               const checkedList = Array.isArray(value) ? value : [];
               const key = String(idx);
@@ -263,7 +237,7 @@ export function FieldFactory({
               return (
                 <label
                   key={idx}
-                  className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 text-sm leading-relaxed text-slate-800"
+                  className="flex cursor-pointer items-start gap-3 rounded-lg border border-[#E5E7EB] bg-[#F3F3F4] p-3.5 text-[15px] font-normal text-[#0D0E0E]"
                 >
                   <input
                     type="checkbox"
@@ -274,13 +248,11 @@ export function FieldFactory({
                         : checkedList.filter((k) => k !== key);
                       onChangeValue?.(next);
                     }}
-                    className="mt-1 h-4 w-4"
+                    className="mt-1 h-4 w-4 accent-[#08255E]"
                   />
                   <span>
                     {consent.description}
-                    {consent.required && (
-                      <span className="ml-1 font-semibold text-rose-600">*</span>
-                    )}
+                    {consent.required && <span className="ml-1 text-[#CA0049]">*</span>}
                   </span>
                 </label>
               );
@@ -289,146 +261,127 @@ export function FieldFactory({
         )}
 
         {validationError && (
-          <p className="flex items-center gap-1.5 text-xs font-medium text-rose-600">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            {validationError}
-          </p>
+          <p className="text-sm font-normal text-[#CA0049]">{validationError}</p>
         )}
       </div>
     );
   }
 
-  // ---------------------------------------------------------------- Tryb przeglądu urzędnika (czysty, bez szumu)
-  const level = assessment?.level ?? 'HIGH';
-  const style = CONFIDENCE_STYLES[level];
+  // ---------------------------------------------------------------- Tryb weryfikacji (prosta lista z edycją i pewnością)
   const allIssues = [...(assessment?.issues ?? []), ...liveIssues];
-  const hasErrors = allIssues.some((i) => i.severity === 'ERROR');
-  const firstSource = assessment?.sources[0];
+  const isLowConfidence = assessment?.level === 'LOW';
+  const confidencePct = assessment ? Math.round(assessment.confidence * 100) : null;
 
-  // Jedna spokojna linia streszczenia zamiast „zupy z pigułek”
   const metaParts: string[] = [FIELD_TYPE_LABELS[field.type]];
+  if (isRequired) metaParts.push('wymagane');
   const domainValidators = validators.filter((v) => v !== 'REQUIRED');
   if (domainValidators.length > 0) {
     metaParts.push(domainValidators.map((v) => VALIDATOR_LABELS[v]).join(', '));
   }
   if (isChoiceField(field)) {
-    if (field.dictionaryName) {
-      metaParts.push(`Słownik: ${field.dictionaryName}`);
-    } else if (field.options.length > 0) {
-      metaParts.push(`${field.options.length} opcji`);
+    if (field.dictionaryName) metaParts.push(`Słownik: ${field.dictionaryName}`);
+    else if (field.options.length > 0) metaParts.push(`${field.options.length} opcji`);
+  }
+
+  const editableValue =
+    field.type === 'INFO_SECTION'
+      ? field.description
+      : field.type === 'CONSENT_SECTION'
+        ? (field.consentSectionConfig.consents[0]?.description ?? '')
+        : ('title' in field ? (field.title ?? '') : '');
+
+  const handleInlineValueChange = (nextVal: string) => {
+    if (!onUpdateField) return;
+    if (field.type === 'INFO_SECTION') {
+      onUpdateField({ ...field, description: nextVal });
+    } else if (field.type === 'CONSENT_SECTION') {
+      const nextConsents = field.consentSectionConfig.consents.map((c, i) =>
+        i === 0 ? { ...c, description: nextVal } : c,
+      );
+      onUpdateField({
+        ...field,
+        consentSectionConfig: { ...field.consentSectionConfig, consents: nextConsents },
+      });
+    } else {
+      onUpdateField({ ...field, title: nextVal } as LeafField);
     }
-  }
-  if ('defaultValueType' in field && field.defaultValueType === 'EXTERNAL_SYSTEM' && field.defaultValue) {
-    metaParts.push(`Rejestr: ${field.defaultValue}`);
-  } else if ('readOnly' in field && field.readOnly) {
-    metaParts.push('Tylko do odczytu');
-  }
-  if ('states' in field && field.states && field.states.length > 0) {
-    metaParts.push(`Warunkowe (${describeStateQuery(field.states[0].query)})`);
-  }
+  };
 
   return (
     <div
       onClick={() => onSelect?.(field.id)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onSelect?.(field.id);
-        }
-      }}
       data-testid={`field-card-${field.techName}`}
-      className={`group rounded-xl border border-l-4 bg-white p-4 text-left transition-all ${style.border} ${
-        isSelected
-          ? 'border-blue-600 bg-blue-50/25 ring-2 ring-blue-600/20 shadow-sm'
-          : hasErrors
-            ? 'border-rose-300 hover:border-rose-400'
-            : 'border-slate-200 hover:border-slate-300 hover:shadow-xs'
+      className={`cursor-pointer py-2.5 transition-colors ${
+        isSelected ? 'border-l-2 border-l-[#08255E] pl-3' : ''
       }`}
     >
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 flex-1 space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[15px] font-semibold leading-snug text-slate-900">
-              {title}
-              {isRequired && <span className="ml-1 text-rose-600">*</span>}
-            </span>
-            {isModified && <Badge variant="info">Zmieniono</Badge>}
-            {isReviewed && (
-              <Badge variant="success">
-                <Check className="h-3 w-3" />
-                Sprawdzone
-              </Badge>
-            )}
-          </div>
+      <div className="flex flex-col gap-2 sm:grid sm:grid-cols-[minmax(0,420px)_1fr_auto_auto] sm:items-center sm:gap-4">
+        <input
+          id={`inline-field-${field.id}`}
+          type="text"
+          value={editableValue}
+          onFocus={() => onSelect?.(field.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect?.(field.id);
+          }}
+          onChange={(e) => handleInlineValueChange(e.target.value)}
+          aria-label={`Etykieta pola ${title}`}
+          className={`w-full rounded-lg border bg-[#FFFFFF] px-3 py-2 text-[15px] font-normal text-[#0D0E0E] shadow-none focus:outline-none ${
+            isLowConfidence
+              ? 'border-[#CA0049] focus:border-[#CA0049]'
+              : 'border-[#E5E7EB] focus:border-[#08255E]'
+          }`}
+        />
 
-          <p className="text-xs leading-5 text-slate-500">{metaParts.join(' · ')}</p>
+        <div className="flex flex-wrap items-center gap-2 text-[14px] font-normal text-[#374151]">
+          <span>{metaParts.join(' · ')}</span>
+          {isModified && <span className="text-[#08255E]">Zmieniono</span>}
+          {isReviewed && <span className="text-[#065F46]">Sprawdzone</span>}
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          {assessment && (
-            <ConfidenceBadge
-              level={assessment.level}
-              confidence={assessment.confidence}
-              signals={assessment.signals}
-              expandable
-            />
+        <div className="flex items-center justify-between gap-4 sm:contents">
+          {confidencePct !== null ? (
+            <span
+              className={`text-[14px] font-normal tabular-nums ${
+                isLowConfidence ? 'text-[#CA0049]' : 'text-[#374151]'
+              }`}
+            >
+              Pewność: {confidencePct}%
+            </span>
+          ) : (
+            <span />
           )}
-          {onToggleReviewed && (
+
+          {onOpenDetails && (
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                onToggleReviewed(field.id);
+                onOpenDetails(field.id);
               }}
-              title={
-                isReviewed ? 'Cofnij oznaczenie jako sprawdzone' : 'Oznacz pole jako sprawdzone'
-              }
-              className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
-                isReviewed
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                  : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-slate-700'
-              }`}
+              className="shrink-0 text-[15px] font-normal text-[#08255E] hover:underline"
             >
-              <Check className="h-4 w-4" />
+              Szczegóły
             </button>
           )}
-          <ChevronRight className="h-4 w-4 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-blue-600" />
         </div>
       </div>
 
-      {/* Zwięzła linia źródła w dokumencie */}
-      {firstSource && (firstSource.text || firstSource.page) && (
-        <div className="mt-2.5 flex items-center gap-1.5 text-xs text-slate-500">
-          <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-          {firstSource.page && (
-            <span className="shrink-0 font-medium text-slate-600">Str. {firstSource.page}</span>
-          )}
-          {firstSource.text && <span className="truncate">· „{firstSource.text}”</span>}
-        </div>
-      )}
-
-      {/* Tylko istotne ostrzeżenia / błędy */}
       {allIssues.length > 0 && (
-        <ul className="mt-3 space-y-1.5">
+        <ul className="mt-1.5 space-y-0.5">
           {allIssues.map((issue, idx) => (
             <li
               key={`${issue.code}-${idx}`}
-              className={`flex items-start gap-2 rounded-lg px-3 py-2 text-xs leading-relaxed ${
+              className={`text-[14px] font-normal ${
                 issue.severity === 'ERROR'
-                  ? 'bg-rose-50 text-rose-900'
+                  ? 'text-[#CA0049]'
                   : issue.severity === 'WARNING'
-                    ? 'bg-amber-50 text-amber-950'
-                    : 'bg-blue-50 text-blue-900'
+                    ? 'text-[#92400E]'
+                    : 'text-[#374151]'
               }`}
             >
-              {issue.severity === 'ERROR' ? (
-                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-600" />
-              ) : (
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
-              )}
-              <span>{issue.message}</span>
+              {issue.message}
             </li>
           ))}
         </ul>

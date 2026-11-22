@@ -1,9 +1,6 @@
 /**
  * Modele konfiguracji e-formularza COI (1:1 z backend/shared/schemas/coi_form.py
  * oraz backend/shared/schemas/initial_data.py).
- *
- * Klucze JSON są w camelCase, zgodnie ze schematem importu COI — w tym celowa pisownia
- * `repetingSectionGrid`.
  */
 
 export const MAX_FORM_TITLE_LENGTH = 255;
@@ -41,9 +38,7 @@ export type Validator =
   | 'SERIAL_NUMBER_ID_CARD';
 
 export type RequiredOnlyValidator = 'REQUIRED';
-
 export type StateType = 'SHOW' | 'READ_ONLY';
-
 export type DefaultValueType = 'EXTERNAL_SYSTEM';
 
 export const ALL_VALIDATORS: readonly Validator[] = [
@@ -81,23 +76,17 @@ export const INPUT_FIELD_TYPES: ReadonlySet<LeafFieldType> = new Set([
   'DATEPICKER',
 ]);
 
-export const CHOICE_FIELD_TYPES: ReadonlySet<LeafFieldType> = new Set([
-  'CHECKBOX',
-  'SELECT',
-  'RADIO',
-]);
-
 export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   SECTION: 'Sekcja',
   REPEATING_SECTION: 'Sekcja powtarzalna',
   TEXT_FIELD: 'Pole tekstowe',
-  CHECKBOX: 'Wielokrotny wybór (Checkbox)',
+  CHECKBOX: 'Wielokrotny wybór',
   NUMBER: 'Pole liczbowe',
   CONSENT_SECTION: 'Sekcja zgód',
-  SELECT: 'Lista rozwijana (Select)',
+  SELECT: 'Lista rozwijana',
   TEXTAREA: 'Pole wieloliniowe',
-  FILE_UPLOADER: 'Załącznik (Plik)',
-  RADIO: 'Jednokrotny wybór (Radio)',
+  FILE_UPLOADER: 'Załącznik',
+  RADIO: 'Jednokrotny wybór',
   DATEPICKER: 'Data',
   TEXT_BLOCK: 'Blok tekstu',
   INFO_SECTION: 'Sekcja informacyjna',
@@ -268,7 +257,6 @@ export interface SectionField extends BaseField {
   type: SectionFieldType;
   title: string;
   states?: ShowState[];
-  /** Pisownia celowo zgodna ze schematem COI (`importowanyPlikJsonSchemat.json`). */
   repetingSectionGrid: FieldQuestion[];
 }
 
@@ -299,7 +287,6 @@ export interface FormDefinition {
   flow: Flow;
 }
 
-/** 6 oficjalnych słowników COI oraz dozwolone typy pól. */
 export const COI_DICTIONARIES: Record<string, readonly ('SELECT' | 'RADIO' | 'CHECKBOX')[]> = {
   Województwo: ['SELECT'],
   Powiat: ['SELECT'],
@@ -319,8 +306,12 @@ export interface InitialDataEntry {
   fieldType: 'TEXT_FIELD' | 'DATEPICKER' | null;
 }
 
-const RAW_INITIAL_DATA: readonly [InitialDataSource, string, string, 'TEXT_FIELD' | 'DATEPICKER' | null][] = [
-  // PESEL
+const RAW_INITIAL_DATA: readonly [
+  InitialDataSource,
+  string,
+  string,
+  'TEXT_FIELD' | 'DATEPICKER' | null,
+][] = [
   ['PESEL', 'pesel', 'Pesel z PESEL', 'TEXT_FIELD'],
   ['PESEL', 'name', 'Imię z PESEL', 'TEXT_FIELD'],
   ['PESEL', 'surname', 'Nazwisko z PESEL', 'TEXT_FIELD'],
@@ -337,7 +328,6 @@ const RAW_INITIAL_DATA: readonly [InitialDataSource, string, string, 'TEXT_FIELD
   ['PESEL', 'familyName', 'Nazwisko rodowe z PESEL', 'TEXT_FIELD'],
   ['PESEL', 'fatherSurname', 'Nazwisko ojca z PESEL', 'TEXT_FIELD'],
   ['PESEL', 'maritalStatus', 'Stan cywilny z PESEL', null],
-  // PESEL_ADDRESS
   ['PESEL_ADDRESS', 'temporaryAddressVoivodeship', 'Tymczasowy adres zameldowania: województwo z PESEL', 'TEXT_FIELD'],
   ['PESEL_ADDRESS', 'temporaryAddressDistrict', 'Tymczasowy adres zameldowania: region z PESEL', null],
   ['PESEL_ADDRESS', 'temporaryAddressCommunity', 'Tymczasowy adres zameldowania: gmina z PESEL', 'TEXT_FIELD'],
@@ -356,7 +346,6 @@ const RAW_INITIAL_DATA: readonly [InitialDataSource, string, string, 'TEXT_FIELD
   ['PESEL_ADDRESS', 'permanentAddressPostalCode', 'Stały adres zameldowania: Kod pocztowy z PESEL', 'TEXT_FIELD'],
   ['PESEL_ADDRESS', 'permanentAddressHouseNumber', 'Stały adres zameldowania: Numer domu z PESEL', 'TEXT_FIELD'],
   ['PESEL_ADDRESS', 'permanentAddressApartmentNumber', 'Stały adres zameldowania: Numer lokalu z PESEL', 'TEXT_FIELD'],
-  // MLPZ
   ['MLPZ', 'name', 'Imię z MLPZ', 'TEXT_FIELD'],
   ['MLPZ', 'secondName', 'Drugie Imię z MLPZ', 'TEXT_FIELD'],
   ['MLPZ', 'surname', 'Nazwisko z MLPZ', 'TEXT_FIELD'],
@@ -394,19 +383,9 @@ export function isChoiceField(field: LeafField): field is ChoiceField {
   return field.type === 'SELECT' || field.type === 'RADIO' || field.type === 'CHECKBOX';
 }
 
-export function isInputField(field: LeafField): boolean {
-  return INPUT_FIELD_TYPES.has(field.type);
-}
-
 export function getFieldTitle(field: LeafField): string {
-  if ('title' in field && field.title) {
-    return field.title;
-  }
-  if (field.type === 'CONSENT_SECTION') {
-    return 'Sekcja zgód';
-  }
-  if (field.type === 'INFO_SECTION') {
-    return 'Informacja';
-  }
+  if ('title' in field && field.title) return field.title;
+  if (field.type === 'CONSENT_SECTION') return 'Sekcja zgód';
+  if (field.type === 'INFO_SECTION') return 'Informacja';
   return field.techName;
 }
