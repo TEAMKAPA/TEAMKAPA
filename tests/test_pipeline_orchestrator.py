@@ -86,7 +86,10 @@ async def test_representative_form_end_to_end(tmp_path: Path) -> None:
     # Bez kanału wizualnego żadne pole nie jest zielone, a raport mówi dlaczego.
     assert all(a.level is not ConfidenceLevel.HIGH for a in report.fields)
     assert "VISUAL_CHANNEL_UNAVAILABLE" in {i.code for i in report.issues}
-    assert report.document_type == "wniosek_dowod_osobisty"
+    # Wniosek o dowód osobisty jest spoza katalogu (9 formularzy organizatora); bez bazy wiedzy
+    # (testy jednostkowe) typ rozpoznaje dopasowanie leksykalne.
+    assert report.document_type == "unknown"
+    assert report.retrieval is not None and report.retrieval.method == "lexical"
     assert report.document_sha256 == incoming(tmp_path).ref.sha256
     assert not report.demo_mode
 

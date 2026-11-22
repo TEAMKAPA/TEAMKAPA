@@ -92,6 +92,38 @@ class Settings(BaseSettings):
         description="Po jakim czasie bez śladu w kolejce zadanie uznaje się za utracone.",
     )
 
+    # --- baza wiedzy (RAG): katalog typów i zatwierdzone formularze w pgvector ---
+    rag_enabled: bool = Field(
+        default=True,
+        description="Rozpoznawanie typu dokumentu przez kNN w bazie wiedzy i wzorzec podobnego "
+        "formularza w zapytaniach do modelu. False = tylko dopasowanie leksykalne.",
+    )
+    embedding_model: str = Field(
+        default="intfloat/multilingual-e5-small",
+        description="Model embeddingów (Hugging Face, otwarte wagi, MIT) — wbudowany w obraz "
+        "workera; worker nie pobiera modeli z internetu.",
+    )
+    embedding_model_revision: str = Field(
+        default="614241f622f53c4eeff9890bdc4f31cfecc418b3",
+        description="Przypięta rewizja modelu — ta sama w obrazie i w bazie wektorów.",
+    )
+    rag_top_k: int = Field(default=5, ge=1, le=20, description="Liczba kandydatów typu (kNN)")
+    # Kalibracja (eval/rag_classification.py, 9 typów × 5 formatów): podobieństwo do własnego
+    # typu ≥ 0,953, do obcego (leave-one-type-out) ≤ 0,926.
+    rag_accept_similarity: float = Field(
+        default=0.95,
+        ge=0,
+        le=1,
+        description="Podobieństwo (kosinus), od którego typ jest przyjmowany bez pytania modelu.",
+    )
+    rag_reject_similarity: float = Field(
+        default=0.90,
+        ge=0,
+        le=1,
+        description="Podobieństwo, poniżej którego dokument jest nowym typem. Pomiędzy progami "
+        "typ wybiera model językowy spośród kandydatów (albo „nowy typ”).",
+    )
+
     # --- modele językowe: Eden AI (API zgodne z OpenAI), wyłącznie modele z otwartymi wagami ---
     edenai_api_key: SecretStr | None = Field(
         default=None,

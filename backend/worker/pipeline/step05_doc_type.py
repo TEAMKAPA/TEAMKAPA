@@ -8,158 +8,12 @@ from copy import deepcopy
 from difflib import SequenceMatcher
 from typing import Any
 
-# Local registry of approved official Polish administrative form templates.
-TEMPLATE_REGISTRY: list[dict[str, Any]] = [
-    {
-        "template_id": "tpl_dowod_osobisty",
-        "code": "DO-01",
-        "doc_type": "wniosek_dowod_osobisty",
-        "title": "Wniosek o wydanie dowodu osobistego",
-        "supports_proxy": False,
-        "keywords": [
-            "dowod osobisty",
-            "wydanie dowodu",
-            "pesel",
-            "obywatelstwo",
-            "powod zlozenia wniosku",
-            "urzad gminy",
-            "fotografia",
-            "utrata dowodu",
-        ],
-        "default_authority": "Urząd Gminy / Urząd Miasta",
-        "subject_section_title": "Powód złożenia wniosku i dane dowodu",
-        "expected_fields": [
-            "powod_wniosku",
-            "fotografia",
-            "obywatelstwo",
-        ],
-    },
-    {
-        "template_id": "tpl_ceidg_wpis",
-        "code": "CEIDG-1",
-        "doc_type": "wniosek_ceidg",
-        "title": "Wniosek o wpis do ewidencji działalności gospodarczej",
-        "supports_proxy": True,
-        "keywords": [
-            "ceidg",
-            "dzialalnosc gospodarcza",
-            "nip",
-            "regon",
-            "pkd",
-            "forma opodatkowania",
-            "nazwa firmy",
-            "przedsiebiorca",
-        ],
-        "default_authority": "Urząd Miasta / CEIDG",
-        "subject_section_title": "Dane działalności gospodarczej",
-        "expected_fields": [
-            "nazwa_firmy",
-            "nip",
-            "regon",
-            "data_rozpoczecia",
-            "kod_pkd",
-            "forma_opodatkowania",
-        ],
-    },
-    {
-        "template_id": "tpl_usuniecie_drzewa",
-        "code": "DRZ-01",
-        "doc_type": "wniosek_usuniecie_drzewa",
-        "title": "Wniosek o zezwolenie na usunięcie drzewa lub krzewu",
-        "supports_proxy": True,
-        "keywords": [
-            "usuniecie drzewa",
-            "drzewo",
-            "krzew",
-            "obwod pnia",
-            "gatunek drzewa",
-            "dzialka ewidencyjna",
-            "zezwolenie na usuniecie",
-            "nieruchomosc",
-        ],
-        "default_authority": "Wójt / Burmistrz / Prezydent Miasta",
-        "subject_section_title": "Dane drzewa lub krzewu i nieruchomości",
-        "expected_fields": [
-            "numer_dzialki",
-            "gatunek_drzewa",
-            "obwod_pnia",
-            "przyczyna_usuniecia",
-            "plan_nasadzen",
-        ],
-    },
-    {
-        "template_id": "tpl_karta_duzej_rodziny",
-        "code": "KDR-01",
-        "doc_type": "wniosek_karta_duzej_rodziny",
-        "title": "Wniosek o przyznanie Karty Dużej Rodziny",
-        "supports_proxy": False,
-        "keywords": [
-            "karta duzej rodziny",
-            "kdr",
-            "rodzina wielodzietna",
-            "czlonkowie rodziny",
-            "dzieci",
-            "tradycyjna karta",
-            "elektroniczna karta",
-            "stan cywilny",
-        ],
-        "default_authority": "Urząd Gminy / Ośrodek Pomocy Społecznej",
-        "subject_section_title": "Członkowie rodziny i forma karty",
-        "expected_fields": [
-            "forma_karty",
-            "liczba_dzieci",
-            "dane_dziecka",
-        ],
-    },
-    {
-        "template_id": "tpl_urodzenie_dziecka",
-        "code": "USC-UR",
-        "doc_type": "zgloszenie_urodzenia_dziecka",
-        "title": "Zgłoszenie urodzenia dziecka",
-        "supports_proxy": False,
-        "keywords": [
-            "urodzenie dziecka",
-            "akt urodzenia",
-            "urzad stanu cywilnego",
-            "imie dziecka",
-            "plec dziecka",
-            "data urodzenia dziecka",
-            "zameldowanie dziecka",
-            "karta urodzenia",
-        ],
-        "default_authority": "Urząd Stanu Cywilnego",
-        "subject_section_title": "Dane dziecka",
-        "expected_fields": [
-            "imie_dziecka",
-            "nazwisko_dziecka",
-            "data_urodzenia_dziecka",
-            "plec_dziecka",
-        ],
-    },
-    {
-        "template_id": "tpl_kanal_technologiczny",
-        "code": "KT-01",
-        "doc_type": "wniosek_kanal_technologiczny",
-        "title": "Wniosek o zwolnienie z obowiązku budowy kanału technologicznego",
-        "supports_proxy": True,
-        "keywords": [
-            "kanal technologiczny",
-            "zwolnienie z obowiazku",
-            "droga publiczna",
-            "zarzadca drogi",
-            "inwestycja drogowa",
-            "lokalizacja inwestycji",
-            "minister cyfryzacji",
-        ],
-        "default_authority": "Minister Cyfryzacji",
-        "subject_section_title": "Dane inwestycji drogowej",
-        "expected_fields": [
-            "nazwa_inwestycji",
-            "kategoria_drogi",
-            "uzasadnienie_zwolnienia",
-        ],
-    },
-]
+from backend.worker.rag.catalog import catalog_types
+from backend.worker.rag.retrieval import TypeDecision
+
+#: Typy z katalogu RAG — nasze formularze od organizatora. Dopasowanie leksykalne działa,
+#: gdy baza wiedzy (kNN) jest niedostępna albo wyłączona (``RAG_ENABLED=false``).
+TEMPLATE_REGISTRY: list[dict[str, Any]] = catalog_types()
 
 
 def _normalize(text: str) -> str:
@@ -185,7 +39,8 @@ def _score_template(text: str, template: dict[str, Any]) -> tuple[float, list[st
     # 1. Form code exact match (strongest deterministic signal).
     code = template["code"]
     code_score = 0.0
-    if re.search(rf"\b{re.escape(_normalize(code))}\b", norm_text):
+    # Pusty kod (nasze formularze go nie mają) pasowałby do każdego tekstu.
+    if code and re.search(rf"\b{re.escape(_normalize(code))}\b", norm_text):
         code_score = 1.0
         signals.append(f"code:{code}")
 
@@ -265,12 +120,42 @@ def classify_document(
     }
 
 
+def _template_for(decision: TypeDecision, registry: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Wzorzec typu wybranego przez RAG + przykład formularza (jeśli baza go ma)."""
+    if decision.doc_type is None:
+        return None
+    known = next((t for t in registry if t["doc_type"] == decision.doc_type), None)
+    template = (
+        deepcopy(known)
+        if known
+        else {
+            # Typ utworzony z zatwierdzenia (pętla zwrotna) — spoza katalogu.
+            "template_id": f"tpl_{decision.doc_type}",
+            "code": "",
+            "doc_type": decision.doc_type,
+            "title": decision.title or decision.doc_type,
+            "keywords": [],
+            "supports_proxy": True,
+            "default_authority": "Urząd właściwy",
+            "subject_section_title": "Przedmiot wniosku",
+            "expected_fields": [],
+        }
+    )
+    template["example_form"] = decision.example
+    return template
+
+
 def run_step05(
     document: dict[str, Any],
     *,
     registry: list[dict[str, Any]] | None = None,
+    decision: TypeDecision | None = None,
 ) -> dict[str, Any]:
-    """Run Step 05 on a document payload (plain text or extracted elements)."""
+    """Run Step 05 on a document payload (plain text or extracted elements).
+
+    ``decision`` — rozstrzygnięcie z bazy wiedzy (RAG); bez niego typ wybiera dopasowanie
+    leksykalne do katalogu (z progiem ``MIN_TEMPLATE_SCORE``).
+    """
     raw_text = str(document.get("text", "")).strip()
     if not raw_text and isinstance(document.get("elements"), list):
         raw_text = "\n".join(
@@ -279,4 +164,12 @@ def run_step05(
     if document.get("title"):
         raw_text = f"{document['title']}\n{raw_text}".strip()
 
-    return classify_document(raw_text, registry=registry, top_k=5)
+    result = classify_document(raw_text, registry=registry, top_k=5)
+    if decision is None:
+        result["method"] = "lexical"
+        return result
+    templates = registry if registry is not None else TEMPLATE_REGISTRY
+    result["doc_type"] = decision.doc_type or "unknown"
+    result["selected_template"] = _template_for(decision, templates)
+    result["method"] = decision.method
+    return result

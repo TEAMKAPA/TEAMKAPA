@@ -14,7 +14,7 @@ importu są niedozwolone. Normalizacja niczego nie gubi po cichu:
 - nazwy techniczne niezgodne z COI (np. zaczynające się cyfrą) → poprawione razem
   z odwołaniami w warunkach JSONata.
 
-Kształt wyniku jak w plikach eksportowanych przez COI (``tests/fixtures/coi_reference``):
+Kształt wyniku jak w plikach eksportowanych przez COI (``backend/worker/rag/catalog/forms``):
 - układ w jednej kolumnie: ``x=0``, ``cols=3``; pole zajmuje 1 wiersz, sekcja — liczbę pól
   + 1; ``y`` i ``questionOrder`` rosną od 0 (kolejność z etapów zostaje zachowana),
 - opisy sekcji, bloków tekstu, pól tekstowych wielowierszowych i zgód w HTML,

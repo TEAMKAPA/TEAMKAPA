@@ -632,7 +632,13 @@ def run_step07(
                 if first_main_section is None:
                     first_main_section = sec_field
 
-    prompt = fields_prompt(document, form, template["title"] if template else None, FIELDS_SCHEMA)
+    prompt = fields_prompt(
+        document,
+        form,
+        template["title"] if template else None,
+        FIELDS_SCHEMA,
+        example=(template or {}).get("example_form"),
+    )
 
     llm_output = client.generate_structured(
         prompt,

@@ -5,6 +5,7 @@ Uruchomienie: ``arq backend.worker.worker.WorkerSettings
 Healthcheck:  ``arq backend.worker.worker.WorkerSettings --check``
 """
 
+import logging
 from typing import Any, ClassVar
 
 from arq import cron
@@ -14,8 +15,11 @@ from backend.shared.config import get_settings
 from backend.shared.db.pool import create_pool, database_dsn
 from backend.shared.db.repository import PgJobStore
 from backend.shared.jobs import deserialize, serialize
+from backend.worker.rag.embedder import E5Embedder
+from backend.worker.rag.knowledge import PgKnowledgeBase
 from backend.worker.tasks import analyze_document, purge_old_jobs, reconcile_stale_jobs
 
+logger = logging.getLogger(__name__)
 _settings = get_settings()  # fail fast przy błędnej konfiguracji
 
 # Zapas na zapis wyniku po wewnętrznym limicie czasu analizy (JOB_TIMEOUT_SECONDS).
@@ -31,6 +35,22 @@ async def startup(ctx: dict[str, Any]) -> None:
     ctx["settings"] = _settings
     ctx["db_pool"] = await create_pool(database_dsn(_settings), max_size=_settings.db_pool_max_size)
     ctx["store"] = PgJobStore(ctx["db_pool"])
+    ctx["knowledge"] = await _knowledge_base(ctx["db_pool"])
+
+
+async def _knowledge_base(pool: Any) -> PgKnowledgeBase | None:
+    """Baza wiedzy (RAG): model embeddingów i katalog typów. Błąd nie blokuje workera —
+    analiza działa wtedy bez RAG (typ z dopasowania leksykalnego, ostrzeżenie w raporcie)."""
+    if not _settings.rag_enabled:
+        return None
+    embedder = E5Embedder(_settings.embedding_model, _settings.embedding_model_revision)
+    knowledge = PgKnowledgeBase(pool, embedder)
+    try:
+        await knowledge.ensure_catalog()
+    except Exception:
+        logger.exception("Baza wiedzy niedostępna — worker działa bez RAG")
+        return None
+    return knowledge
 
 
 async def shutdown(ctx: dict[str, Any]) -> None:

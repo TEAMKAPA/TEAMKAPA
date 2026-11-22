@@ -6,7 +6,7 @@ zespołu tam, gdzie materiały są niespójne. Kod: `backend/shared/schemas/coi_
 `tests/fixtures/sample_form.json`, oficjalny schemat: `docs/coi/importowanyPlikJsonSchemat.json`.
 
 **Najważniejsze źródło formatu:** konfiguracje wyeksportowane z systemu COI dla dwóch
-wniosków referencyjnych (`tests/fixtures/coi_reference/`). Schemat importu nie ma kluczy
+wniosków referencyjnych (`backend/worker/rag/catalog/forms/`). Schemat importu nie ma kluczy
 wymaganych ani zakazu kluczy dodatkowych — opisuje tylko typy. Tam, gdzie opisy różnią się
 od plików z COI, obowiązuje plik z COI; testy pilnują, że oba wzorce przechodzą nasze modele
 i reguły bez błędów, a wynik ma te same klucze w tej samej kolejności.

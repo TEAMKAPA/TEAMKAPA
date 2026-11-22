@@ -40,6 +40,7 @@ from backend.worker.pipeline.step08_dependencies import (  # noqa: E402
     validate_form_definition,
 )
 from eval.compare_models import (  # noqa: E402
+    BENCHMARK_REGISTRY,
     DEFAULT_MODELS,
     compare_models,
     format_comparison_table,
@@ -220,10 +221,13 @@ class TestLLMClientStructuredOutput:
 
 class TestStep05DocType:
     def test_returns_top_5_candidates_sorted_descending(self) -> None:
-        assert len(TEMPLATE_REGISTRY) >= 5
+        # Katalog pipeline'u: 9 formularzy organizatora. Logika dopasowania leksykalnego
+        # sprawdzana na syntetycznych wzorcach benchmarku (mają kody formularzy).
+        assert len(TEMPLATE_REGISTRY) == 9
         result = classify_document(
             "Formularz CEIDG-1 Wniosek o wpis do ewidencji działalności gospodarczej "
-            "NIP REGON PKD forma opodatkowania"
+            "NIP REGON PKD forma opodatkowania",
+            registry=BENCHMARK_REGISTRY,
         )
         candidates = result["top_candidates"]
 
@@ -238,7 +242,7 @@ class TestStep05DocType:
             "title": "Wniosek o zezwolenie na usunięcie drzewa lub krzewu",
             "text": "Kod DRZ-01, gatunek drzewa, obwód pnia, działka ewidencyjna",
         }
-        result = run_step05(doc)
+        result = run_step05(doc, registry=BENCHMARK_REGISTRY)
         assert len(result["top_candidates"]) == 5
         assert result["doc_type"] == "wniosek_usuniecie_drzewa"
         assert result["selected_template"]["template_id"] == "tpl_usuniecie_drzewa"
@@ -622,15 +626,14 @@ class TestModelComparison:
 class TestStep05TemplateThreshold:
     def test_document_outside_catalog_gets_no_template(self) -> None:
         """Cudzy wzorzec w zapytaniu prowadzi model do zmyślania pól — lepiej brak wzorca."""
-        result = run_step05(
-            {"text": "Wniosek o ustalenie numeru porządkowego nieruchomości\nPESEL"}
-        )
+        result = run_step05({"text": "Wniosek o wydanie dowodu osobistego\nPESEL"})
         assert result["doc_type"] == "unknown"
         assert result["selected_template"] is None
         assert result["top_candidates"]  # kandydaci zostają w wyniku do wglądu
+        assert result["method"] == "lexical"
 
     def test_inflected_title_line_matches_template(self) -> None:
-        text = "Urząd Miasta\nWniosek o wydanie dowodu osobistego\nImię\nNazwisko"
+        text = "Urząd Gminy\nWNIOSEK O STWIERDZENIE NADPŁATY PODATKU\nKwota nadpłaty"
         result = run_step05({"text": text})
-        assert result["doc_type"] == "wniosek_dowod_osobisty"
+        assert result["doc_type"] == "wniosek_nadplata_podatku"
         assert "title" in result["top_candidates"][0]["matched_signals"]

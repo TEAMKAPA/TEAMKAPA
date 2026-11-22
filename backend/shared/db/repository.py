@@ -5,6 +5,8 @@ zadania, które zostało już zakończone (np. uznane za utracone), a zakończon
 zostanie ponownie uruchomione.
 """
 
+import re
+import unicodedata
 from datetime import datetime
 from typing import Any, Protocol
 
@@ -169,6 +171,59 @@ def _approval(row: Any) -> ApprovalRecord:
 def result_json(result: AnalysisResult) -> dict[str, Any]:
     """Wynik w postaci JSON zgodnej z odpowiedzią API (plik COI bez pustych kluczy)."""
     return result.model_dump(mode="json", by_alias=True, exclude_none=True)
+
+
+def document_type_code(title: str) -> str:
+    """Kod nowego typu dokumentu z tytułu formularza (snake_case, bez polskich znaków)."""
+    folded = unicodedata.normalize("NFKD", title.lower().replace("ł", "l"))
+    ascii_text = "".join(ch for ch in folded if not unicodedata.combining(ch))
+    code = re.sub(r"[^a-z0-9]+", "_", ascii_text).strip("_")[:100].rstrip("_")
+    return code or "dokument"
+
+
+async def _feed_knowledge_base(
+    connection: Any, job_id: str, approved_id: int, title: str, form: dict[str, Any]
+) -> None:
+    """Pętla zwrotna RAG: zatwierdzony formularz trafia do bazy wiedzy jako wzorzec typu.
+
+    Wektor dokumentu policzył worker podczas analizy (API nie ma modelu embeddingów).
+    Dokument nierozpoznany (``unknown``) zakłada nowy typ z tytułu formularza. Bez wektora
+    (analiza bez bazy wiedzy) zatwierdzenie zapisuje się, a baza wiedzy zostaje bez zmian.
+    """
+    job = await connection.fetchrow(
+        "SELECT embedding::text AS embedding, embedding_model, sha256, "
+        "result->'report'->>'document_type' AS doc_type FROM jobs WHERE id = $1",
+        job_id,
+    )
+    if job is None or job["embedding"] is None:
+        return
+    doc_type = job["doc_type"]
+    known = doc_type and await connection.fetchval(
+        "SELECT 1 FROM document_types WHERE code = $1", doc_type
+    )
+    if not known:
+        doc_type = document_type_code(title)
+        await connection.execute(
+            "INSERT INTO document_types (code, title, source) VALUES ($1, $2, 'approved') "
+            "ON CONFLICT (code) DO NOTHING",
+            doc_type,
+            title[:255],
+        )
+    await connection.execute(
+        """
+        INSERT INTO knowledge_examples
+            (doc_type, source, sha256, embedding_model, embedding, form, approved_form_id)
+        VALUES ($1, 'approved', $2, $3, $4::vector, $5, $6)
+        ON CONFLICT (approved_form_id) DO UPDATE
+            SET doc_type = EXCLUDED.doc_type, form = EXCLUDED.form, created_at = now()
+        """,
+        doc_type,
+        job["sha256"],
+        job["embedding_model"],
+        job["embedding"],
+        form,
+        approved_id,
+    )
 
 
 class PgJobStore:
@@ -357,21 +412,24 @@ class PgJobStore:
     async def save_approval(
         self, job_id: str, owner: str, sha256: str, form: FormDefinition
     ) -> ApprovalRecord:
-        row = await self._pool.fetchrow(
-            """
-            INSERT INTO approved_forms (job_id, owner, sha256, title, form)
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (job_id) DO UPDATE
-                SET owner = EXCLUDED.owner, title = EXCLUDED.title, form = EXCLUDED.form,
-                    approved_at = now()
-            RETURNING job_id, owner, sha256, title, form, approved_at
-            """,
-            job_id,
-            owner,
-            sha256,
-            form.title,
-            form.to_coi_json(),
-        )
+        coi_json = form.to_coi_json()
+        async with self._pool.acquire() as connection, connection.transaction():
+            row = await connection.fetchrow(
+                """
+                INSERT INTO approved_forms (job_id, owner, sha256, title, form)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (job_id) DO UPDATE
+                    SET owner = EXCLUDED.owner, title = EXCLUDED.title, form = EXCLUDED.form,
+                        approved_at = now()
+                RETURNING id, job_id, owner, sha256, title, form, approved_at
+                """,
+                job_id,
+                owner,
+                sha256,
+                form.title,
+                coi_json,
+            )
+            await _feed_knowledge_base(connection, job_id, row["id"], form.title, coi_json)
         return _approval(row)
 
     async def get_approval(self, job_id: str, owner: str) -> ApprovalRecord | None:

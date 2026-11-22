@@ -69,7 +69,10 @@ def _pipeline(monkeypatch: pytest.MonkeyPatch, behaviour: Any) -> dict[str, int]
     calls = {"n": 0}
 
     async def run(
-        document: IncomingDocument, progress: ProgressReporter, settings: Settings
+        document: IncomingDocument,
+        progress: ProgressReporter,
+        settings: Settings,
+        knowledge: Any = None,
     ) -> AnalysisResult:
         calls["n"] += 1
         await progress.update("text_extraction", 1, 10)

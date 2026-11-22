@@ -77,14 +77,36 @@ Zasady COI dla stron i sekcji:
   „Zgłoszenie …”, „Oświadczenie …”), maks. 255 znaków."""
 
 
+_EXAMPLE_INTRO = (
+    "Wzorzec z bazy wiedzy — zatwierdzona konfiguracja COI formularza tego samego rodzaju "
+    "(strony tematyczne). Zachowaj jego układ, nazwy techniczne, tytuły i typy pól dla "
+    "elementów, które występują w dokumencie; pomiń elementy wzorca, których w dokumencie nie "
+    "ma, i dodaj pola z dokumentu, których wzorzec nie zawiera."
+)
+
+
+def example_block(example: dict[str, Any] | None) -> list[str]:
+    """Wzorzec podobnego formularza (RAG) jako część zapytania — pusty, gdy go nie ma."""
+    if not example:
+        return []
+    from backend.worker.rag.retrieval import example_listing
+
+    listing = example_listing(example)
+    return [f"{_EXAMPLE_INTRO}\n{listing}"] if listing else []
+
+
 def structure_prompt(
-    document: dict[str, Any], template_title: str | None, schema: dict[str, Any]
+    document: dict[str, Any],
+    template_title: str | None,
+    schema: dict[str, Any],
+    example: dict[str, Any] | None = None,
 ) -> str:
     return "\n\n".join(
         [
             "Zaprojektuj strony i sekcje e-formularza dla poniższego wniosku papierowego.",
             _STRUCTURE_RULES,
             f"Rozpoznany rodzaj dokumentu: {template_title or 'nieznany'}",
+            *example_block(example),
             "Treść dokumentu (elementy: [id|strona] tekst):\n" + document_listing(document),
             schema_instruction(schema),
         ]
@@ -138,6 +160,7 @@ def fields_prompt(
     structure: dict[str, Any],
     template_title: str | None,
     schema: dict[str, Any],
+    example: dict[str, Any] | None = None,
 ) -> str:
     return "\n\n".join(
         [
@@ -145,6 +168,7 @@ def fields_prompt(
             "sekcji. Zwróć wszystkie pola do wypełnienia przez wnioskodawcę.",
             _FIELD_RULES,
             f"Rozpoznany rodzaj dokumentu: {template_title or 'nieznany'}",
+            *example_block(example),
             "Sekcje formularza (techName: tytuł):\n" + _sections_listing(structure),
             "Treść dokumentu (elementy: [id|strona] tekst):\n" + document_listing(document),
             schema_instruction(schema),
@@ -206,3 +230,47 @@ def dependencies_prompt(
         )
     parts.append(schema_instruction(schema))
     return "\n\n".join(parts)
+
+
+# ------------------------------------------------------------------ etap 05: wybór typu (RAG)
+
+
+def type_choice_schema(codes: list[str], new_type: str) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "required": ["doc_type"],
+        "properties": {"doc_type": {"type": "string", "enum": [*codes, new_type]}},
+    }
+
+
+def type_choice_prompt(
+    signature: str, candidates: list[tuple[str, str, float, str]], new_type: str
+) -> str:
+    """Model wybiera typ spośród najbliższych w bazie wiedzy albo wskazuje nowy typ.
+
+    ``candidates``: (kod, nazwa, podobieństwo, opis — początek dokumentu wzorcowego albo
+    pola wzorca), żeby model porównał treść, a nie tylko nazwy rodzajów.
+    """
+    listing = "\n".join(
+        f"- {code}: „{title}” (podobieństwo {similarity:.3f})\n"
+        f"  Przykład tego rodzaju: {' '.join(description.split())[:MAX_DESCRIPTION]}"
+        for code, title, similarity, description in candidates
+    )
+    return "\n\n".join(
+        [
+            "Rozpoznaj rodzaj dokumentu urzędowego. Baza wiedzy wskazała najbliższe znane "
+            "rodzaje, ale podobieństwo nie rozstrzyga. Wybierz rodzaj tylko wtedy, gdy dokument "
+            "dotyczy DOKŁADNIE tej samej sprawy — tego samego przedmiotu i celu wniosku lub "
+            "deklaracji (może pochodzić z innego urzędu i mieć inny układ). Podobna dziedzina "
+            "nie wystarcza: np. stwierdzenie nadpłaty podatku i zwrot opłaty skarbowej to różne "
+            f"sprawy, choć obie dotyczą zwrotu pieniędzy. Jeśli żaden nie pasuje, odpowiedz "
+            f"{new_type}.",
+            "Kandydaci:\n" + listing,
+            "Początek dokumentu:\n" + signature[:MAX_SIGNATURE_IN_CHOICE],
+            schema_instruction(type_choice_schema([code for code, *_ in candidates], new_type)),
+        ]
+    )
+
+
+MAX_SIGNATURE_IN_CHOICE = 2000
+MAX_DESCRIPTION = 500

@@ -1,7 +1,7 @@
 """Modele konfiguracji e-formularza COI (``FormDefinition``).
 
 Źródła, w kolejności ważności przy sprzecznościach (patrz docs/coi-specyfikacja.md):
-1. referencyjne konfiguracje od organizatora (``tests/fixtures/coi_reference/``) — tak
+1. referencyjne konfiguracje od organizatora (``backend/worker/rag/catalog/forms/``) — tak
    wygląda plik, który system COI faktycznie eksportuje i importuje,
 2. „Reguły techniczne konfiguracji formularzy i pól” — typy pól, walidatory, stany,
 3. ``importowanyPlikJsonSchemat.json`` i „OpisImportowanegoPlikuJSON” — nazwy i typy kluczy,
