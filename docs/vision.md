@@ -244,20 +244,107 @@ w raporcie przebiegu etap 3 ma `StageReport(status=SKIPPED, detail="OFFICE_FORMA
 
 ## Analiza stron przez Eden AI (Etap D)
 
-Od 2026-11-21 VLM (#11) działa przez **Eden AI**: organizatorzy przekazali zespołowi token i dopuścili
-jego użycie z modelami open-weight. Implementacja powstanie w Etapie D; poniżej zasady.
+Pakiet `backend/worker/vision/vlm` (#11): role i etykiety elementów (tryb 1), podwójny odczyt pól
+(tryb 2), raport przeglądu z kodami powodów. Od 2026-11-21 VLM działa przez **Eden AI**
+(organizatorzy przekazali token i dopuścili modele open-weight).
 
-- **Obrazy stron formularzy, także materiałów COI, są wysyłane do Eden AI** i dalej do dostawcy
-  wybranego modelu. W trybie przypisywania ról razem z obrazem wysyłana jest lista elementów
-  wykrytych przez OpenCV i bloki tekstu strony.
-- Dozwolone są **tylko modele open-weight z licencją permisywną**; model, dostawca w Eden AI i licencja
-  wag trafiają do `docs/licenses.md`.
-- Token tylko w zmiennej środowiskowej `EDENAI_API_KEY` (konfiguracja wspólna z LLM tekstowym,
-  `backend/shared/config.py`). Nie trafia do repozytorium, logów, raportów ani nagranych odpowiedzi.
-- Odpowiedzi są cache'owane w `dane/robocze/` po hashu (obraz strony, model, wersja promptu, schemat,
-  parametry), więc ta sama strona z tym samym promptem nie jest wysyłana ponownie.
-- Implementacja lokalna (Qwen3-VL na vLLM lub llama.cpp) zostaje jako awaryjna za tym samym interfejsem.
-- Testy w CI nie łączą się z siecią: używają fake'a z nagranymi odpowiedziami bez treści COI.
+### Model i przepływ danych
+
+| | |
+|---|---|
+| Model | **Qwen3-VL-30B-A3B-Instruct** (open-weight), wagi `Qwen/Qwen3-VL-30B-A3B-Instruct` |
+| Licencja wag | **Apache-2.0** (`docs/licenses.md`) |
+| Identyfikator w Eden AI | `deepinfra/Qwen/Qwen3-VL-30B-A3B-Instruct` |
+| Dostawca wykonujący | **DeepInfra** (katalog Eden AI: `zero_data_retention: true`, region `us`) |
+
+- **Strony formularzy, także materiałów COI, trafiają do Eden AI i dalej do DeepInfra.** Tryb 1 wysyła
+  obraz strony z naniesionymi numerami elementów OpenCV, listę elementów (ID, kategoria, bbox)
+  i bloki tekstu strony; tryb 2 wysyła sam obraz.
+- Kod przyjmuje tylko modele z listy dozwolonych (`vlm/config.py`); inny identyfikator kończy start
+  błędem walidacji. Jedynym celem połączeń jest skonfigurowany adres Eden AI (tylko `https`,
+  bez wykonywania przekierowań).
+- Token: `EDENAI_API_KEY` jako `SecretStr`, wczytywany przez pydantic-settings ze zmiennej
+  środowiskowej albo z pliku `.env` w katalogu repozytorium (zmienna ma pierwszeństwo). Nie trafia do
+  repozytorium, logów, komunikatów błędów, raportów, cache ani nagranych odpowiedzi.
+- Backend awaryjny `VLM_BACKEND=local`: te same wagi na vLLM lub llama.cpp (API zgodne z OpenAI,
+  `VLM_BASE_URL`, wagi pobiera człowiek); `fake` do testów.
+
+### Wywołanie
+
+- `POST {EDENAI_BASE_URL}/chat/completions`, jedna wiadomość `user` z tekstem i obrazem (`image_url`,
+  adres `data:image/png;base64`). Model w Eden AI nie obsługuje komunikatów systemowych, więc
+  instrukcje są w tej samej wiadomości. **Bez narzędzi.**
+- `temperature` 0; `seed` nie jest wysyłany, bo nie ma go w `supported_parameters` modelu w Eden AI
+  (`VLM_SEND_SEED=true` go włącza). `max_tokens` 4096, obraz zmniejszany do 1600 px dłuższego boku.
+- **Odpowiedź wymuszona schematem JSON** (`response_format: json_schema`, `strict`; model ma
+  `supports_response_schema: true`), a mimo to walidowana Pydantic; przy niezgodności jedna ponowna
+  próba, potem `VLM_INVALID_RESPONSE`. `VLM_RESPONSE_FORMAT=json_object` zostawia samą walidację.
+- Limit czasu 120 s na wywołanie; 429, 5xx i błędy sieci: jedno ponowienie, potem `VLM_UNAVAILABLE`.
+  **Błąd VLM nie zatrzymuje pipeline'u**: elementy zostają z detekcji OpenCV, z kodem powodu.
+- **Cache** w `dane/robocze/vlm_cache/` po SHA-256 z: zadania, hasha obrazu, modelu, wersji promptu,
+  hasha treści promptu, schematu i parametrów. Ta sama strona z tym samym promptem nie jest wysyłana
+  ponownie. **Logi** zawierają tylko zadanie, skrót klucza, model, liczby tokenów, czas i kody błędów;
+  liczniki (`VlmStats`): wywołania, trafienia cache, tokeny, czas, błędy według kodu.
+- **Prompt injection:** prompty są plikami w repozytorium (`backend/worker/vision/prompts/`,
+  wersja = nazwa + skrót treści, więc zmiana promptu unieważnia cache). Tekst dokumentu trafia
+  wyłącznie do bloku `<<<DATA_BEGIN>>>` … `<<<DATA_END>>>` z instrukcją ignorowania poleceń w nim;
+  wartości są kodowane jako JSON, a znaczniki bloku w danych neutralizowane. Model nie ma narzędzi,
+  a każdy wynik przechodzi walidację deterministyczną.
+
+### Tryb 1: role i etykiety
+
+- VLM nadaje każdemu elementowi `cv-*` rolę (`input`, `choice`, `skip`, `e_signature`, `section`,
+  `unknown`) i wskazuje **ID bloku tekstu** będącego etykietą. **VLM nie zmienia bbox ani kategorii
+  elementów OpenCV**, a tekst etykiety pochodzi ze źródła (bloki tekstu), nie z VLM.
+- Walidacja: ID spoza listy i bloki spoza listy są odrzucane; rola niezgodna z kategorią (np. `choice`
+  dla komórki) zamienia się na `unknown`; element z rolą ma `source=both`, bez roli `NO_ROLE`.
+- **Dodawanie `vlm-*`:** tylko miejsca pominięte przez OpenCV (IoU z elementem OpenCV < 0,5), najwyżej
+  `VLM_MAX_ADDED_PER_PAGE` (10) na stronę, pewność 0,3, kod `VLM_ONLY_ELEMENT`.
+- Kratki: element `char_boxes`, którego etykieta wskazuje inną liczbę kratek (PESEL 11, NIP 10,
+  REGON 9 lub 14, KRS 10, kod pocztowy 2 + 3), dostaje `CELLS_LABEL_CONFLICT`.
+
+### Tryb 2: podwójny odczyt
+
+- VLM niezależnie, **tylko z obrazu** (bez tekstu dokumentu w prompcie), wypisuje pola strony:
+  etykieta, rodzaj (`text`, `number`, `date`, `choice`, `signature`, `char_boxes`), bbox, liczba kratek.
+- Porównanie z polami z kanału tekstowego: docelowo LLM tekstowy (krok 7, #8), do tego czasu pola
+  z oczekiwanego JSON-a COI (materiał referencyjny, `ReferenceJsonFieldSource`). Etykiety po
+  normalizacji porównuje rapidfuzz (średnia `token_set_ratio` i `token_sort_ratio`, próg 80, a z
+  potwierdzeniem bbox, IoU ≥ 0,3, próg 50); dopasowanie zachłanne.
+
+### `ACCURACY_MODE`
+
+- `max` (domyślny): podwójny odczyt każdej strony.
+- `balanced`: podwójny odczyt tylko strony z niską pewnością: tryb 1 bez powodzenia, kod strony
+  `LOW_CONTRAST` lub `SKEW_CORRECTED`, brak bloków tekstu (skan), > 20% elementów bez roli, element
+  dodany przez VLM lub etykieta o niskiej pewności OCR, średnia pewność elementów < 0,7. Gdy pola
+  z tekstu nie mają numeru strony, a nie wszystkie strony były czytane, `MISSING_IN_VLM` jest pomijany.
+
+### Kody raportu przeglądu
+
+| Kod | Znaczenie |
+|---|---|
+| `MISSING_IN_VLM` | pole z kanału tekstowego bez pary w odczycie z obrazu |
+| `MISSING_IN_TEXT` | pole odczytane z obrazu bez pary w polach z tekstu |
+| `TYPE_MISMATCH` | para o rodzajach z różnych grup (wpis / wybór / podpis) |
+| `CELLS_LABEL_CONFLICT` | liczba kratek sprzeczna z etykietą |
+| `VLM_ONLY_ELEMENT` | element dodany przez VLM, niewykryty przez OpenCV |
+| `NO_ROLE` | element OpenCV bez roli od VLM |
+| `LOW_OCR_CONFIDENCE` | etykieta z bloku tekstu o niskiej pewności OCR (< 0,6) |
+| `VLM_INVALID_RESPONSE` | odpowiedź niezgodna ze schematem po ponowieniu albo odrzucona część odpowiedzi |
+| `VLM_UNAVAILABLE` | błąd API, limit czasu, brak tokenu |
+
+### Testy i ewaluacja
+
+- Testy (`tests/vision/test_vlm_*.py`, `test_eval_vlm.py`) działają bez sieci i bez tokenu
+  (`httpx.MockTransport`, `FakeVlmClient`). Nagrane odpowiedzi (`tests/vision/recordings/vlm/`) są
+  syntetyczne, wygenerowane ze strony syntetycznej; odpowiedzi z materiałów COI zostają w
+  `dane/robocze/vlm_cache/`. Oba tryby `ACCURACY_MODE` są przetestowane.
+- `python -m eval.visual.vlm_eval --dry-run` buduje te same żądania co przebieg właściwy i szacuje
+  tokeny i koszt bez sieci; bez `--dry-run` uruchamia etap na oznaczonych stronach `dev` (strona
+  bazowa PDF) i liczy metryki OpenCV i fuzji (role). Narzędzie nie ma opcji `holdout`.
+- Bloki tekstu w ewaluacji pochodzą tymczasowo z warstwy tekstowej PDF (`eval/visual/text_blocks.py`);
+  w pipeline dostarczy je krok 02 (#7). Podpięcie etapu w pipeline należy do #16.
 
 ## Konfiguracja i limity
 
