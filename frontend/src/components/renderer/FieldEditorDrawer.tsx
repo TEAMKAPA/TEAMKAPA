@@ -410,7 +410,7 @@ export function FieldEditorDrawer({
                     />
                     <Input
                       type="text"
-                      value={opt.techName}
+                      value={opt.techName ?? ''}
                       onChange={(e) => {
                         const next = field.options.map((o, i) =>
                           i === idx ? { ...o, techName: e.target.value } : o,
@@ -505,7 +505,13 @@ export function FieldEditorDrawer({
 
                   {'defaultValueType' in field && field.defaultValueType === 'EXTERNAL_SYSTEM' ? (
                     <Select
-                      value={'defaultValue' in field ? (field.defaultValue ?? '') : ''}
+                      value={
+                        'defaultValue' in field
+                          ? Array.isArray(field.defaultValue)
+                            ? (field.defaultValue[0] ?? '')
+                            : (field.defaultValue ?? '')
+                          : ''
+                      }
                       onChange={(e) =>
                         onUpdateField({ ...field, defaultValue: e.target.value } as LeafField)
                       }
@@ -519,7 +525,13 @@ export function FieldEditorDrawer({
                   ) : (
                     <Input
                       type="text"
-                      value={'defaultValue' in field ? (field.defaultValue ?? '') : ''}
+                      value={
+                        'defaultValue' in field
+                          ? Array.isArray(field.defaultValue)
+                            ? field.defaultValue.join(', ')
+                            : (field.defaultValue ?? '')
+                          : ''
+                      }
                       onChange={(e) =>
                         onUpdateField({ ...field, defaultValue: e.target.value || undefined } as LeafField)
                       }

@@ -13,6 +13,7 @@ import {
   validateZipCode,
 } from '../lib/zodSchemaBuilder';
 import { makeAnswerKey } from '../lib/conditionEvaluator';
+import { normalizeFormDefinition } from '../types/coiForm';
 import { SAMPLE_FORM } from '../mocks/sampleResponse';
 
 describe('zodSchemaBuilder — polskie walidatory domenowe i reguły COI', () => {
@@ -74,5 +75,20 @@ describe('zodSchemaBuilder — polskie walidatory domenowe i reguły COI', () =>
     const sanitized = sanitizeFormForExport(SAMPLE_FORM);
     expect(sanitized.title).toBe(SAMPLE_FORM.title);
     expect(sanitized.tabs).toHaveLength(SAMPLE_FORM.tabs.length);
+  });
+
+  it('obsługuje nowy klucz repeatingSectionGrid, tablicowe defaultValue oraz option.techName=null bez błędów', () => {
+    const rawFromBackend = JSON.parse(
+      JSON.stringify(SAMPLE_FORM).replaceAll('"repetingSectionGrid"', '"repeatingSectionGrid"'),
+    );
+    rawFromBackend.tabs[1].questions[0].field.repeatingSectionGrid[0].field.defaultValue = ['Polska'];
+    rawFromBackend.tabs[0].questions[1].field.repeatingSectionGrid[0].field.options[0].techName = null;
+
+    const normalized = normalizeFormDefinition(rawFromBackend);
+    const issues = validateFormDefinitionRules(normalized);
+    expect(issues.filter((i) => i.severity === 'ERROR')).toHaveLength(0);
+
+    const exported = sanitizeFormForExport(normalized);
+    expect(exported.tabs[0].questions[0].field).toHaveProperty('repeatingSectionGrid');
   });
 });

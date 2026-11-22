@@ -4,6 +4,7 @@ import {
   INPUT_FIELD_TYPES,
   MAX_FORM_TITLE_LENGTH,
   TECH_NAME_REGEX,
+  getSectionGrid,
   isChoiceField,
   type ConsentSectionField,
   type FormDefinition,
@@ -212,9 +213,9 @@ export function buildFormZodSchema(
   visibleAnswerKeys?: ReadonlySet<string>,
 ): z.ZodObject<Record<string, z.ZodTypeAny>> {
   const shape: Record<string, z.ZodTypeAny> = {};
-  for (const tab of form.tabs) {
-    for (const sq of tab.questions) {
-      for (const fq of sq.field.repetingSectionGrid) {
+  for (const tab of form.tabs ?? []) {
+    for (const sq of tab.questions ?? []) {
+      for (const fq of getSectionGrid(sq.field)) {
         const key = makeAnswerKey(tab.title, sq.field.techName, fq.field.techName);
         shape[key] =
           visibleAnswerKeys && !visibleAnswerKeys.has(key)
@@ -273,15 +274,17 @@ export function validateFormDefinitionRules(form: FormDefinition): Issue[] {
   >();
 
   form.tabs.forEach((tab, t) => {
-    const leavesCount = tab.questions.reduce((s, q) => s + q.field.repetingSectionGrid.length, 0);
+    const questions = Array.isArray(tab.questions) ? tab.questions : [];
+    const leavesCount = questions.reduce((s, q) => s + getSectionGrid(q.field).length, 0);
     if (leavesCount === 0) {
       issues.push(
         errIssue('TAB_EMPTY', `Strona „${tab.title}” musi zawierać co najmniej jedno pole`, `/tabs/${t}`),
       );
     }
 
-    tab.questions.forEach((sq, s) => {
+    questions.forEach((sq, s) => {
       const section = sq.field;
+      const grid = getSectionGrid(section);
       const sPath = `/tabs/${t}/questions/${s}/field`;
       if (!TECH_NAME_REGEX.test(section.techName)) {
         issues.push(
@@ -292,13 +295,13 @@ export function validateFormDefinitionRules(form: FormDefinition): Issue[] {
       sectionKeys.add(secKey);
 
       const fieldTechCounts = new Map<string, number>();
-      for (const fq of section.repetingSectionGrid) {
+      for (const fq of grid) {
         fieldTechCounts.set(fq.field.techName, (fieldTechCounts.get(fq.field.techName) ?? 0) + 1);
       }
 
-      section.repetingSectionGrid.forEach((fq, f) => {
+      grid.forEach((fq, f) => {
         const leaf = fq.field;
-        const fPath = `${sPath}/repetingSectionGrid/${f}/field`;
+        const fPath = `${sPath}/repeatingSectionGrid/${f}/field`;
 
         if (!TECH_NAME_REGEX.test(leaf.techName)) {
           issues.push(
@@ -333,8 +336,8 @@ export function validateFormDefinitionRules(form: FormDefinition): Issue[] {
         const defaultValueType = 'defaultValueType' in leaf ? leaf.defaultValueType : undefined;
         const readOnly = 'readOnly' in leaf ? leaf.readOnly : undefined;
         if (defaultValueType === 'EXTERNAL_SYSTEM') {
-          if (!defaultValue || !INITIAL_DATA_CATALOG.has(defaultValue)) {
-            issues.push(errIssue('INITIAL_DATA_UNKNOWN', `Nieznane dane inicjalne „${defaultValue ?? ''}”`, `${fPath}/defaultValue`, leaf.id));
+          if (typeof defaultValue !== 'string' || !INITIAL_DATA_CATALOG.has(defaultValue)) {
+            issues.push(errIssue('INITIAL_DATA_UNKNOWN', `Nieznane dane inicjalne „${String(defaultValue ?? '')}”`, `${fPath}/defaultValue`, leaf.id));
           }
           if (readOnly !== true) {
             issues.push(errIssue('INITIAL_DATA_NOT_READONLY', 'Dane inicjalne wymagają readOnly: true', `${fPath}/readOnly`, leaf.id));
@@ -379,35 +382,59 @@ function stripEmpty<T extends object>(obj: T): T {
   return out as T;
 }
 
+function cleanDefaultValue(val: unknown): string | string[] | undefined {
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+  if (Array.isArray(val)) {
+    const list = val.map((item) => String(item).trim()).filter((s) => s.length > 0);
+    return list.length > 0 ? list : undefined;
+  }
+  return undefined;
+}
+
+function sanitizeOptions(options?: { id: string; name: string; techName?: string | null }[]) {
+  return (Array.isArray(options) ? options : []).map((o) =>
+    stripEmpty({
+      id: (o.id ?? o.name ?? '').trim(),
+      name: (o.name ?? '').trim(),
+      techName: typeof o.techName === 'string' && o.techName.trim() ? o.techName.trim() : undefined,
+    }),
+  );
+}
+
 function sanitizeLeafField(field: LeafField): LeafField {
   const base = stripEmpty({
     id: field.id,
-    techName: field.techName.trim(),
+    techName: (field.techName ?? '').trim(),
     questionOrder: field.questionOrder,
-    tooltipMessage: field.tooltipMessage?.trim() || undefined,
+    tooltipMessage: typeof field.tooltipMessage === 'string' ? field.tooltipMessage.trim() || undefined : undefined,
   });
 
   const cleanStates = (states?: State[]): State[] | undefined => {
-    if (!states || states.length === 0) return undefined;
+    if (!Array.isArray(states) || states.length === 0) return undefined;
     const valid = states
-      .filter((s) => s.query.trim().length > 0)
+      .filter((s) => typeof s.query === 'string' && s.query.trim().length > 0)
       .map((s) => ({ type: s.type, query: s.query.trim() }));
     return valid.length > 0 ? valid : undefined;
   };
 
   switch (field.type) {
-    case 'TEXT_FIELD':
+    case 'TEXT_FIELD': {
+      const def = cleanDefaultValue(field.defaultValue);
       return stripEmpty({
         ...base,
         type: 'TEXT_FIELD' as const,
         title: field.title?.trim() || undefined,
         description: field.description?.trim() || undefined,
         readOnly: field.readOnly,
-        defaultValue: field.defaultValue?.trim() || undefined,
-        defaultValueType: field.defaultValue?.trim() ? field.defaultValueType : undefined,
-        validation: [...field.validation],
+        defaultValue: def as string | undefined,
+        defaultValueType: def ? field.defaultValueType : undefined,
+        validation: [...(field.validation ?? [])],
         states: cleanStates(field.states),
       });
+    }
     case 'CHECKBOX':
       return stripEmpty({
         ...base,
@@ -416,10 +443,8 @@ function sanitizeLeafField(field: LeafField): LeafField {
         description: field.description?.trim() || undefined,
         readOnly: field.readOnly,
         dictionaryName: field.dictionaryName?.trim() || undefined,
-        options: field.dictionaryName?.trim()
-          ? []
-          : field.options.map((o) => ({ id: o.id, name: o.name.trim(), techName: o.techName.trim() })),
-        validation: field.validation.filter((v): v is 'REQUIRED' => v === 'REQUIRED'),
+        options: field.dictionaryName?.trim() ? [] : sanitizeOptions(field.options),
+        validation: (field.validation ?? []).filter((v): v is 'REQUIRED' => v === 'REQUIRED'),
         states: cleanStates(field.states),
       });
     case 'NUMBER':
@@ -429,10 +454,11 @@ function sanitizeLeafField(field: LeafField): LeafField {
         title: field.title?.trim() || undefined,
         description: field.description?.trim() || undefined,
         readOnly: field.readOnly,
-        validation: field.validation.filter((v): v is 'REQUIRED' => v === 'REQUIRED'),
+        validation: (field.validation ?? []).filter((v): v is 'REQUIRED' => v === 'REQUIRED'),
         states: cleanStates(field.states),
       });
-    case 'SELECT':
+    case 'SELECT': {
+      const def = cleanDefaultValue(field.defaultValue);
       return stripEmpty({
         ...base,
         type: 'SELECT' as const,
@@ -441,36 +467,39 @@ function sanitizeLeafField(field: LeafField): LeafField {
         readOnly: field.readOnly,
         searchEnabled: field.searchEnabled,
         dictionaryName: field.dictionaryName?.trim() || undefined,
-        options: field.dictionaryName?.trim()
-          ? []
-          : field.options.map((o) => ({ id: o.id, name: o.name.trim(), techName: o.techName.trim() })),
-        defaultValue: field.defaultValue?.trim() || undefined,
-        defaultValueType: field.defaultValue?.trim() ? field.defaultValueType : undefined,
-        validation: field.validation.filter((v): v is 'REQUIRED' => v === 'REQUIRED'),
+        options: field.dictionaryName?.trim() ? [] : sanitizeOptions(field.options),
+        defaultValue: def as string | undefined,
+        defaultValueType: def ? field.defaultValueType : undefined,
+        validation: (field.validation ?? []).filter((v): v is 'REQUIRED' => v === 'REQUIRED'),
         states: cleanStates(field.states),
       });
-    case 'TEXTAREA':
+    }
+    case 'TEXTAREA': {
+      const def = cleanDefaultValue(field.defaultValue);
       return stripEmpty({
         ...base,
         type: 'TEXTAREA' as const,
         title: field.title?.trim() || undefined,
         description: field.description?.trim() || undefined,
         readOnly: field.readOnly,
-        defaultValue: field.defaultValue?.trim() || undefined,
-        defaultValueType: field.defaultValue?.trim() ? field.defaultValueType : undefined,
-        validation: field.validation.filter((v): v is 'REQUIRED' => v === 'REQUIRED'),
+        defaultValue: def as string | undefined,
+        defaultValueType: def ? field.defaultValueType : undefined,
+        validation: (field.validation ?? []).filter((v): v is 'REQUIRED' => v === 'REQUIRED'),
         states: cleanStates(field.states),
       });
-    case 'FILE_UPLOADER':
+    }
+    case 'FILE_UPLOADER': {
+      const def = cleanDefaultValue(field.defaultValue);
       return stripEmpty({
         ...base,
         type: 'FILE_UPLOADER' as const,
         title: field.title?.trim() || undefined,
         description: field.description?.trim() || undefined,
-        defaultValue: field.defaultValue?.trim() || undefined,
-        validation: field.validation.filter((v): v is 'REQUIRED' => v === 'REQUIRED'),
+        defaultValue: def as string | undefined,
+        validation: (field.validation ?? []).filter((v): v is 'REQUIRED' => v === 'REQUIRED'),
         states: cleanStates(field.states),
       });
+    }
     case 'RADIO':
       return stripEmpty({
         ...base,
@@ -479,24 +508,24 @@ function sanitizeLeafField(field: LeafField): LeafField {
         description: field.description?.trim() || undefined,
         readOnly: field.readOnly,
         dictionaryName: field.dictionaryName?.trim() || undefined,
-        options: field.dictionaryName?.trim()
-          ? []
-          : field.options.map((o) => ({ id: o.id, name: o.name.trim(), techName: o.techName.trim() })),
-        validation: field.validation.filter((v): v is 'REQUIRED' => v === 'REQUIRED'),
+        options: field.dictionaryName?.trim() ? [] : sanitizeOptions(field.options),
+        validation: (field.validation ?? []).filter((v): v is 'REQUIRED' => v === 'REQUIRED'),
         states: cleanStates(field.states),
       });
-    case 'DATEPICKER':
+    case 'DATEPICKER': {
+      const def = cleanDefaultValue(field.defaultValue);
       return stripEmpty({
         ...base,
         type: 'DATEPICKER' as const,
         title: field.title?.trim() || undefined,
         description: field.description?.trim() || undefined,
         readOnly: field.readOnly,
-        defaultValue: field.defaultValue?.trim() || undefined,
-        defaultValueType: field.defaultValue?.trim() ? field.defaultValueType : undefined,
-        validation: field.validation.filter((v): v is 'REQUIRED' => v === 'REQUIRED'),
+        defaultValue: def as string | undefined,
+        defaultValueType: def ? field.defaultValueType : undefined,
+        validation: (field.validation ?? []).filter((v): v is 'REQUIRED' => v === 'REQUIRED'),
         states: cleanStates(field.states),
       });
+    }
     case 'TEXT_BLOCK': {
       const showOnly = field.states
         ?.filter((s) => s.type === 'SHOW' && s.query.trim().length > 0)
@@ -546,14 +575,14 @@ function sanitizeSection(section: SectionField): SectionField {
     type: section.type,
     title: section.title.trim(),
     states: showOnly && showOnly.length > 0 ? showOnly : undefined,
-    repetingSectionGrid: section.repetingSectionGrid.map((fq) => ({
+    repeatingSectionGrid: getSectionGrid(section).map((fq) => ({
       x: fq.x,
       y: fq.y,
       rows: fq.rows,
       cols: fq.cols,
       field: sanitizeLeafField(fq.field),
     })),
-  });
+  }) as unknown as SectionField;
 }
 
 export function sanitizeFormForExport(form: FormDefinition): FormDefinition {

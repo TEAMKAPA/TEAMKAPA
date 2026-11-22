@@ -95,7 +95,19 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
 export interface Option {
   id: string;
   name: string;
-  techName: string;
+  techName?: string | null;
+}
+
+export function isEmptyHtml(value?: string | null): boolean {
+  if (!value) return true;
+  const stripped = value.replace(/<[^>]*>/g, '').trim();
+  return stripped.length === 0;
+}
+
+export function defaultValueToString(val: string | string[] | undefined | null): string {
+  if (typeof val === 'string') return val;
+  if (Array.isArray(val)) return val[0] ?? '';
+  return '';
 }
 
 export interface State {
@@ -258,6 +270,44 @@ export interface SectionField extends BaseField {
   title: string;
   states?: ShowState[];
   repetingSectionGrid: FieldQuestion[];
+  repeatingSectionGrid?: FieldQuestion[];
+}
+
+export function getSectionGrid(section: SectionField | undefined | null): FieldQuestion[] {
+  if (!section) return [];
+  const raw = section as SectionField & { repeatingSectionGrid?: FieldQuestion[] };
+  if (Array.isArray(raw.repetingSectionGrid)) return raw.repetingSectionGrid;
+  if (Array.isArray(raw.repeatingSectionGrid)) return raw.repeatingSectionGrid;
+  return [];
+}
+
+/**
+ * Normalizuje FormDefinition z API (obsługuje zarówno nowy klucz repeatingSectionGrid
+ * z backendu, jak i starszy repetingSectionGrid).
+ */
+export function normalizeFormDefinition(form: FormDefinition): FormDefinition {
+  const cloned = JSON.parse(JSON.stringify(form)) as FormDefinition;
+  return {
+    ...cloned,
+    title: typeof cloned.title === 'string' ? cloned.title : '',
+    tabs: (Array.isArray(cloned.tabs) ? cloned.tabs : []).map((tab) => ({
+      ...tab,
+      questions: (Array.isArray(tab.questions) ? tab.questions : []).map((sq) => {
+        const grid = getSectionGrid(sq.field);
+        const { repeatingSectionGrid: _drop, ...restField } = sq.field as SectionField & {
+          repeatingSectionGrid?: FieldQuestion[];
+        };
+        return {
+          ...sq,
+          field: {
+            ...restField,
+            repetingSectionGrid: grid,
+          },
+        };
+      }),
+    })),
+    flow: cloned.flow ?? { links: [] },
+  };
 }
 
 export interface SectionQuestion extends GridPosition {

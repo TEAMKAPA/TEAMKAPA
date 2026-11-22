@@ -1,5 +1,10 @@
 import { useMemo, useState } from 'react';
-import { getFieldTitle, type FormDefinition, type LeafField } from '../../types/coiForm';
+import {
+  getFieldTitle,
+  getSectionGrid,
+  type FormDefinition,
+  type LeafField,
+} from '../../types/coiForm';
 import type { FieldAssessment, Issue } from '../../types/auditReport';
 import { evaluateStates, makeAnswerKey, type FormAnswers } from '../../lib/conditionEvaluator';
 import { buildFormZodSchema } from '../../lib/zodSchemaBuilder';
@@ -69,9 +74,9 @@ export function FormRenderer({
 
   const drawerField: LeafField | null = useMemo(() => {
     if (!drawerFieldId) return null;
-    for (const tab of form.tabs) {
-      for (const sq of tab.questions) {
-        for (const fq of sq.field.repetingSectionGrid) {
+    for (const tab of form.tabs ?? []) {
+      for (const sq of tab.questions ?? []) {
+        for (const fq of getSectionGrid(sq.field)) {
           if (fq.field.id === drawerFieldId) return fq.field;
         }
       }
@@ -85,9 +90,9 @@ export function FormRenderer({
     let low = 0;
     let withIssues = 0;
 
-    for (const tab of form.tabs) {
-      for (const sq of tab.questions) {
-        for (const fq of sq.field.repetingSectionGrid) {
+    for (const tab of form.tabs ?? []) {
+      for (const sq of tab.questions ?? []) {
+        for (const fq of getSectionGrid(sq.field)) {
           total += 1;
           const a = assessmentsById.get(fq.field.id);
           const live = liveIssuesByFieldId.get(fq.field.id) ?? [];
@@ -112,11 +117,11 @@ export function FormRenderer({
 
   const handleValidateInteractive = () => {
     const visibleKeys = new Set<string>();
-    for (const tab of form.tabs) {
-      for (const sq of tab.questions) {
+    for (const tab of form.tabs ?? []) {
+      for (const sq of tab.questions ?? []) {
         const secState = evaluateStates(sq.field.states, answers, false);
         if (!secState.visible) continue;
-        for (const fq of sq.field.repetingSectionGrid) {
+        for (const fq of getSectionGrid(sq.field)) {
           const leaf = fq.field;
           const leafStates = 'states' in leaf ? leaf.states : undefined;
           const leafEval = evaluateStates(leafStates, answers, false);
@@ -232,10 +237,9 @@ export function FormRenderer({
       {activeTab && (
         <div className="space-y-5 p-4 sm:px-6 sm:py-5">
           {activeTab.questions.map((sq) => {
+            const grid = getSectionGrid(sq.field);
             const visibleQuestions =
-              mode === 'review'
-                ? sq.field.repetingSectionGrid.filter((fq) => matchesFilter(fq.field))
-                : sq.field.repetingSectionGrid;
+              mode === 'review' ? grid.filter((fq) => matchesFilter(fq.field)) : grid;
 
             return (
               <SectionCard
@@ -282,7 +286,7 @@ export function FormRenderer({
           {mode === 'review' &&
             activeTab.questions.every(
               (sq) =>
-                sq.field.repetingSectionGrid.filter((fq) => matchesFilter(fq.field)).length === 0,
+                getSectionGrid(sq.field).filter((fq) => matchesFilter(fq.field)).length === 0,
             ) && (
               <div className="rounded-lg border border-[#E5E7EB] bg-[#F3F3F4] p-8 text-center text-sm font-normal text-[#52555A]">
                 <p>Brak pól na stronie „{activeTab.title}” dla wybranego filtra.</p>
