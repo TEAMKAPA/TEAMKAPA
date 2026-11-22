@@ -24,6 +24,21 @@ WORKDIR /app
 COPY backend/worker/requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt && rm /tmp/requirements.txt
 
+# Model embeddingów bazy wiedzy (RAG) wbudowany w obraz: worker działa w sieci bez internetu.
+# intfloat/multilingual-e5-small (MIT), rewizja przypięta jak EMBEDDING_MODEL_REVISION
+# w backend/shared/config.py. Tylko wagi safetensors i tokenizer (~490 MB).
+ARG EMBEDDING_MODEL=intfloat/multilingual-e5-small
+ARG EMBEDDING_MODEL_REVISION=614241f622f53c4eeff9890bdc4f31cfecc418b3
+ENV HF_HOME=/opt/huggingface
+RUN python -c "from huggingface_hub import snapshot_download; \
+snapshot_download('${EMBEDDING_MODEL}', revision='${EMBEDDING_MODEL_REVISION}', \
+allow_patterns=['config.json', 'model.safetensors', 'tokenizer.json', \
+'tokenizer_config.json', 'special_tokens_map.json', 'sentencepiece.bpe.model'])" \
+    && chmod -R a+rX /opt/huggingface
+# Po zbudowaniu: żadnych pobrań w czasie działania (tylko pliki z obrazu).
+ENV HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1
+
 COPY backend/__init__.py backend/__init__.py
 COPY backend/shared backend/shared
 COPY backend/worker backend/worker

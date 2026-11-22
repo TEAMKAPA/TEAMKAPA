@@ -90,7 +90,10 @@ class Env:
 
 def _patch_pipeline(monkeypatch: pytest.MonkeyPatch, behaviour: Any) -> None:
     async def run(
-        document: IncomingDocument, progress: ProgressReporter, settings: Settings
+        document: IncomingDocument,
+        progress: ProgressReporter,
+        settings: Settings,
+        knowledge: Any = None,
     ) -> AnalysisResult:
         result: AnalysisResult = await behaviour(document, progress)
         return result

@@ -83,7 +83,7 @@ async def _run(ctx: dict[str, Any], document: dict[str, Any]) -> dict[str, Any]:
     )
     progress = ProgressReporter(redis, ref.job_id, settings.job_result_ttl_seconds)
     try:
-        outcome = await _analyze(redis, ref, settings, progress)
+        outcome = await _analyze(redis, ref, settings, progress, ctx.get("knowledge"))
     except pipeline.PipelineTemporarilyUnavailableError as exc:
         if job_try < settings.max_job_tries:
             delay = retry_delay(settings, job_try)
@@ -115,7 +115,11 @@ async def _run(ctx: dict[str, Any], document: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _analyze(
-    redis: Any, ref: DocumentRef, settings: Settings, progress: ProgressReporter
+    redis: Any,
+    ref: DocumentRef,
+    settings: Settings,
+    progress: ProgressReporter,
+    knowledge: Any = None,
 ) -> JobOutcome:
     """Zwraca wynik albo błąd ostateczny; błąd przejściowy i anulowanie przepuszcza dalej."""
     content: bytes | None = await redis.get(file_key(ref.job_id))
@@ -131,7 +135,7 @@ async def _analyze(
     try:
         async with asyncio.timeout(settings.job_timeout_seconds):
             with document_workspace(ref, content, settings.temp_dir) as incoming:
-                result = await pipeline.run_pipeline(incoming, progress, settings)
+                result = await pipeline.run_pipeline(incoming, progress, settings, knowledge)
         return JobOutcome.succeeded(result)
     except TimeoutError:
         return JobOutcome.failed(

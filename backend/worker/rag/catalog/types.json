@@ -1,0 +1,133 @@
+{
+  "_opis": "Katalog typów dokumentów (RAG): formularze od organizatora (Dane do KAPAForms). Pola 'signature' uzupełnia: python -m backend.worker.rag.build_catalog --source <katalog>. 'form' — konfiguracja COI typu (wzorzec), jeśli jest. Słowa kluczowe to rdzenie bez polskich znaków (dopasowanie leksykalne, gdy baza wiedzy jest niedostępna).",
+  "types": [
+    {
+      "doc_type": "wniosek_numer_porzadkowy",
+      "title": "Wniosek o ustalenie numeru porządkowego nieruchomości",
+      "keywords": [
+        "numer porzadkow",
+        "numeracj",
+        "budynk",
+        "dzialk",
+        "obreb"
+      ],
+      "subject_section_title": "Lokalizacja budynku",
+      "form": "forms/wniosek_numer_porzadkowy.json",
+      "source_folder": "1.",
+      "signature": "(data)\nWnioskodawca: Adresat:\n(imię i nazwisko/nazwa wnioskodawcy)\nWójt Gminy Elbląg\nul. Browarna 85\n82-300 Elbląg\n(adres)\n(nr telefonu/adres e-mail)\nWNIOSEK O USTALENIE NUMERU PORZĄDKOWEGO\nWnoszę o ustalenie numeru porządkowego budynkowi zlokalizowanemu\nw miejscowości  przy ulicy\nnr ewidencyjny działki  w obrębie\n(podpis wnioskodawcy)\nKLAUZULA INFORMACYJNA numeracja porządkowa nieruchomości\nZgodnie z art. 13 ust. 1 i 2 Rozporządzenia Parlamentu Europejskiego i Rady (UE) 2016/679 z dnia 27 kwietnia 2016 r. w sprawie ochrony osób fizycznych w związku przetwarzaniem danych osobowych i w sprawie swobodnego przepływu takich danych oraz uchylenia dyrektywy 95/46/W – ogólne rozporządzenie o ochronie danych, informujemy, iż:\nAdministratorem Państwa danych osobowych jest Gmina Elbląg.\nMożna się z nim kontaktować w następujący sposób:\n- listownie na adres: Urząd Gminy Elbląg 82-300 Elbląg, ul. Browarna 85, - przez e-mail:\nsekretariat@gminaelblag.pl\n- telefonicznie: 55 234-18-84\nWyznaczyliśmy Inspektora Ochrony Danych. Jest to osoba, z którą możesz się kontaktować we wszystkich sprawach dotyczących przetwarzania Twoich danych osobowych oraz korzystania z przysługujących Ci praw związanych z przetwarzaniem danych. Z inspektorem możesz się kontaktować w następujący sposób:\n- listownie na adres: 82-300 Elbląg, ul. Browarna 85\n- przez e-mail:\niod@gminaelblag.pl\nPaństwa dane osobowe będą przetwarzane w celu ustalenia i potwierdzenia numeru porządkowego nieruchomości na podstawie art. 6 ust. 1 lit c RODO, art. 47 a ust. 1 ustawy z dnia 17 maja 1989 r. Prawo geodezyjne i kartograficzne.\nPaństwa dane osobowe możemy przekazywać i udostępniać wyłącznie podmiotom uprawnionym na podstawie obowiązujących przepisów prawa są nimi np.: sądy, organy ścigania, organy podatkowe oraz inne podmioty publiczne, gdy wystąpią z takim żądaniem oczywiście w oparciu o stosowną podstawę prawną. Państwa dane osobowe możemy także przekazywać podmiotom, które przetwarzają je na zlecenie administratora tzw. "
+    },
+    {
+      "doc_type": "wniosek_zwrot_oplaty_skarbowej",
+      "title": "Wniosek o zwrot opłaty skarbowej",
+      "keywords": [
+        "zwrot oplaty skarbowej",
+        "oplat skarbow",
+        "rachunk",
+        "nienależnie"
+      ],
+      "subject_section_title": "Informacje o opłacie",
+      "form": null,
+      "source_folder": "2.",
+      "signature": "strona 1/2\nUrząd Gminy Stawiguda\nWniosek o zwrot opłaty skarbowej\n1. Instrukcja wypełnienia dokumentu\nWYPEŁNIJ WIELKIMI LITERAMI.\nPola wyboru oznaczaj\nlub\nWypełniaj kolorem\nczarnym\nlub\nniebieskim\n2. Dane wnioskodawcy\n2.1. Dane identyfikacyjne\nNazwa /Imię i nazwisko\nNIP\n2.2. Adres siedziby lub miejsca zamieszkania wnioskodawcy\nMiejscowość\nUlica\nNr domu\nNr lokalu\nKod pocztowy\n2.3. Dane kontaktowe wnioskodawcy\n(dane kontaktowe nie są obowiązkowe,\nale ułatwią kontakt w sprawie wniosku)\nNumer telefonu\nAdres poczty elektronicznej\n2.4. Dane pełnomocnika\nImię i nazwisko\nMiejscowość\nUlica\nNr domu\nNr lokalu\nKod pocztowy\nstrona 2/2\n3. Informacje o opłacie skarbowej\nData uiszczenia opłaty\nDD-MM-RRRR\nWysokość opłaty\nNazwa organu,\nw którym zapłacono opłatę\n4. Uzasadnienie wniosku\n(opisz w polu poniżej dlaczego opłata skarbowa, której dotyczy wniosek została błędnie uiszczona\n5. Informacje dotyczące sposobu zwrotu opłaty skarbowej\n(postaw „x” w wybranym polu)\nGotówką w kasie organu\nPrzelewem na rachunek w banku\nJeśli wybierzesz tę formę, wpisz poniżej nr rachunku i dane jego właściciela\nNr rachunku\n6. Podstawa prawna\nArt. 9 ustawy z dnia 16 listopada 2006 r. o opłacie skarbowej\n7. Załączniki\n(postaw „x” w wybranym polu)\nDokument stwierdzający udzielenie pełnomocnictwa\nDowód uiszczenia opłaty skarbowej za pełnomocnictwo\n8. Data i podpis wnioskodawcy\nData\nDD-MM-RRRR\nPodpis\nDane właściciela"
+    },
+    {
+      "doc_type": "wniosek_wydanie_zaswiadczenia",
+      "title": "Wniosek o wydanie zaświadczenia",
+      "keywords": [
+        "zaswiadczeni",
+        "wydanie zaswiadczenia",
+        "cel wydania"
+      ],
+      "subject_section_title": "Informacje o zaświadczeniu",
+      "form": null,
+      "source_folder": "3.",
+      "signature": "Młynary, dnia\n/ imię i nazwisko /\nUrząd Miasta i Gminy Młynary\nul. Dworcowa 29\n14-420 Młynary\n/ adres /\n/ PESEL /\n/ nr telefonu /\nWNIOSEK O WYDANIE ZAŚWIADCZENIA\nProszę o wydanie zaświadczenia o:*\nilości posiadanych użytków rolnych w hektarach fizycznych i przeliczeniowych\nilości dzierżawionych użytków rolnych w hektarach fizycznych i przeliczeniowych\nokresie posiadania gospodarstwa rolnego\nnieposiadaniu użytków rolnych / gospodarstwa rolnego na terenie Gminy Młynary\ninne\nZaświadczenie potrzebne jest celem przedłożenia w\n/podpis/\nINFORMACJE:\nOpłata za wydanie zaświadczenia wynosi 17 zł (od każdego egzemplarza). Obowiązek uiszczenia opłaty skarbowej powstaje z chwilą złożenia wniosku o wydanie zaświadczenia.\nOpłatę skarbową należy wnieść w kasie lub bezgotówkowo na rachunek tut. Urzędu – przed złożeniem wniosku. Konto bankowe Urzędu: Bank PKO BP S.A. 12 1234 1234 1234 1234 1234 1234.\nZwolnienie z opłaty skarbowej określa art. 2, natomiast wyłączenie art. 7 ustawy z dnia 16 listopada 2006 r. o opłacie skarbowej."
+    },
+    {
+      "doc_type": "wniosek_wynajecie_swietlicy",
+      "title": "Wniosek o wynajęcie świetlicy",
+      "keywords": [
+        "swietlic",
+        "wynajec",
+        "regulamin korzystania",
+        "impreza"
+      ],
+      "subject_section_title": "Informacje o wynajmie",
+      "form": null,
+      "source_folder": "4.",
+      "signature": "Załącznik nr 2 do Regulaminu korzystania ze świetlic wiejskich stanowiących własność Gminy Płoskinia\n(miejscowość i data)\n(imię i nazwisko wnioskodawcy)\n(adres zamieszkania)\n(nr telefonu)\nWÓJT GMINY PŁOSKINIA\nPłoskinia 8\n14-526 Płoskinia\nWNIOSEK\nwynajęcie/użyczenie* świetlicy wiejskiej\nProszę o wynajem/użyczenie* świetlicy wiejskiej w   wraz z wyposażeniem w terminie od   do\nCel wynajęcia świetlicy:\n( rodzaj uroczystości, np. wesele, urodziny, zabawa itp.)\nPrzewidywana ilość uczestników :\n3. Osoba odpowiedzialna (pełnoletnia) za utrzymanie porządku i bezpieczeństwa:\n( imię i nazwisko – wnioskodawca, w przypadku innej osoby niż wnioskodawca - zgoda osoby odpowiedzialnej)\n4. Jednocześnie oświadczam, że\n(w przypadku innej osoby niż wnioskodawca, zbiorcze oświadczenie tej osoby załączyć do wniosku)\nzapoznałem/am się z warunkami wynajmu świetlicy wiejskiej,\nw czasie najmu odpowiadam za ład i porządek w świetlicy oraz na ternie przyległym do świetlicy,\nzobowiązuję się do przestrzegania przepisów sanitarnych, BHP i p.poż. w czasie trwania przedsięwzięcia,\nna okres wynajmu ponoszę pełną odpowiedzialność za powierzone mienie.\n(czytelny podpis wnioskodawcy)"
+    },
+    {
+      "doc_type": "wniosek_nadplata_podatku",
+      "title": "Wniosek o stwierdzenie nadpłaty podatku",
+      "keywords": [
+        "nadplat",
+        "podatk",
+        "korekt",
+        "rachunek bankowy"
+      ],
+      "subject_section_title": "Informacje o nadpłacie",
+      "form": "forms/wniosek_nadplata_podatku.json",
+      "source_folder": "5.",
+      "signature": "Ulan-Majorat, dnia\nWnioskodawca:\nNazwisko i imię/Nazwa firmy\nadres zamieszkania/siedziba firmy\nPESEL\nNIP *\nUrząd Gminy\nUlan-Majorat\nUlan-Majorat 57\n21-307 Ulan-Majorat\nWNIOSEK\no stwierdzenie nadpłaty podatku\nNa podstawie art. 75 ustawy z dnia 29 sierpnia 1997 r. - Ordynacja podatkowa (Dz. U. z 2025 r. poz. 111 ze zm.) wnoszę o stwierdzenie nadpłaty z tytułu\nw kwocie\n(rodzaj podatku)\nUzasadnienie:\nKwotę nadpłaty proszę:\n1) zaliczyć na poczet przyszłego zobowiązania podatkowego z tytułu\n2) zwrócić przelewem na wskazany rachunek\npodpis wnioskodawcy lub osoby upoważnionej\nw załączeniu:\n1) korekta deklaracji"
+    },
+    {
+      "doc_type": "wniosek_zajecie_pasa_drogowego",
+      "title": "Wniosek o wydanie zezwolenia na zajęcie pasa drogowego",
+      "keywords": [
+        "pasa drogowego",
+        "pas drogow",
+        "zajeci",
+        "jezdni",
+        "chodnik"
+      ],
+      "subject_section_title": "Informacje o zajęciu pasa drogowego",
+      "form": null,
+      "source_folder": "6.",
+      "signature": "dnia\nWnioskodawca\n(Imię i nazwisko lub nazwa firmy)\nAdres zamieszkania/siedziby\nnr telefonu i e-mail\nUrząd Miasta i Gminy Miasteczko\nWNIOSEK\no wydanie zezwolenia na zajęcie pasa drogowego\nw celu prowadzenia robót\nProszę o wydanie zezwolenia na zajęcie terenu pasa drogowego drogi gminnej   Mui\nnazwa drogi oraz jej nr\nw miejscowości   działka nr ewid.\nw celu wykonania\n/ rodzaj robót i sposób wykonania /\n1. Powierzchnia pasa drogowego potrzebna do zajęcia w celu realizacji w/w zakresu robót:\na/ jezdnia (przy zajęciu do 20% szerokości)\ndługość szerokość razem m\ndługość szerokość razem m\nb/ jezdnia (przy zajęciu powyżej 20% do 50% szerokości)\ndługość szerokość razem m\ndługość szerokość razem m\nc/ jezdnia (przy zajęciu powyżej 50% szerokości)\ndługość szerokość razem m\ndługość szerokość razem m\nd/ chodnik\ndługość szerokość razem m\ndługość szerokość razem m\nCałkowita powierzchnia zajęcia:  m\n2. Roboty będą realizowane w terminie od dnia do dnia\ntj.  dni, zgodnie z załączonym harmonogramem.\n3. Wykonawcą Robót będzie\nnazwa przedsiębiorstwa lub osoby fizycznej\na osobą odpowiedzialną za wykonanie robót zgodnie z projektem i odtworzenie pasa drogowego zgodnie z warunkami określonymi w wydanej decyzji będzie\nzam.   tel.\n4. Załączniki do wniosku:\nOgólny plan orientacyjny w skali 1:10 000 lub 1:25 000 z zaznaczeniem zajmowanego odcinka pasa drogowego.\nSzczegółowy plan sytuacyjny w skali 1:1000 lub 1:500 z zaznaczeniem granic i podaniem wymiarów planowanej powierzchni zajęcia pasa drogowego.\nSzczegółowy harmonogram robót.\nZatwierdzony projekt organizacji ruchu, jeżeli zajęcie pasa drogowego wpływa na ruch drogowy lub ogranicza widoczność na drodze albo powoduje wprowadzenie zmian w istniejącej organizacji ruchu pojazdów lub pieszych.\nInformację o sposobie zabezpieczenia robót, jeżeli nie jest wymagany projekt organizacji ruchu.\nOryginał pełnomocnictwa lub poświadczony odpis pełnomocnictwa stosownie do zapisów art. 33 ustawy Kodeks postępowania administracyjnego wraz z opłatą skarbow"
+    },
+    {
+      "doc_type": "wniosek_psy_ras_agresywnych",
+      "title": "Wniosek o wydanie zezwolenia na hodowanie lub utrzymywanie psa rasy uznawanej za agresywną",
+      "keywords": [
+        "za agresywne",
+        "ras uznawanych",
+        "psa",
+        "hodowan",
+        "utrzymywan"
+      ],
+      "subject_section_title": "Informacje o psie",
+      "form": null,
+      "source_folder": "7.",
+      "signature": "Miejsce na pieczęć Urzędu\nNr sprawy\n/wypełnia organ/\nWrocław, dnia\nUrząd Miejski Wrocławia\nWydział Środowiska\nWniosek o wydanie zezwolenia na hodowanie lub utrzymywanie psów ras uznawanych za agresywne\nDANE IDENTYFIKACYJNE WNIOSKODAWCY\nImię i nazwisko\nUlica:\nNr domu:\nNr lokalu:\nZgodnie z ustawą z dnia 13 października 1995 r. Prawo Łowieckie oraz Rozporządzeniem Ministra Rolnictwa i Rozwoju Wsi z dnia 5 lipca 2010 r. w sprawie warunków i sposobu hodowania i utrzymywania chartów rasowych oraz ich mieszańców proszę o wydanie zezwolenia na hodowanie/utrzymywanie* charta/chartów* lub mieszańca charta/mieszańców chartów*\nINFORMACJA O POSIADANYM PSIE\n(w przypadku więcej niż jednego psa pobrać odpowiednią liczbę załączników z tabelą B z urzędu bądź ze strony BIP).\nPochodzenie psa (metryka**, numer rodowodu**, imię, nazwisko i adres poprzedniego właściciela):\nData szczepienia\n(w przypadku jego braku)\n mikroprocesor\n tatuaż\n brak\nAdres miejsca utrzymywania psa/psów:\nOpis miejsca i warunków w jakich wnioskodawca zamierza utrzymywać psa/psy:\n/* niepotrzebne skreślić/\n/**Opcjonalnie/\nOświadczenia :\nOświadczam, że psy nie będą wykorzystywane do polowań.\nOświadczam, że zaszczepiono psa/psy przeciwko wściekliźnie – w załączeniu kopia dla każdego psa.\nOświadczam, że zapewniam warunki utrzymywania psa, zgodnie z rozporządzeniem Ministra Rolnictwa i Rozwoju Wsi z dnia 5 lipca 2010r.\n/podpis wnioskodawcy/\nINFORMACJE DOTYCZĄCE PRZETWARZANIA TWOICH DANYCH OSOBOWYCH\nNiniejszą informację otrzymuje Pani/Pan w związku z obowiązkami określonymi w art. 13 rozporządzenia Parlamentu Europejskiego i Rady (UE) 2016/679 z dnia 27 kwietnia 2016 r. w sprawie ochrony osób fizycznych w związku z przetwarzaniem danych osobowych i w sprawie swobodnego przepływu takich danych oraz uchylenia dyrektywy 95/46/WE (ogólne rozporządzenie o ochronie danych) (Dziennik Urzędowy Unii Europejskiej z dnia 4 maja 2016 r. L 119/1).\nAdministrator danych\nAdministratorem Pani/Pana danych osobowych jest Prezydent Wrocła"
+    },
+    {
+      "doc_type": "deklaracja_oplata_odpady",
+      "title": "Deklaracja o wysokości opłaty za gospodarowanie odpadami komunalnymi",
+      "keywords": [
+        "odpad",
+        "gospodarowanie odpadami",
+        "deklaracj",
+        "selektywn"
+      ],
+      "subject_section_title": "Informacje o nieruchomości i opłacie",
+      "form": null,
+      "source_folder": "8.",
+      "signature": "1/6\nDEKLARACJA O WYSOKOŚCI MIESIĘCZNEJ OPŁATY\nZA GOSPODAROWANIE ODPADAMI KOMUNALNYMI\nPodstawa prawna:\nart. 6n ust. 1 i 2 i art. 6m ust. 1a i 1b ustawy o utrzymaniu czystości i porządku w gminach (t.j. Dz.U. z 2025r. poz.733)\nSkładający:\nwłaściciel nieruchomości w rozumieniu art. 2 ust. 1 pkt 4 ustawy o utrzymaniu czystości i porządku w gminach, tj. także\nwspółwłaściciel, użytkownik wieczysty oraz jednostka organizacyjna i osoba posiadająca nieruchomości w zarządzie lub\nużytkowaniu, a także inny podmiot władający nieruchomością.\nTermin składania:\nw terminie 14 dni od dnia zamieszkania na danej nieruchomości pierwszego mieszkańca,\nw terminie 14 dni od dnia powstania na nieruchomości odpadów komunalnych lub\nw terminie do 10 dnia miesiąca następującego po miesiącu, w którym nastąpiła zmiana danych stanowiących podstawę\nustalenia opłaty.\nA. ORGAN, DO KTÓREGO SKŁADANA JEST DEKLARACJA\nPrezydent Miasta Gdyni\nAl. Marszałka Piłsudskiego 52/54\n81-382 Gdynia\nB. DANE PODMIOTU ZOBOWIĄZANEGO DO ZŁOŻENIA DEKLARACJI\nB.1 DANE IDENTYFIKACYJNE\n1. Składający deklarację (zaznaczyć właściwą kratkę)\n1. właściciel/współwłaściciel\n2. współwłaściciel (wspólność majątkowa )\n3. najemca/dzierżawca\n4. wspólnota mieszkaniowa\n5. spółdzielnia mieszkaniowa\n6. inny podmiot posiadający nieruchomość\nw zarządzie lub użytkowaniu (należy podać jaki oraz dokładne dane)\n2. Nazwisko, imię / Nazwa pełna\n3. PESEL 4. NIP/REGON (dot. tylko osób prawnych)\nB.2 DANE IDENTYFIKACYJNE WSPÓŁMAŁŻONKA (wypełnić tylko w przypadku zaznaczenia kratki w poz. B 1.1.2)\nNazwisko, imię\nAdres zamieszkania\n7. PESEL\nB.3 ADRES ZAMIESZKANIA / SIEDZIBY\nKraj\nWojewództwo\n10. Gmina\n11. Miejscowość\n12. Ulica\n13. Numer\nnieruchomości/domu\n14. Numer lokalu\n15. Kod pocztowy\n16. Numer/y działki/działek (wypełnić jeżeli nieruchomość nie ma urzędowo nadanego adresu)\n2/6\nB.4 ADRES DO KORESPONDENCJI (wypełnić tylko w przypadku kiedy jest inny niż w poz. B.3)\n17. Kraj\n18. Województwo\n19. Gmina\n20. Miejscowość\n21. Ulica\n22. Numer nieruchomości/domu\n2"
+    },
+    {
+      "doc_type": "wniosek_stypendium_sportowe",
+      "title": "Wniosek o przyznanie stypendium sportowego",
+      "keywords": [
+        "stypendi",
+        "sportow",
+        "nagrod",
+        "wynik sportow"
+      ],
+      "subject_section_title": "Informacje o osiągnięciach sportowych",
+      "form": null,
+      "source_folder": "9.",
+      "signature": "Załącznik Nr 3 do zarządzenia\nNr 245/IX/2024\nPrezydenta Miasta Zgierza\nz dnia 26 listopada 2024 r.\nRodzaje wniosków:\nWniosek o przyznanie stypendium sportowego Rady Miasta Zgierza\nWniosek o przyznanie nagrody sportowej Rady Miasta Zgierza\nWniosek o przyznanie wyróżnienia sportowego Rady Miasta Zgierza\n1 Wniosek o przyznanie stypendium sportowego Rady Miasta Zgierza\n1. Wnioskodawca\nPrezydent Miasta Zgierza\nKlub sportowy\nNależy wypełnić w przypadku Wnioskodawcy – Klubu sportowego.\n□ Dane reprezentanta klubu sportowego z KRS lub innego właściwego rejestru\nImię\nNazwisko\nNumer telefonu (opcjonalnie)\n□ Dane pełnomocnika klubu sportowego\nImię\nNazwisko\nSeria i numer dowodu osobistego\nNumer telefonu (opcjonalnie)\nDo wniosku należy dołączyć pełnomocnictwo potwierdzające uprawnienia do działania w imieniu klubu wraz z potwierdzeniem uiszczenia opłaty skarbowej (opłata skarbowa jest niezbędna w związku z udzielonym pełnomocnictwem).\nDane klubu sportowego\nNazwa klubu sportowego\nTelefon kontaktowy (opcjonalnie)\nAdres siedziby\nKorespondencja z urzędem (\nwybierz preferowany sposób korespondencji z urzędem\nPoczta tradycyjna\nna który adres kierować korespondencję □ adres siedziby klubu □ inny adres korespondencyjny\nSkrzynka ePUAP\nadres skrzynki:\neDoręczenia\n- adres skrzynki:\nOdpis danych z KRS lub innego właściwego rejestru\nDo wniosku należy dołączyć aktualny odpis danych o klubie z Krajowego Rejestru Sądowego lub innego właściwego rejestru, zgodny z bieżącym stanem faktycznym i prawnym.\n2. Dane sportowca\nDane kandydatki/kandydata do stypendium:\nImię\nNazwisko\nData urodzenia\nAdres zameldowania (\nadres zameldowania może być inny niż adres zamieszkania\nAdres do korespondencji (\njeśli różni się od adresu zameldowania)\nDyscypliny sportowe\nWskaż rodzaje dyscyplin sportowych, w których bierze udział osoba objęta wnioskiem, a następnie wybierz konkretne dyscypliny z listy:\nzespołowa\nindywidualna – inna\nindywidualna – lekkoatletyka\nDyscypliny sportowe:\ngimnastyka artystyczna\nhokej\nkarate\nkola"
+    }
+  ]
+}

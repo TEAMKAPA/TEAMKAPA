@@ -70,6 +70,17 @@ Warunek utrzymania statusu: bibliotek z `numpy.libs/` nie modyfikujemy ani nie l
    SBOM CycloneDX Pillow, `PIL.features.check(...)`.
 4. Linkowanie statyczne: wyszukanie symboli (`liq_*`, `fribidi_*`) i nazw `lib*.so` w plikach `.so`.
 
+## Modele wbudowane w obraz workera
+
+| Model | Rewizja | Licencja | Użycie |
+|---|---|---|---|
+| `intfloat/multilingual-e5-small` (Hugging Face) | `614241f622f53c4eeff9890bdc4f31cfecc418b3` | MIT (karta modelu) | wektory dokumentów bazy wiedzy (RAG, `docs/rag.md`) |
+
+- Pobierane przy budowaniu obrazu (`backend/worker/Dockerfile`): wyłącznie `model.safetensors`,
+  `config.json` i pliki tokenizera (~470 MB); w czasie działania `HF_HUB_OFFLINE=1`.
+- Uruchamiany przez `transformers` i `torch` (CPU), które obraz już zawiera dla Docling —
+  bez nowych zależności Pythona.
+
 ## Narzędzia pomocnicze (nie są zależnościami rozwiązania)
 
 | Narzędzie | Wersja | Licencja | Użycie |

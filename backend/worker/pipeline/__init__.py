@@ -12,6 +12,8 @@ Kontrakt błędów dla etapów (decyduje o statusie zadania):
 - ``PipelineNotImplementedError`` — brak wymaganego etapu (501).
 """
 
+from typing import TYPE_CHECKING
+
 from backend.shared.config import Settings
 from backend.shared.schemas.quality import AnalysisResult
 from backend.worker.document import IncomingDocument
@@ -23,6 +25,9 @@ from backend.worker.pipeline.errors import (
 )
 from backend.worker.progress import ProgressReporter
 
+if TYPE_CHECKING:
+    from backend.worker.rag.knowledge import KnowledgeBase
+
 __all__ = [
     "DocumentUnreadableError",
     "PipelineNotImplementedError",
@@ -33,10 +38,18 @@ __all__ = [
 
 
 async def run_pipeline(
-    document: IncomingDocument, progress: ProgressReporter, settings: Settings
+    document: IncomingDocument,
+    progress: ProgressReporter,
+    settings: Settings,
+    knowledge: KnowledgeBase | None = None,
 ) -> AnalysisResult:
-    """Analizuje dokument i zwraca plik importu COI z raportem jakości."""
+    """Analizuje dokument i zwraca plik importu COI z raportem jakości.
+
+    ``knowledge`` — baza wiedzy (RAG) workera; bez niej typ rozpoznaje dopasowanie leksykalne.
+    """
     # Import leniwy: orkiestrator importuje etapy, a te — moduły tego pakietu.
     from backend.worker.pipeline.orchestrator import run_pipeline as run
+    from backend.worker.pipeline.stages import default_stages
 
-    return await run(document, progress, settings)
+    stages = default_stages(settings, knowledge) if knowledge is not None else None
+    return await run(document, progress, settings, stages)

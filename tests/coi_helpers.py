@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_FORM_PATH = ROOT / "tests" / "fixtures" / "sample_form.json"
 OFFICIAL_SCHEMA_PATH = ROOT / "docs" / "coi" / "importowanyPlikJsonSchemat.json"
 #: Konfiguracje wyeksportowane z systemu COI (materiał referencyjny organizatora).
-REFERENCE_DIR = ROOT / "tests" / "fixtures" / "coi_reference"
+REFERENCE_DIR = ROOT / "backend" / "worker" / "rag" / "catalog" / "forms"
 
 _SAMPLE: dict[str, Any] = json.loads(SAMPLE_FORM_PATH.read_text(encoding="utf-8"))
 
