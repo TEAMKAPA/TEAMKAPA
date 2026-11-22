@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   getFieldTitle,
+  getSectionGrid,
+  normalizeFormDefinition,
   type FormDefinition,
   type LeafField,
 } from './types/coiForm';
@@ -56,7 +58,7 @@ function randomHexId(): string {
 }
 
 function cloneForm(form: FormDefinition): FormDefinition {
-  return JSON.parse(JSON.stringify(form)) as FormDefinition;
+  return normalizeFormDefinition(form);
 }
 
 function cloneField(field: LeafField): LeafField {
@@ -67,9 +69,9 @@ function findFieldInForm(
   form: FormDefinition,
   fieldId: string,
 ): { tabId: string; field: LeafField } | null {
-  for (const tab of form.tabs) {
-    for (const sq of tab.questions) {
-      for (const fq of sq.field.repetingSectionGrid) {
+  for (const tab of form.tabs ?? []) {
+    for (const sq of tab.questions ?? []) {
+      for (const fq of getSectionGrid(sq.field)) {
         if (fq.field.id === fieldId) {
           return { tabId: tab.id, field: fq.field };
         }
@@ -82,13 +84,13 @@ function findFieldInForm(
 function replaceFieldInForm(form: FormDefinition, updated: LeafField): FormDefinition {
   return {
     ...form,
-    tabs: form.tabs.map((tab) => ({
+    tabs: (form.tabs ?? []).map((tab) => ({
       ...tab,
-      questions: tab.questions.map((sq) => ({
+      questions: (tab.questions ?? []).map((sq) => ({
         ...sq,
         field: {
           ...sq.field,
-          repetingSectionGrid: sq.field.repetingSectionGrid.map((fq) =>
+          repetingSectionGrid: getSectionGrid(sq.field).map((fq) =>
             fq.field.id === updated.id ? { ...fq, field: updated } : fq,
           ),
         },
@@ -549,9 +551,9 @@ export default function App() {
   const fieldLabels = useMemo(() => {
     const map = new Map<string, string>();
     if (!editedForm) return map;
-    for (const tab of editedForm.tabs) {
-      for (const sq of tab.questions) {
-        for (const fq of sq.field.repetingSectionGrid) {
+    for (const tab of editedForm.tabs ?? []) {
+      for (const sq of tab.questions ?? []) {
+        for (const fq of getSectionGrid(sq.field)) {
           map.set(fq.field.id, getFieldTitle(fq.field));
         }
       }
@@ -648,9 +650,9 @@ export default function App() {
     (proposal: DictionaryProposal) => {
       if (!editedForm) return;
       let targetField: LeafField | null = null;
-      for (const tab of editedForm.tabs) {
-        for (const sq of tab.questions) {
-          for (const fq of sq.field.repetingSectionGrid) {
+      for (const tab of editedForm.tabs ?? []) {
+        for (const sq of tab.questions ?? []) {
+          for (const fq of getSectionGrid(sq.field)) {
             if (fq.field.techName === proposal.tech_name) {
               targetField = fq.field;
             }

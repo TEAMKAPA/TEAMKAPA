@@ -1,8 +1,10 @@
 import {
   FIELD_TYPE_LABELS,
   VALIDATOR_LABELS,
+  defaultValueToString,
   getFieldTitle,
   isChoiceField,
+  isEmptyHtml,
   type LeafField,
   type Validator,
 } from '../../types/coiForm';
@@ -55,7 +57,8 @@ export function FieldFactory({
 }: FieldFactoryProps) {
   const title = getFieldTitle(field);
   const readOnly = ('readOnly' in field && Boolean(field.readOnly)) || dynamicReadOnly;
-  const validators: readonly Validator[] = 'validation' in field ? field.validation : [];
+  const validators: readonly Validator[] =
+    'validation' in field && Array.isArray(field.validation) ? field.validation : [];
   const isRequired = validators.includes('REQUIRED');
 
   // ---------------------------------------------------------------- Tryb podglądu wypełniania
@@ -75,7 +78,7 @@ export function FieldFactory({
         )}
 
         {'description' in field &&
-          field.description &&
+          !isEmptyHtml(field.description) &&
           field.type !== 'INFO_SECTION' &&
           field.type !== 'TEXT_BLOCK' && (
             <p className="text-sm font-normal text-[#52555A]">{field.description}</p>
@@ -84,11 +87,11 @@ export function FieldFactory({
         {field.type === 'TEXT_FIELD' && (
           <Input
             type="text"
-            value={String(value ?? field.defaultValue ?? '')}
+            value={String(value ?? defaultValueToString(field.defaultValue))}
             disabled={readOnly}
             hasError={Boolean(validationError)}
             onChange={(e) => onChangeValue?.(e.target.value)}
-            placeholder={field.tooltipMessage ?? title}
+            placeholder={field.tooltipMessage || title}
           />
         )}
 
@@ -105,7 +108,7 @@ export function FieldFactory({
         {field.type === 'TEXTAREA' && (
           <Textarea
             rows={3}
-            value={String(value ?? field.defaultValue ?? '')}
+            value={String(value ?? defaultValueToString(field.defaultValue))}
             disabled={readOnly}
             hasError={Boolean(validationError)}
             onChange={(e) => onChangeValue?.(e.target.value)}
@@ -124,7 +127,7 @@ export function FieldFactory({
 
         {field.type === 'SELECT' && (
           <Select
-            value={String(value ?? field.defaultValue ?? '')}
+            value={String(value ?? defaultValueToString(field.defaultValue))}
             disabled={readOnly}
             hasError={Boolean(validationError)}
             onChange={(e) => onChangeValue?.(e.target.value)}
