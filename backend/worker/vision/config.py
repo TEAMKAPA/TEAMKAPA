@@ -78,6 +78,7 @@ class DetectConfig(BaseModel):
     otsu_max: int = Field(default=215, ge=1, le=254)
     adaptive_block_mm: Mm = 7.0  # okno średniej lokalnej (cienie i nierówne tło skanów)
     adaptive_offset: int = Field(default=10, ge=0, le=100)
+    light_ink_delta: int = Field(default=45, ge=5, le=200)  # maska kropek: papier minus delta
     low_contrast: int = Field(
         default=110, ge=1, le=255
     )  # różnica papier–tusz poniżej: LOW_CONTRAST

@@ -48,6 +48,7 @@ def rotate_points(
 class Prepared:
     gray: Gray  # szarość (po odszumieniu) obrazu wyprostowanego
     ink: Mask  # tusz obrazu wyprostowanego
+    light_ink: Mask  # czulsza maska tuszu (tylko do kropek, C.5)
     angle: float  # wykryte pochylenie treści w stopniach (0: bez obrotu)
     threshold: int
     contrast: int  # różnica poziomu papieru i tuszu
@@ -89,19 +90,29 @@ def _blur(gray: Gray, cfg: DetectConfig, scale: Scale) -> Gray:
     return np.asarray(blurred, dtype=np.uint8)
 
 
-def binarize(gray: Gray, cfg: DetectConfig, scale: Scale) -> tuple[Mask, int, int]:
-    """Maska tuszu, użyty próg globalny i oszacowany kontrast (papier – tusz)."""
+@dataclass(frozen=True)
+class Binarized:
+    ink: Mask
+    light_ink: Mask  # czulsza maska (drobne, jasne ślady: kropki przy niskim DPI)
+    threshold: int
+    contrast: int
+
+
+def binarize(gray: Gray, cfg: DetectConfig, scale: Scale) -> Binarized:
+    """Maski tuszu, użyty próg globalny i oszacowany kontrast (papier – tusz)."""
     otsu, _ = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     threshold = int(min(max(round(otsu), cfg.otsu_min), cfg.otsu_max))
     block = scale.odd(cfg.adaptive_block_mm)
     local = cv2.boxFilter(
         gray.astype(np.float32), -1, (block, block), borderType=cv2.BORDER_REPLICATE
     )
-    ink: Mask = (gray < threshold) & (gray.astype(np.float32) < local - cfg.adaptive_offset)
+    below_local = gray.astype(np.float32) < local - cfg.adaptive_offset
+    ink: Mask = (gray < threshold) & below_local
     paper = int(np.percentile(gray, 90))
+    light: Mask = (gray < max(threshold, paper - cfg.light_ink_delta)) & below_local
     dark = gray[ink]
     contrast = paper - int(np.median(dark)) if dark.size else 255
-    return ink, threshold, contrast
+    return Binarized(ink=ink, light_ink=light, threshold=threshold, contrast=contrast)
 
 
 def _angles(center: float, half: float, step: float) -> npt.NDArray[np.float64]:
@@ -157,20 +168,21 @@ def _rotate_gray(gray: Gray, angle: float) -> Gray:
 def prepare(image: ImageArray, cfg: DetectConfig, scale: Scale) -> Prepared:
     raw = to_gray(image)
     gray = _blur(raw, cfg, scale)
-    ink, threshold, contrast = binarize(gray, cfg, scale)
-    angle = estimate_skew(ink, cfg, scale)
+    masks = binarize(gray, cfg, scale)
+    angle = estimate_skew(masks.ink, cfg, scale)
     reasons: list[str] = []
     if angle != 0.0:
         gray = _blur(_rotate_gray(raw, -angle), cfg, scale)
-        ink, threshold, contrast = binarize(gray, cfg, scale)
+        masks = binarize(gray, cfg, scale)
         reasons.append(SKEW_CORRECTED)
-    if contrast < cfg.low_contrast:
+    if masks.contrast < cfg.low_contrast:
         reasons.append(LOW_CONTRAST)
     return Prepared(
         gray=gray,
-        ink=ink,
+        ink=masks.ink,
+        light_ink=masks.light_ink,
         angle=angle,
-        threshold=threshold,
-        contrast=contrast,
+        threshold=masks.threshold,
+        contrast=masks.contrast,
         reasons=tuple(reasons),
     )
