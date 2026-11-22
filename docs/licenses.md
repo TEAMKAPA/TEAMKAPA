@@ -133,6 +133,16 @@ Uwagi:
    napisy licencji i flagi `--enable-*` konfiguracji FFmpeg w plikach binarnych, wersja OpenSSL
    (`OpenSSL 1.1.1w`), symbole `__itt_*`, `cv2.getBuildInformation()` (IPP, ITT, zależności 3rdparty).
 
+## PyTorch w wersji CPU (bez bibliotek NVIDIA)
+
+Docling zależy od PyTorch. Domyślne koła `torch` z PyPI dla Linuksa to wersja CUDA, która
+dociąga ~4 GB bibliotek `nvidia-*` (cuBLAS, cuDNN, NCCL… — licencja własnościowa NVIDIA, nie
+open source) i `triton`. Rozwiązanie działa bez GPU, więc obraz workera i CI instalują
+najpierw `backend/worker/requirements-torch-cpu.txt` (indeks `download.pytorch.org/whl/cpu`,
+`torch==2.15.0+cpu`, `torchvision==0.29.2+cpu`, BSD-3-Clause), a dopiero potem
+`requirements.txt` — pip uznaje torch za spełniony i nie pobiera wersji CUDA. Sprawdzone:
+po tej kolejności w środowisku nie ma żadnego pakietu `nvidia-*` ani `triton`.
+
 ## Modele wbudowane w obraz workera
 
 | Model | Rewizja | Licencja | Użycie |

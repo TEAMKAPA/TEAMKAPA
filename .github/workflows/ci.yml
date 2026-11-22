@@ -79,9 +79,14 @@ jobs:
             requirements-dev.txt
             backend/api/requirements.txt
             backend/worker/requirements.txt
+            backend/worker/requirements-torch-cpu.txt
 
       - name: Install dependencies
-        run: python -m pip install --upgrade pip && python -m pip install -r requirements-dev.txt
+        # PyTorch CPU przed resztą — bez kół CUDA (~4 GB), jak w obrazie workera.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/worker/requirements-torch-cpu.txt
+          python -m pip install -r requirements-dev.txt
 
       - name: Run Ruff check
         run: ruff check .
@@ -172,6 +177,8 @@ jobs:
 
           python -m venv /tmp/license-audit-venv
           /tmp/license-audit-venv/bin/python -m pip install --upgrade pip
+          # Te same koła PyTorch co w obrazie workera (CPU, bez bibliotek NVIDIA).
+          /tmp/license-audit-venv/bin/pip install -r backend/worker/requirements-torch-cpu.txt
           for req in "${REQ_FILES[@]}"; do
             echo "Installing dependencies from $req..."
             /tmp/license-audit-venv/bin/pip install -r "$req"
