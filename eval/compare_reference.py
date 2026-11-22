@@ -12,7 +12,7 @@ na pliku wniosku i porównuje wynik z referencyjnym JSON-em COI:
 Przykład (tryb demonstracyjny, bez modelu):
 
     python eval/compare_reference.py --demo \\
-        --reference tests/fixtures/coi_reference/wniosek_numer_porzadkowy.json \\
+        --reference backend/worker/rag/catalog/forms/wniosek_numer_porzadkowy.json \\
         "Wniosek o ustalenie numeru porządkowego nieruchomości.pdf"
 
 Z prawdziwym modelem: bez ``--demo``, z ``EDENAI_API_KEY`` w środowisku (koszt po stronie
@@ -196,13 +196,50 @@ def compare_forms(predicted: dict[str, Any], expected: dict[str, Any]) -> Compar
 # ------------------------------------------------------------------ uruchomienie pipeline'u
 
 
-async def run_document(path: Path, content: bytes, *, demo: bool) -> dict[str, Any]:
+class CatalogKnowledgeBase:
+    """Baza wiedzy w pamięci z katalogu typów (bez PostgreSQL) — do ewaluacji RAG.
+
+    Te same wektory (e5) i ta sama decyzja co w workerze; ``exclude`` usuwa typy z bazy
+    (leave-one-type-out: czy dokument spoza bazy zostanie rozpoznany jako nowy typ).
+    """
+
+    def __init__(self, embedder: Any, exclude: frozenset[str] = frozenset()) -> None:
+        from backend.worker.rag.catalog import catalog_form, catalog_types
+
+        self._embedder = embedder
+        types = [t for t in catalog_types() if t["doc_type"] not in exclude]
+        vectors = embedder.embed([t["signature"] for t in types])
+        self._entries = [
+            (t["doc_type"], t["title"], v, catalog_form(t))
+            for t, v in zip(types, vectors, strict=True)
+        ]
+
+    async def retrieve(self, *, job_id: str, sha256: str, signature: str, top_k: int) -> Any:
+        from backend.worker.rag.knowledge import Candidate, Retrieval
+
+        (vector,) = await asyncio.to_thread(self._embedder.embed, [signature])
+        candidates = sorted(
+            (
+                Candidate(code, title, sum(a * b for a, b in zip(vector, v, strict=True)),
+                          "catalog", form)
+                for code, title, v, form in self._entries
+            ),
+            key=lambda c: c.similarity,
+            reverse=True,
+        )  # fmt: skip
+        return Retrieval(candidates[:top_k], self._embedder.model_name)
+
+
+async def run_document(
+    path: Path, content: bytes, *, demo: bool, knowledge: Any = None
+) -> dict[str, Any]:
     """Cały pipeline na pliku; zwraca ``{"form", "report"}`` jak API."""
     from backend.api.file_validators import CANONICAL_MIME, EXTENSION_ALIASES
     from backend.shared.config import Settings
     from backend.shared.jobs import DocumentRef
     from backend.worker.document import document_workspace
     from backend.worker.pipeline.orchestrator import run_pipeline
+    from backend.worker.pipeline.stages import default_stages
     from backend.worker.progress import ProgressReporter
 
     class _NullProgress(ProgressReporter):
@@ -228,8 +265,9 @@ async def run_document(path: Path, content: bytes, *, demo: bool) -> dict[str, A
         owner="eval",
     )
     settings = Settings(llm_demo_mode=demo)
+    stages = default_stages(settings, knowledge)
     with document_workspace(ref, content) as document:
-        result = await run_pipeline(document, _NullProgress(), settings)
+        result = await run_pipeline(document, _NullProgress(), settings, stages)
     return {"form": result.form.to_coi_json(), "report": result.report.model_dump(mode="json")}
 
 
@@ -252,6 +290,11 @@ def _print(name: str, comparison: Comparison, report: dict[str, Any]) -> None:
     for assessment in report.get("fields", []):
         levels[assessment["level"]] = levels.get(assessment["level"], 0) + 1
     print(f"błędy reguł COI: {len(errors)}; pewność pól: {levels}; usage: {report.get('usage')}")
+    retrieval = report.get("retrieval") or {}
+    print(
+        f"typ: {report.get('document_type')} (metoda {retrieval.get('method')}, "
+        f"podobieństwo {retrieval.get('similarity')}, wzorzec: {retrieval.get('example_source')})"
+    )
     print("brakujące (wzorzec):", comparison.missing[:25])
     print("nadmiarowe (wynik):", comparison.extra[:25])
 
@@ -262,12 +305,32 @@ def main() -> None:
     parser.add_argument("--reference", type=Path, required=True, help="JSON wyeksportowany z COI")
     parser.add_argument("--demo", action="store_true", help="bez modelu (LLM_DEMO_MODE)")
     parser.add_argument("--out", type=Path, help="katalog na wyniki (JSON) i metryki")
+    parser.add_argument(
+        "--rag", action="store_true", help="baza wiedzy z katalogu (model e5, bez PostgreSQL)"
+    )
+    parser.add_argument(
+        "--exclude-type",
+        action="append",
+        default=[],
+        help="typ usunięty z bazy wiedzy (leave-one-type-out); można podać kilka razy",
+    )
     args = parser.parse_args()
+
+    knowledge = None
+    if args.rag:
+        from backend.shared.config import Settings
+        from backend.worker.rag.embedder import E5Embedder
+
+        settings = Settings()
+        embedder = E5Embedder(settings.embedding_model, settings.embedding_model_revision)
+        knowledge = CatalogKnowledgeBase(embedder, frozenset(args.exclude_type))
 
     expected = json.loads(args.reference.read_text(encoding="utf-8"))
     summary: dict[str, Any] = {}
     for path in args.documents:
-        result = asyncio.run(run_document(path, path.read_bytes(), demo=args.demo))
+        result = asyncio.run(
+            run_document(path, path.read_bytes(), demo=args.demo, knowledge=knowledge)
+        )
         comparison = compare_forms(result["form"], expected)
         _print(path.name, comparison, result["report"])
         summary[path.name] = asdict(comparison)

@@ -20,7 +20,7 @@ z otwartymi wagami, wołane przez API Eden AI (patrz [Modele językowe](#modele-
 | `migrate` | obraz `api` | jednorazowo stosuje migracje schematu (`db/migrations`) | — |
 | `api` | `python:3.14.10-alpine3.24` | REST API (FastAPI), JWT, walidacja plików | `8000` |
 | `worker` | `python:3.14.10-slim-trixie` | pipeline przetwarzania (arq) | — |
-| `postgres` | `pgvector/pgvector:0.8.7-pg18-trixie` | zadania, wyniki, zatwierdzone formularze | — |
+| `postgres` | `pgvector/pgvector:0.8.7-pg18-trixie` | zadania, wyniki, zatwierdzone formularze, baza wiedzy RAG (pgvector) | — |
 | `valkey` | `valkey/valkey:9.0.8-alpine3.24` | kolejka zadań batch | — |
 | `llm-gateway` | `nginxinc/nginx-unprivileged:1.31.7-alpine3.24` | jedyne wyjście do internetu: zapytania do Eden AI, dokłada klucz API | — |
 | `frontend` *(profil `frontend`)* | `node:24.22.3-alpine3.24` → `nginxinc/nginx-unprivileged:1.31.7-alpine3.24` | interfejs urzędnika | `8080` |
@@ -219,7 +219,9 @@ Apache 2.0; tekst i obraz, tryb JSON). Wybór modelu ostatecznie rozstrzyga skry
    (`VisualAnalyzer`, krok 03, #10/#11). Kontrakty: `pipeline/contracts.py`, rejestr
    implementacji: `pipeline/stages.py`.
 2. **Etapy 05–09** (#6, #8) — typ wniosku, struktura, pola, zależności, reguły i słowniki.
-   Wywołania modelu działają w wątku, z limitem `LLM_TIMEOUT_SECONDS`.
+   Wywołania modelu działają w wątku, z limitem `LLM_TIMEOUT_SECONDS`. Typ wniosku i wzorzec
+   podobnego formularza daje baza wiedzy (RAG: e5-small + pgvector, katalog naszych typów,
+   pętla zwrotna z zatwierdzeń) — [`docs/rag.md`](docs/rag.md).
 3. **Normalizacja** (`pipeline/normalize.py`) — wynik etapów → plik importu COI. Źródła pól,
    propozycje słowników i konflikty reguł trafiają do raportu, a każda poprawka (pole poza
    sekcją, klucz niedozwolony dla typu, nazwa techniczna, dane inicjalne bez źródła) jest
