@@ -313,9 +313,15 @@ export function validateFormDefinitionRules(form: FormDefinition): Issue[] {
             errIssue('TECHNAME_DUPLICATE_IN_SECTION', `techName „${leaf.techName}” powtarza się w sekcji`, fPath, leaf.id),
           );
         }
-        if (tab.type === 'FINISH' && leaf.type !== 'INFO_SECTION') {
+        // Jak w backendzie i plikach COI: strona końcowa ma sekcję z blokiem tekstu (TEXT_BLOCK).
+        if (tab.type === 'FINISH' && leaf.type !== 'INFO_SECTION' && leaf.type !== 'TEXT_BLOCK') {
           issues.push(
-            errIssue('FINISH_ONLY_INFO_SECTION', `Na stronie FINISH dozwolone jest tylko INFO_SECTION`, fPath, leaf.id),
+            errIssue(
+              'FINISH_ONLY_INFORMATIONAL',
+              'Na stronie FINISH dozwolone są wyłącznie pola informacyjne (TEXT_BLOCK, INFO_SECTION)',
+              fPath,
+              leaf.id,
+            ),
           );
         }
         if (INPUT_FIELD_TYPES.has(leaf.type) && !('title' in leaf && leaf.title?.trim())) {
@@ -336,10 +342,13 @@ export function validateFormDefinitionRules(form: FormDefinition): Issue[] {
         const defaultValueType = 'defaultValueType' in leaf ? leaf.defaultValueType : undefined;
         const readOnly = 'readOnly' in leaf ? leaf.readOnly : undefined;
         if (defaultValueType === 'EXTERNAL_SYSTEM') {
-          if (typeof defaultValue !== 'string' || !INITIAL_DATA_CATALOG.has(defaultValue)) {
+          const initialData =
+            typeof defaultValue === 'string' ? INITIAL_DATA_CATALOG.get(defaultValue) : undefined;
+          if (!initialData) {
             issues.push(errIssue('INITIAL_DATA_UNKNOWN', `Nieznane dane inicjalne „${String(defaultValue ?? '')}”`, `${fPath}/defaultValue`, leaf.id));
           }
-          if (readOnly !== true) {
+          // Dane kontaktowe i adresowe z MLPZ mogą zostać edytowalne (jak w formularzach COI).
+          if (readOnly !== true && !initialData?.editable) {
             issues.push(errIssue('INITIAL_DATA_NOT_READONLY', 'Dane inicjalne wymagają readOnly: true', `${fPath}/readOnly`, leaf.id));
           }
         }
