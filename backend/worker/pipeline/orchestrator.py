@@ -16,13 +16,14 @@ import logging
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from backend.shared.config import Settings
 from backend.shared.schemas.quality import (
     AnalysisResult,
     Issue,
     QualityReport,
+    RetrievalReport,
     Severity,
     StageReport,
     StageStatus,
@@ -46,6 +47,11 @@ from backend.worker.pipeline.step07_fields import run_step07
 from backend.worker.pipeline.step08_dependencies import run_step08
 from backend.worker.pipeline.step09_rules_dicts import run_step09
 from backend.worker.progress import ProgressReporter
+from backend.worker.rag.embedder import document_signature
+from backend.worker.rag.retrieval import TypeDecision, decide, llm_chooser
+
+if TYPE_CHECKING:
+    from backend.worker.clients.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +190,47 @@ async def _extract(
     return extracted, visual
 
 
+async def _recognize_type(
+    stages: PipelineStages,
+    settings: Settings,
+    document: IncomingDocument,
+    payload: dict[str, Any],
+    client: LLMClient,
+    run: _Run,
+) -> TypeDecision | None:
+    """RAG: hash → kNN w bazie wiedzy → wybór modelu z top-k albo nowy typ (``None`` = bez RAG)."""
+    if stages.knowledge is None or not settings.rag_enabled:
+        return None
+    signature = document_signature(payload)
+    try:
+        retrieval = await stages.knowledge.retrieve(
+            job_id=document.ref.job_id,
+            sha256=document.ref.sha256,
+            signature=signature,
+            top_k=settings.rag_top_k,
+        )
+    except Exception:  # baza wiedzy to wzmocnienie, nie warunek analizy
+        logger.warning("Baza wiedzy niedostępna — typ z dopasowania leksykalnego", exc_info=True)
+        run.issues.append(
+            Issue(
+                code="KNOWLEDGE_BASE_UNAVAILABLE",
+                severity=Severity.WARNING,
+                message="Baza wiedzy niedostępna — typ dokumentu rozpoznano dopasowaniem słów "
+                "kluczowych, bez wzorca podobnego formularza",
+            )
+        )
+        return None
+    return await llm.run_llm_stage(
+        _STEP_LABEL["document_type"],
+        decide,
+        retrieval,
+        signature=signature,
+        accept=settings.rag_accept_similarity,
+        reject=settings.rag_reject_similarity,
+        chooser=llm_chooser(client),
+    )
+
+
 def _sync[T](function: Callable[..., T], *args: Any, **kwargs: Any) -> T:
     try:
         return function(*args, **kwargs)
@@ -205,13 +252,15 @@ async def run_pipeline(
     payload = extracted.as_step_payload()
 
     async with run.stage("document_type"):
-        doc_type = _sync(run_step05, payload)
+        # Budowa sesji sprawdza w katalogu Eden AI, czy model ma otwarte wagi (wywołanie HTTP).
+        # Sesja jest potrzebna już tu: w strefie niepewności typ wybiera model językowy.
+        session = await asyncio.to_thread(stages.llm_session_factory)
+        client = session.client
+        decision = await _recognize_type(stages, settings, document, payload, client, run)
+        doc_type = _sync(run_step05, payload, decision=decision)
     template = doc_type.get("selected_template")
 
     async with run.stage("structure"):
-        # Budowa sesji sprawdza w katalogu Eden AI, czy model ma otwarte wagi (wywołanie HTTP).
-        session = await asyncio.to_thread(stages.llm_session_factory)
-        client = session.client
         structure = await llm.run_llm_stage(
             _STEP_LABEL["structure"], run_step06, payload, template=template, llm_client=client
         )
@@ -239,6 +288,7 @@ async def run_pipeline(
             high=settings.confidence_high,
             low=settings.confidence_low,
             demo_mode=settings.llm_demo_mode,
+            example=decision.example if decision else None,
         )
         form_issues = [i for i in [*normalized.issues, *rule_issues] if i.field_id is None]
         if settings.llm_demo_mode:
@@ -254,6 +304,7 @@ async def run_pipeline(
     report = QualityReport(
         document_sha256=document.ref.sha256,
         document_type=str(doc_type.get("doc_type") or "") or None,
+        retrieval=decision.report() if decision else RetrievalReport(method="lexical"),
         accuracy_mode=settings.accuracy_mode,
         fields=fields,
         issues=[*run.issues, *form_issues],

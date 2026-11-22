@@ -7,7 +7,9 @@ Sygnały pola (0..1, nazwane w raporcie — urzędnik i ewaluacja widzą, skąd 
 - ``ocr``            — pewność odczytu OCR elementu źródłowego (tylko skany),
 - ``rules``          — brak problemów reguł COI i normalizacji (ostrzeżenie: 0.6, błąd: 0),
 - ``domain_rules``   — reguła dziedzinowa nadpisała decyzję modelu (0.4),
-- ``visual_match``   — element źródłowy pokrywa się z elementem wykrytym na obrazie strony.
+- ``visual_match``   — element źródłowy pokrywa się z elementem wykrytym na obrazie strony,
+- ``example_match``  — pole występuje we wzorcu formularza tego samego typu z bazy wiedzy
+                       (RAG; 1.0), albo nie występuje (0.6 — nowe pole nie musi być błędem).
 
 Pola ze standardowego szablonu COI (strony „Dane”, „Kontakt i zgody”) i pola informacyjne
 bez źródła (np. tekst strony końcowej) nie pochodzą z dokumentu — nie mają sygnałów źródła ani
@@ -23,6 +25,7 @@ import unicodedata
 from collections import defaultdict
 from collections.abc import Iterable
 from statistics import fmean
+from typing import Any
 from uuid import UUID
 
 from backend.shared.schemas.coi_form import INFORMATIONAL_FIELD_TYPES
@@ -37,6 +40,7 @@ from backend.shared.schemas.quality import (
 )
 from backend.worker.pipeline.contracts import ExtractedDocument, TextElement, VisualAnalysis
 from backend.worker.pipeline.normalize import NormalizedForm
+from backend.worker.rag.retrieval import subject_tabs
 
 _EPSILON = 0.001
 
@@ -59,6 +63,22 @@ def _visual_signal(element: TextElement | None, visual: VisualAnalysis) -> float
     return 0.3
 
 
+def _example_keys(example: dict[str, Any] | None) -> set[str]:
+    """Nazwy techniczne i tytuły pól stron tematycznych wzorca (RAG), znormalizowane."""
+    if not example:
+        return set()
+    keys: set[str] = set()
+    for tab in subject_tabs(example):
+        for question in tab.get("questions", []):
+            for child in question.get("field", {}).get("repeatingSectionGrid", []):
+                field = child.get("field", {})
+                keys.add(normalize_text(str(field.get("techName", "")).replace("_", " ")))
+                if field.get("title"):
+                    keys.add(normalize_text(str(field["title"])))
+    keys.discard("")
+    return keys
+
+
 def _rules_signal(issues: Iterable[Issue]) -> float:
     severities = {i.severity for i in issues}
     if Severity.ERROR in severities:
@@ -77,8 +97,10 @@ def assess_fields(
     high: float,
     low: float,
     demo_mode: bool,
+    example: dict[str, Any] | None = None,
 ) -> list[FieldAssessment]:
     elements = {e.element_id: e for e in extracted.elements}
+    example_keys = _example_keys(example)
     document_text = normalize_text(extracted.text)
     issues_by_field: dict[UUID, list[Issue]] = defaultdict(list)
     for issue in [*normalized.issues, *rule_issues]:
@@ -99,6 +121,9 @@ def assess_fields(
         found = bool(source and source.text and normalize_text(source.text) in document_text)
         if standard:
             signals["standard_template"] = 1.0
+        elif example_keys and not template_text:
+            keys = {normalize_text(leaf.tech_name.replace("_", " ")), normalize_text(leaf.title)}
+            signals["example_match"] = 1.0 if keys & example_keys else 0.6
         if not template_text:
             signals["source_found"] = 1.0 if found else 0.0
             signals["source_element"] = 1.0 if element is not None else 0.0

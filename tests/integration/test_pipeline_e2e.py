@@ -87,7 +87,8 @@ async def test_representative_form_through_whole_system(
                 assert with_source
                 assert {"page", "bbox", "text", "element_id"} <= set(with_source[0]["sources"][0])
                 assert {s["name"] for s in report["stages"]} >= {"text_extraction", "control"}
-                assert report["document_type"] == "wniosek_dowod_osobisty"
+                # Wniosek o dowód jest spoza katalogu typów (9 formularzy organizatora).
+                assert report["document_type"] == "unknown"
 
                 # Stan w bazie i w API; wynik można zatwierdzić (brak błędów reguł COI).
                 jobs = (await client.get("/api/v1/jobs", headers=auth())).json()

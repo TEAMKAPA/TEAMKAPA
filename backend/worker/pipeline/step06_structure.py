@@ -543,7 +543,12 @@ def run_step06(
 ) -> dict[str, Any]:
     """Extract COI-compliant tabs and sections from document and template context."""
     client = llm_client or LLMClient()
-    prompt = structure_prompt(document, template["title"] if template else None, STRUCTURE_SCHEMA)
+    prompt = structure_prompt(
+        document,
+        template["title"] if template else None,
+        STRUCTURE_SCHEMA,
+        example=(template or {}).get("example_form"),
+    )
 
     llm_output = client.generate_structured(
         prompt,

@@ -7,7 +7,7 @@ Pola raportu wiążą się z polami formularza przez ``field_id`` (UUID pola w `
 
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -142,9 +142,35 @@ class DictionaryProposal(ReportModel):
     usage: str | None = None
 
 
+class TypeCandidate(ReportModel):
+    """Kandydat typu dokumentu z bazy wiedzy (kNN po wektorach)."""
+
+    doc_type: str
+    title: str
+    similarity: Annotated[float, Field(ge=-1, le=1)]
+    source: Literal["catalog", "approved", "hash"]
+
+
+class RetrievalReport(ReportModel):
+    """Jak rozpoznano typ dokumentu i czy model dostał wzorzec podobnego formularza."""
+
+    method: Literal["hash", "knn", "llm", "new", "lexical"] = Field(
+        description="hash — ten sam plik był zatwierdzony; knn — podobieństwo ≥ progu "
+        "akceptacji; llm — model wybrał spośród kandydatów; new — nowy typ; lexical — bez "
+        "bazy wiedzy (dopasowanie słów kluczowych)"
+    )
+    similarity: float | None = None
+    embedding_model: str | None = None
+    candidates: list[TypeCandidate] = Field(default_factory=list)
+    example_source: Literal["catalog", "approved"] | None = Field(
+        default=None, description="Skąd pochodzi wzorzec formularza przekazany modelowi"
+    )
+
+
 class QualityReport(ReportModel):
     document_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
     document_type: str | None = None
+    retrieval: RetrievalReport | None = None
     accuracy_mode: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     fields: list[FieldAssessment] = Field(default_factory=list)
