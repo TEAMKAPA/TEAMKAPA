@@ -78,15 +78,24 @@ def find_lines(ink: Mask, cfg: DetectConfig, scale: Scale) -> LineMaps:
     )
 
 
-def _on_border(segment: Segment, rect: PixelBox, band: int) -> bool:
-    """Czy poziomy odcinek leży na górnej lub dolnej krawędzi prostokąta (pas ``band`` px)."""
+def _on_border(segment: Segment, rects: Sequence[PixelBox], band: int) -> bool:
+    """Czy poziomy odcinek leży w ≥ 50% długości na górnych lub dolnych krawędziach prostokątów."""
     x0, y0, x1, y1 = segment.box
-    overlap = min(x1, rect[2]) - max(x0, rect[0])
-    if overlap <= 0.5 * (x1 - x0):
-        return False
-    top = y0 >= rect[1] - band and y1 <= rect[1] + band
-    bottom = y0 >= rect[3] - band and y1 <= rect[3] + band
-    return top or bottom
+    spans = []
+    for rect in rects:
+        top = y0 >= rect[1] - band and y1 <= rect[1] + band
+        bottom = y0 >= rect[3] - band and y1 <= rect[3] + band
+        if top or bottom:
+            start, stop = max(x0, rect[0]), min(x1, rect[2])
+            if stop > start:
+                spans.append((start, stop))
+    covered, end = 0, x0
+    for start, stop in sorted(spans):
+        start = max(start, end)
+        if stop > start:
+            covered += stop - start
+            end = stop
+    return covered >= 0.5 * (x1 - x0)
 
 
 def text_line_candidates(
@@ -101,7 +110,7 @@ def text_line_candidates(
     for segment in lines.h_segments:
         if segment.length < min_length or segment.thickness > max_thickness:
             continue
-        if any(_on_border(segment, rect, band) for rect in boxes):
+        if _on_border(segment, boxes, band):
             continue
         result.append(segment.box)
     return result

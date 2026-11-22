@@ -93,13 +93,13 @@ class DetectConfig(BaseModel):
     line_min_mm: Mm = 8.0  # jądro morfologii: najkrótszy odcinek linii
     line_bridge_mm: Mm = 0.8  # domykanie przerw w liniach (skany, kreski przerywane)
     text_line_min_mm: Mm = 15.0
-    text_line_max_thickness_mm: Mm = (
-        0.45  # grubsze poziome paski to separatory, nie linie do pisania
-    )
+    # Grubsze poziome paski to separatory sekcji, a nie linie do pisania.
+    text_line_max_thickness_mm: Mm = 0.6
 
     # Prostokąty (C.4)
-    rect_min_mm: Mm = 1.8  # najmniejszy bok wnętrza prostokąta (mniejsze: pętle liter)
+    rect_min_mm: Mm = 1.3  # najmniejszy bok wnętrza (checkbox 2,5 mm z grubą krawędzią: ok. 1,7 mm)
     rect_fill: Ratio = 0.85  # wypełnienie ramki wnętrza przez obszar tła (prostokątność)
+    rect_open: Ratio = 0.5  # wnętrze wolne od zawartości (pierścień wokół tabeli: mniej)
     border_max_mm: Mm = 1.2  # najgrubsza krawędź ramki (z cieniem znaku ❑)
     border_coverage: Ratio = 0.9  # część długości boku pokryta tuszem
     checkbox_min_mm: Mm = 2.0
@@ -112,6 +112,7 @@ class DetectConfig(BaseModel):
     cell_min_w_mm: Mm = 5.0
     cell_min_h_mm: Mm = 3.0
     section_min_children: int = Field(default=2, ge=1, le=100)
+    frame_band_mm: Mm = 0.5  # pas przy boku ramki sekcji, w którym szukamy linii
 
     # Kropki (C.5)
     dot_max_mm: Mm = 0.8
