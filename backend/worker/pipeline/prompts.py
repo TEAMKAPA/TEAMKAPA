@@ -67,7 +67,8 @@ Zasady COI dla stron i sekcji:
 - Sekcja grupuje powiązane pola (np. „Lokalizacja budynku”, „Rozliczenie nadpłaty”).
   Sekcja, której wierszy może być wiele (np. lista osób, nieruchomości), ma typ
   REPEATING_SECTION.
-- techName: snake_case, bez polskich znaków, unikalny w formularzu.
+- techName: polskie słowa w snake_case bez polskich znaków, unikalny w formularzu
+  (np. informacje_o_oplacie) — nie tłumacz nazw na angielski.
 - Nie twórz sekcji dla: podpisu, daty i miejsca złożenia, pieczęci, pól „wypełnia urząd”,
   instrukcji wypełniania ani klauzuli informacyjnej RODO.
 - authority: pełna nazwa organu albo urzędu, do którego składany jest wniosek, dokładnie jak
@@ -119,7 +120,8 @@ _FIELD_RULES = """\
 Zasady COI dla pól:
 - Typy: TEXT_FIELD (krótki tekst), TEXTAREA (dłuższy opis, uzasadnienie), NUMBER (liczba,
   kwota, powierzchnia), DATEPICKER (data), RADIO (jedna z 2–5 opcji), SELECT (jedna z wielu
-  opcji albo słownik), CHECKBOX (wiele opcji naraz), FILE_UPLOADER (załącznik),
+  opcji albo słownik), CHECKBOX (wiele opcji naraz), FILE_UPLOADER (każdy załącznik — plik
+  do dołączenia, np. skan dokumentu, dowód wpłaty),
   CONSENT_SECTION (zgoda lub oświadczenie do zaakceptowania — nigdy CHECKBOX ani RADIO),
   TEXT_BLOCK (informacja do przeczytania, np. o wysokości opłaty).
 - validation: REQUIRED, gdy pole jest obowiązkowe (brak dopisku „nieobowiązkowe”,
@@ -129,7 +131,8 @@ Zasady COI dla pól:
 - Słownik zamiast opcji: kraj → SELECT, dictionaryName „Kraje”, defaultValue „Polska”
   (pole ze słownikiem ma puste options).
 - Dane wnioskodawcy, jego adres, PESEL, dane pełnomocnika lub reprezentanta, telefon, e-mail,
-  zgoda RODO i nazwa urzędu są w standardowych sekcjach COI — nie zwracaj takich pól.
+  zgoda RODO, nazwa urzędu oraz załączniki pełnomocnictwa i dowodu opłaty skarbowej za
+  pełnomocnictwo są w standardowych sekcjach COI — nie zwracaj takich pól.
   Zwracaj pola dotyczące przedmiotu wniosku (np. położenie nieruchomości, kwota, uzasadnienie,
   załączniki wymagane przez wniosek, oświadczenia właściwe dla sprawy).
 - options: nazwy opcji dokładnie jak w dokumencie (pole wyboru), bez znaków □ ☐ ⃞.
@@ -138,7 +141,8 @@ Zasady COI dla pól:
 - source_text: dosłowna etykieta pola z dokumentu (maks. 80 znaków); page i element_id:
   strona i identyfikator elementu, z którego pochodzi etykieta.
 - section_tech_name: techName jednej z podanych sekcji; title: krótka etykieta pola
-  w e-formularzu (np. „Imię”, „Kod pocztowy”); techName: snake_case bez polskich znaków."""
+  w e-formularzu (np. „Imię”, „Kod pocztowy”); techName: polskie słowa w snake_case bez
+  polskich znaków, np. data_uiszczenia_oplaty — nie tłumacz nazw na angielski."""
 
 
 def _sections_listing(form: dict[str, Any]) -> str:
