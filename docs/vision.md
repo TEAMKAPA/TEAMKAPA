@@ -1,9 +1,13 @@
-# Kanał wizualny: renderowanie stron i układ współrzędnych (#10, część 1)
+# Kanał wizualny: renderowanie stron, współrzędne i detektory OpenCV (#10)
 
 Moduł `backend/worker/vision/render` zamienia dokument wejściowy (PDF, JPEG, PNG) na obrazy stron
 z metadanymi. Dokumenty biurowe (DOC, DOCX, ODS, XLSX) są rozpoznawane, ale nie są renderowane
 ([Formaty biurowe poza kanałem wizualnym](#formaty-biurowe-poza-kanałem-wizualnym)). Wszystkie dalsze elementy kanału wizualnego (detektory OpenCV,
 VLM, oznaczenia, fuzja z tekstem) opisują położenie w jednym, wspólnym układzie współrzędnych.
+
+Detektory OpenCV (`backend/worker/vision/detect`, Etap C) wykrywają na obrazach stron elementy
+formularza (kratki, checkboxy i ich grupy, linie, kropki, komórki, ramki sekcji); opis w
+[Detektory OpenCV (Etap C)](#detektory-opencv-etap-c).
 
 Dokument nie zawiera treści formularzy COI. Liczby dotyczące materiałów są wyłącznie zbiorcze.
 
@@ -22,7 +26,8 @@ Dokument nie zawiera treści formularzy COI. Liczby dotyczące materiałów są 
 11. [Bezpieczeństwo](#bezpieczeństwo)
 12. [Testy](#testy)
 13. [Zbiór oznaczeń i ewaluacja (#12)](#zbiór-oznaczeń-i-ewaluacja-12)
-14. [Znane ograniczenia](#znane-ograniczenia)
+14. [Detektory OpenCV (Etap C)](#detektory-opencv-etap-c)
+15. [Znane ograniczenia](#znane-ograniczenia)
 
 ## Punkt wejścia
 
@@ -307,6 +312,11 @@ uruchamiają się w CI bez dostępu do `dane/`:
   JPEG, słabszy kontrast, niższe DPI. Testy (`test_synth_forms.py`) sprawdzają determinizm, ciasność
   ramek (krawędź na linii), to, że każdy piksel tuszu należy do elementu albo „tekstu”, oraz zgodność
   etykiet z tuszem po obrocie (±1,5 px). Detektory z Etapu C używają tego generatora,
+- `test_detect_*.py` (Etap C): preprocessing (kąt prostowania ±0,05°, przeliczenie ramek), linie,
+  prostokąty (m.in. checkbox-glif z cieniem, kratki z przerwą, linie 1 px z brakującym pikselem
+  w narożniku), kropki (także wielokropki; szum i kropki w tekście odrzucane), grupy, ID i pewność,
+  determinizm między procesami, wyłączanie IPP, wejście kroku 3 na PNG i PDF;
+  `test_detect_quality.py`: jakość na stronach syntetycznych o różnej jakości (tabela wyżej),
 - `test_coords.py`: przeliczenia z wartościami wyliczonymi ręcznie,
 - `test_render_pdf.py`, `test_render_image.py`, `test_render_document.py`,
   `test_isolation.py`, `test_detect.py`: determinizm (identyczny hash pikseli), błędy, limity,
@@ -379,6 +389,95 @@ i pełne raporty są wyłącznie w `dane/`.
   przesunięciu o 1–2 px; przesunięcie o pół szerokości elementu daje 0, a usunięcie co 10. elementu
   R = 0,92. Ciasność ramek pilota: 95% krawędzi ramek najwyżej 1 px od linii w obrazie.
 
+## Detektory OpenCV (Etap C)
+
+Pakiet `backend/worker/vision/detect`, wejście `detect_page(RenderedPage)` i `detect_document`,
+cienkie wejście kroku 3: `backend/worker/pipeline/step03_visual_analyze.analyze_visual` (render +
+detekcja, wynik w kontrakcie 7.5). Podpięcie w pipeline (`stages.default_stages`, odwzorowanie na
+`contracts.VisualAnalysis`) należy do #16.
+
+**Zasada: detektory pracują wyłącznie na obrazie strony.** Nigdy nie korzystają z warstwy
+wektorowej ani tekstowej PDF. Ten sam kod działa więc dla PDF, obrazów cyfrowych i skanów, a ocena
+na etykietach nie jest cykliczna także wtedy, gdy etykiety powstaną z pre-etykiet z warstwy
+wektorowej (decyzja z 2026-11-22).
+
+### Kroki
+
+| Krok | Moduł | Opis |
+|---|---|---|
+| Preprocessing | `preprocess.py` | szarość jako minimum kanałów RGB (kolorowe linie są ciemne), rozmycie σ = 0,1 mm, tusz: ciemniejszy od progu Otsu (w granicach 120–245 i ≤ poziom papieru − 20) **i** od średniej lokalnej (okno 7 mm) − 10; czulsza maska do kropek: papier − max(30, 5 × szum tła); prostowanie z profilu rzutu wierszy (±5°, krok 0,25°, potem 0,02°; obrót od 0,1°) |
+| Linie | `lines.py` | otwarcie morfologiczne jądrem 8 mm (poziomo i pionowo), domykanie przerw do 0,8 mm; `text_line`: odcinek poziomy ≥ 15 mm, ≤ 0,6 mm grubości, w ≥ 50% długości nieleżący na krawędziach prostokątów |
+| Prostokąty | `rects.py` | wnętrza z zamkniętych obszarów tła (struktura pogrubiona o 0,15 mm, bo linie 1 px mają przerwy na złączach), rozszerzane do zewnętrznej krawędzi obramowania; checkbox 2–6,5 mm (proporcja ≤ 1,35); kratki: ≥ 2 sąsiadujące komórki ≤ 10 mm tej samej wysokości (`cells` = liczba komórek); komórka ≥ 5 × 3 mm; ramka sekcji: obrys składowej zawierający ≥ 2 elementy (bez ramek wewnętrznych o tych samych elementach) |
+| Kropki | `dots.py` | łańcuchy składowych ≤ 0,8 mm w wierszu, przerwy ≤ 2,5 mm, ≥ 8 kropek, ≥ 10 mm, odstępy regularne (także okresowe co 3: wielokropki) |
+| Grupy | `groups.py` | kandydaci: checkboxy w wierszu (przerwa ≤ 70 mm), potem w kolumnie (≤ 12 mm); ramka z tekstem opcji; pewność 0,3, `GROUP_CANDIDATE`, `multi` nieznane |
+| ID i pewność | `page.py` | ramki przeliczane z obrazu wyprostowanego do układu strony; ID i kody poniżej |
+
+Wszystkie progi są w `DetectConfig` (`backend/worker/vision/config.py`, zmienne `VISION_DETECT_*`)
+w milimetrach strony albo jako proporcje i są przeliczane na piksele według efektywnego DPI strony
+(DPI renderu lub metadanych, oszacowanie z Etapu A, szerokość strony A4, domyślnie 200).
+Wartości wynikają z typowych wymiarów pól formularzy A4, a nie z dopasowania do zbioru #12.
+
+### ID, rola i pewność
+
+- **ID** `cv-p{strona}-{nnn}`: elementy sortowane po (wiersz, x0, y1, x1, kategoria), gdzie
+  wiersz = `floor(y0 / 2 mm)`. Elementy jednego wiersza są numerowane od lewej mimo różnic
+  1–2 px w y0.
+- **Rola** jest zawsze `unknown`, a `signature` i `office_only` nie są nadawane: wymagają tekstu
+  (rozstrzyga VLM i fuzja, Etapy D i E). Miejsce na podpis z kropek to dla OpenCV `dotted_line`,
+  a ramka urzędu to `table_cell`.
+- **Pewność:** komórka i kratki 0,9 (kratki o nieregularnej szerokości 0,6 z `CELLS_IRREGULAR`),
+  checkbox 0,85, ramka sekcji i kropki 0,8, linia 0,7, kandydat na grupę 0,3 (`GROUP_CANDIDATE`).
+  Kody strony mnożą pewność: `LOW_CONTRAST` (różnica papier–tusz < 110) × 0,8,
+  `SKEW_CORRECTED` × 0,95.
+
+### Determinizm
+
+Ten sam obraz i ta sama konfiguracja dają te same elementy, kolejność i ID: detekcja nie używa
+losowości, a test porównuje wynik w dwóch osobnych procesach. Intel IPP jest na czas detekcji
+wyłączany (`cv2.ipp.setUseIPP(False)`, stan sprzed wywołania jest przywracany), bo IPP wybiera
+ścieżkę obliczeń zależnie od procesora. Licencja IPP: wyjątek do potwierdzenia przez zespół
+(`docs/licenses.md`).
+
+### Wyniki na stronach syntetycznych
+
+Generator `tests/vision/synth_forms.py` (A4, 200 DPI, wszystkie kategorie). Kategorie zależne od
+tekstu porównywane z postacią wizualną (podpis jako kropki, pole urzędu jako komórka).
+
+| Warunki | Mikro-F1 | Uwagi |
+|---|---|---|
+| czyste strony; obrót 1° i −2°; rozmycie 1 px; szum σ = 20; JPEG q = 30; kontrast 0,4; 100 DPI | 1,000 | także liczba kratek 100% |
+| skan (obrót 1,2°, rozmycie, szum, JPEG); obrót 3° z szumem σ = 25 i JPEG q = 30; obrót −4,5°; 100 DPI z rozmyciem i JPEG; rozmycie 2 px | 1,000 | |
+| wyblakły i rozmyty druk (kontrast 0,35, rozmycie 1,5 px) | 0,89 | kropki znikają (F1 kropek 0) |
+| 75 DPI | 0,97 | ramki sekcji i część linii (linie 1 px łączą się z sąsiednim tuszem) |
+| szum σ = 40 | 0,96 | szum przerywa łańcuchy kropek (F1 kropek 0,82) |
+
+Czas detekcji: ok. 0,2 s na stronę A4 przy 200 DPI (z prostowaniem ok. 0,3 s).
+
+### Wstępny pomiar na pilocie (`dev`)
+
+**Tylko wstępny pomiar:** 2 oznaczone strony `dev` (z dwóch rodzajów wniosku), 8 stron oceny razem
+z wariantami PNG, JPG i JPEG, bez skanów, 260 elementów etykiet; `holdout` nie był używany.
+
+| Kategoria | P | R | F1 |
+|---|---|---|---|
+| char_boxes (liczba kratek zgodna w 20/20) | 1,000 | 1,000 | 1,000 |
+| checkbox | 1,000 | 1,000 | 1,000 |
+| checkbox_group (kandydaci) | 1,000 | 1,000 | 1,000 |
+| dotted_line | 0,923 | 1,000 | 0,960 |
+| table_cell | 0,974 | 1,000 | 0,987 |
+| section_frame | 1,000 | 1,000 | 1,000 |
+| text_line (brak w etykietach) | 0,000 | – | – |
+| office_only (wymaga tekstu) | – | 0,000 | – |
+| **mikro** | **0,940** | **0,969** | **0,955** |
+
+- PDF i warianty obrazowe: mikro-F1 0,955 w obu przekrojach. Wynik jest taki sam przy IoU 0,3,
+  0,5 i 0,7 (ramki są ciasne).
+- Wszystkie pozostałe błędy wynikają z braku tekstu: linie nad przypisami jako `text_line`
+  (8 fałszywych alarmów) oraz pola urzędu wykryte jako `dotted_line` albo `table_cell` (8).
+- Pomiar wykrył dwa błędy, poprawione na podstawie zasad, a nie strojenia progów: zbyt duży
+  minimalny bok wnętrza (checkbox-glif 2,5 mm ma wnętrze 1,7 mm) i przerwy w liniach 1 px
+  w obrazach PNG.
+
 ## Znane ograniczenia
 
 - **Skany obrócone bez `/Rotate` lub bez orientacji EXIF** (np. kartka zeskanowana bokiem) nie są
@@ -390,6 +489,11 @@ i pełne raporty są wyłącznie w `dane/`.
 - **Profile kolorów ICC** nie są stosowane przy konwersji do RGB.
 - **DPI z metadanych bywa fikcyjne** (np. domyślne 72 lub 96 w zrzutach ekranu); przyjmujemy je, gdy jest
   spójne, a jego wiarygodność oceniają dalsze kroki.
+- **Detektory OpenCV nie rozróżniają `signature` ani `office_only` i nie nadają ról** (wymagają
+  tekstu: VLM i fuzja). Separatory przypisów są wykrywane jako `text_line`.
+- **Granice odporności detektorów** (strony syntetyczne): kropki znikają przy wyblakłym
+  i jednocześnie rozmytym druku oraz przy szumie σ ≥ 40; przy 75 DPI giną ramki sekcji i część linii.
+- **Pomiar detektorów na COI jest wstępny** (2 strony `dev`); progi nie były strojone na tym zbiorze.
 - **`/UserUnit`** (rzadki parametr PDF zmieniający rozmiar jednostki) nie jest uwzględniany w DPI.
 - **Narzut izolacji** to ok. 0,5 s na dokument (start procesu), a przy dużych obrazach dochodzi
   przesyłanie pikseli między procesami.

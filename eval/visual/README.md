@@ -242,7 +242,7 @@ Szacunek przeliczam po `holdout`. Zmęczenie pogarsza dokładność ramek, więc
 
 ```powershell
 .venv\Scripts\python.exe -m eval.visual.predict --system opencv
-.venv\Scripts\python.exe -m eval.visual.run --system opencv --predictions daneobocze\predictions\opencv-dev
+.venv\Scripts\python.exe -m eval.visual.run --system opencv --predictions dane\robocze\predictions\opencv-dev
 .venv\Scripts\python.exe -m eval.visual.selfcheck
 ```
 
