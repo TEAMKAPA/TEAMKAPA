@@ -3,7 +3,8 @@
 - Skala szarości: minimum kanałów RGB, żeby kolorowe linie (np. błękitne obramowania) były ciemne.
 - Odszumianie: rozmycie Gaussa o promieniu ``blur_sigma_mm`` (szum skanu przed progowaniem).
 - Binaryzacja: piksel jest tuszem, gdy jest ciemniejszy od progu globalnego (Otsu, w granicach
-  ``otsu_min``–``otsu_max``) **i** od średniej lokalnej minus ``adaptive_offset`` (cienie skanu).
+  ``otsu_min``–``otsu_max`` i nie wyżej niż poziom papieru minus ``ink_min_delta``) **i** od
+  średniej lokalnej minus ``adaptive_offset`` (cienie skanu).
 - Prostowanie: kąt z profilu rzutu wierszy (maksimum sumy kwadratów histogramu) w zakresie
   ±``deskew_max_deg``, najpierw zgrubnie, potem dokładnie; obrót wokół środka strony, gdy
   ``|kąt| ≥ deskew_min_deg``. Ramki wykryte na obrazie wyprostowanym ``Prepared.to_page``
@@ -90,6 +91,20 @@ def _blur(gray: Gray, cfg: DetectConfig, scale: Scale) -> Gray:
     return np.asarray(blurred, dtype=np.uint8)
 
 
+def paper_noise(gray: Gray, threshold: int) -> float:
+    """Odporne odchylenie jasności tła (1,4826 × MAD pikseli jaśniejszych od progu)."""
+    paper = gray[gray >= threshold]
+    if paper.size == 0:
+        return 0.0
+    median = float(np.median(paper))
+    return 1.4826 * float(np.median(np.abs(paper.astype(np.float32) - median)))
+
+
+def _light_delta(gray: Gray, threshold: int, cfg: DetectConfig) -> float:
+    """Delta czulszej maski: co najmniej ``light_ink_delta`` i ``light_noise_k`` × szum tła."""
+    return max(float(cfg.light_ink_delta), cfg.light_noise_k * paper_noise(gray, threshold))
+
+
 @dataclass(frozen=True)
 class Binarized:
     ink: Mask
@@ -101,15 +116,18 @@ class Binarized:
 def binarize(gray: Gray, cfg: DetectConfig, scale: Scale) -> Binarized:
     """Maski tuszu, użyty próg globalny i oszacowany kontrast (papier – tusz)."""
     otsu, _ = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    threshold = int(min(max(round(otsu), cfg.otsu_min), cfg.otsu_max))
+    paper = int(np.percentile(gray, 90))
+    # Górna granica względem papieru: wyblakły druk ma próg Otsu blisko bieli, a szum na białym
+    # tle odcina dodatkowo warunek średniej lokalnej.
+    upper = min(cfg.otsu_max, paper - cfg.ink_min_delta)
+    threshold = int(min(max(round(otsu), cfg.otsu_min), max(upper, cfg.otsu_min)))
     block = scale.odd(cfg.adaptive_block_mm)
     local = cv2.boxFilter(
         gray.astype(np.float32), -1, (block, block), borderType=cv2.BORDER_REPLICATE
     )
     below_local = gray.astype(np.float32) < local - cfg.adaptive_offset
     ink: Mask = (gray < threshold) & below_local
-    paper = int(np.percentile(gray, 90))
-    light: Mask = (gray < max(threshold, paper - cfg.light_ink_delta)) & below_local
+    light: Mask = (gray < max(threshold, paper - _light_delta(gray, threshold, cfg))) & below_local
     dark = gray[ink]
     contrast = paper - int(np.median(dark)) if dark.size else 255
     return Binarized(ink=ink, light_ink=light, threshold=threshold, contrast=contrast)

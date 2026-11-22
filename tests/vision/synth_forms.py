@@ -447,3 +447,20 @@ DEGRADATIONS = {
     "dpi_100": lambda f: downscale(f, 100.0),
 }
 """Zestaw degradacji do testów odporności detektorów (Etap C)."""
+
+
+HARD_DEGRADATIONS = {
+    "scan_like": lambda f: jpeg(noise(blur(rotate(f, 1.2), 0.8), 12.0, seed=1), 40),
+    "rotate_3_noise_25_jpeg_30": lambda f: jpeg(noise(rotate(f, 3.0), 25.0, seed=2), 30),
+    "rotate_-4.5": lambda f: rotate(f, -4.5),
+    "dpi_100_blur_jpeg": lambda f: jpeg(blur(downscale(f, 100.0), 0.7), 40),
+    "blur_2": lambda f: blur(f, 2.0),
+}
+"""Kombinacje degradacji (skan, mocne pochylenie, niskie DPI z kompresją); detektor ma F1 = 1."""
+
+LIMIT_DEGRADATIONS = {
+    "faded_blurred": lambda f: contrast(blur(f, 1.5), 0.35),
+    "dpi_75": lambda f: downscale(f, 75.0),
+    "noise_40": lambda f: noise(f, 40.0, seed=3),
+}
+"""Znane granice odporności (``docs/vision.md``): wynik niższy niż 1, pilnowany progiem dolnym."""
