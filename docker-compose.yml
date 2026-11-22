@@ -1,5 +1,6 @@
 # COI Cyfryzacja formularzy — środowisko uruchomieniowe.
 #
+#   .\start.cmd  albo  ./start.sh                   # wszystko jednym poleceniem (+ token JWT)
 #   docker compose up -d --build                    # api, worker, postgres, valkey, llm-gateway
 #   docker compose --profile frontend up -d --build # + frontend
 #
@@ -133,6 +134,11 @@ services:
       - "${FRONTEND_PORT:-8080}:8080"
     tmpfs:
       - /tmp
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     depends_on:
       api: { condition: service_healthy }
     networks: [edge]

@@ -38,6 +38,20 @@ snapshot_download('${EMBEDDING_MODEL}', revision='${EMBEDDING_MODEL_REVISION}', 
 allow_patterns=['config.json', 'model.safetensors', 'tokenizer.json', \
 'tokenizer_config.json', 'special_tokens_map.json', 'sentencepiece.bpe.model'])" \
     && chmod -R a+rX /opt/huggingface
+# Modele Doclinga dla PDF i obrazów — bez nich worker bez internetu kończy analizę PDF/JPG/PNG
+# błędem. Tylko modele używane przez pipeline (OCR robi Tesseract): układ strony Heron (silnik
+# transformers, Apache-2.0) i TableFormer v2.3.0 (CDLA-Permissive-2.0), rewizje przypięte
+# (docs/licenses.md). Katalogi jak w `docling-tools models download`; Docling czyta je
+# z DOCLING_ARTIFACTS_PATH (~510 MB).
+ARG DOCLING_LAYOUT_REVISION=8f39ad3c0b4c58e9c2d2c84a38465abf757272d8
+ARG DOCLING_TABLEFORMER_REVISION=fc0f2d45e2218ea24bce5045f58a389aed16dc23
+ENV DOCLING_ARTIFACTS_PATH=/opt/docling/models
+RUN python -c "from huggingface_hub import snapshot_download; \
+snapshot_download('docling-project/docling-layout-heron', revision='${DOCLING_LAYOUT_REVISION}', \
+local_dir='${DOCLING_ARTIFACTS_PATH}/docling-project--docling-layout-heron'); \
+snapshot_download('docling-project/docling-models', revision='${DOCLING_TABLEFORMER_REVISION}', \
+local_dir='${DOCLING_ARTIFACTS_PATH}/docling-project--docling-models')" \
+    && chmod -R a+rX /opt/docling
 # Po zbudowaniu: żadnych pobrań w czasie działania (tylko pliki z obrazu).
 ENV HF_HUB_OFFLINE=1 \
     TRANSFORMERS_OFFLINE=1
