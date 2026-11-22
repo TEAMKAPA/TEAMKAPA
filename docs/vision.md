@@ -298,8 +298,11 @@ Pakiet `backend/worker/vision/vlm` (#11): role i etykiety elementów (tryb 1), p
   elementów OpenCV**, a tekst etykiety pochodzi ze źródła (bloki tekstu), nie z VLM.
 - Walidacja: ID spoza listy i bloki spoza listy są odrzucane; rola niezgodna z kategorią (np. `choice`
   dla komórki) zamienia się na `unknown`; element z rolą ma `source=both`, bez roli `NO_ROLE`.
-- **Dodawanie `vlm-*`:** tylko miejsca pominięte przez OpenCV (IoU z elementem OpenCV < 0,5), najwyżej
-  `VLM_MAX_ADDED_PER_PAGE` (10) na stronę, pewność 0,3, kod `VLM_ONLY_ELEMENT`.
+- **Dodawanie `vlm-*`:** tylko miejsca do wypełnienia (rola `input`, `choice`, `e_signature`) pominięte
+  przez OpenCV (IoU ramek rozszerzonych pionowo do 1% strony < 0,3 i środek poza elementem OpenCV),
+  najwyżej `VLM_MAX_ADDED_PER_PAGE` (10) na stronę, pewność 0,3, kod `VLM_ONLY_ELEMENT`.
+- Komórka zawierająca inny element do wypełnienia dostaje rolę `skip` (kontener, jak w konwencji
+  oznaczania `eval/visual/LABELING.md`).
 - Kratki: element `char_boxes`, którego etykieta wskazuje inną liczbę kratek (PESEL 11, NIP 10,
   REGON 9 lub 14, KRS 10, kod pocztowy 2 + 3), dostaje `CELLS_LABEL_CONFLICT`.
 
@@ -345,6 +348,36 @@ Pakiet `backend/worker/vision/vlm` (#11): role i etykiety elementów (tryb 1), p
   bazowa PDF) i liczy metryki OpenCV i fuzji (role). Narzędzie nie ma opcji `holdout`.
 - Bloki tekstu w ewaluacji pochodzą tymczasowo z warstwy tekstowej PDF (`eval/visual/text_blocks.py`);
   w pipeline dostarczy je krok 02 (#7). Podpięcie etapu w pipeline należy do #16.
+
+### Wstępny pomiar na pilocie (`dev`, 2026-11-22)
+
+**Tylko wstępny pomiar:** 2 oznaczone strony `dev` (f02-p01, f07-p01, render PDF) oraz f05-p01
+(`dev`, bez etykiet) wyłącznie do porównania pól z oczekiwanym JSON-em. `holdout` nie był używany.
+
+- **Wywołania (tryb `max`, 3 strony):** 6 wywołań, każda odpowiedź zgodna ze schematem za
+  pierwszym razem (0 ponowień, 0 błędów); 25 765 tokenów wejścia i 7 105 wyjścia (ok. 0,008 USD);
+  15–38 s na wywołanie, łącznie 143 s (ok. 48 s na stronę). Obraz jako adres `data:` i wymuszony
+  `json_schema` działają w Eden AI dla tego modelu. Ponowne przeliczenie: 0 wywołań (cache).
+- **Tryb `balanced`:** 5 wywołań zamiast 6 (podwójny odczyt pominięty na stronie „pewnej”), ok.
+  128 s zamiast 143 s; role i elementy bez zmian, bo tryb 2 ich nie modyfikuje.
+
+| Na 2 oznaczonych stronach | OpenCV | OpenCV + VLM (tryb 1) |
+|---|---|---|
+| mikro-P / R / F1 elementów | 0,940 / 0,969 / 0,955 | 0,900 / 0,969 / 0,933 |
+| trafność ról (63 dopasowane elementy) | 0 (rola `unknown`) | **0,873** |
+
+- Role: `choice` 7/7, `section` 2/2, `input` 34/36, `skip` 12/18. Błędy: komórki z samą etykietą
+  oznaczone jako `input` (6) i komórki z podpisem u góry i miejscem na wpis oznaczone jako `skip` (2).
+- Elementy dodane przez VLM (pewność 0,3, `VLM_ONLY_ELEMENT`): 3 na f07, wszystkie fałszywe (linie
+  kropek „zobaczone” w wierszach tekstu), stąd niższa precyzja.
+- Walidacja deterministyczna odrzuciła 13 identyfikatorów zmyślonych przez VLM na f05 (ID spoza listy).
+- Pomiar wprowadził dwie reguły deterministyczne zgodne z konwencją oznaczania (nie strojenie
+  promptu): komórka zawierająca element do wypełnienia → `skip`; dodane elementy tylko z rolą do
+  wypełnienia i bez duplikatów cienkich linii. Trafność ról przed regułami: 0,778, F1 fuzji: 0,900.
+- **Podwójny odczyt f05 względem JSON-a referencyjnego:** 3 z 46 pól dopasowane, 14 pól odczytanych
+  z obrazu. Tytuły pól formularza cyfrowego są krótkie i inaczej sformułowane niż podpisy na papierze,
+  a formularz cyfrowy ma więcej pól, więc JSON referencyjny jest słabym zastępstwem pól z LLM
+  tekstowego (#8); wynik nie mierzy jakości odczytu VLM.
 
 ## Konfiguracja i limity
 
