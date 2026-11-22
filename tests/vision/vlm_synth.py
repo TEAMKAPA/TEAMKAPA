@@ -16,6 +16,7 @@ from pathlib import Path
 from backend.shared.schemas.quality import BoundingBox
 from backend.worker.vision.detect.page import detect_image
 from backend.worker.vision.models import ElementKind, ElementRole, VisualElement
+from backend.worker.vision.vlm.client import VlmRequest
 from backend.worker.vision.vlm.roles import TextBlock
 from tests.vision.synth_forms import SynthForm, make_form
 
@@ -140,6 +141,32 @@ def fields_response() -> dict[str, object]:
             }
         )
     return {"fields": fields}
+
+
+ROLE_BY_KIND = {
+    "char_boxes": "input",
+    "text_line": "input",
+    "dotted_line": "input",
+    "table_cell": "input",
+    "checkbox": "choice",
+    "checkbox_group": "choice",
+    "section_frame": "section",
+}
+
+
+def echo_responder(request: VlmRequest) -> str:
+    """Fake dla dowolnej strony: role według kategorii elementów z bloku danych, pola z nagrania."""
+    if request.task == "fields":
+        return recording("synth_fields")
+    section = request.prompt.split("ELEMENTS (", 1)[1].split("TEXT BLOCKS (", 1)[0]
+    answers = []
+    for line in section.splitlines()[1:]:
+        if line.startswith("{"):
+            row = json.loads(line)
+            answers.append(
+                {"id": row["id"], "role": ROLE_BY_KIND[row["kind"]], "label_block_id": None}
+            )
+    return json.dumps({"elements": answers, "added": []})
 
 
 def recording(name: str) -> str:
