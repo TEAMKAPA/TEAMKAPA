@@ -9,3 +9,6 @@
 *.docx binary
 *.ods binary
 *.xlsx binary
+
+# Skrypty wsadowe Windows (start.cmd): cmd.exe wymaga CRLF.
+*.cmd text eol=crlf

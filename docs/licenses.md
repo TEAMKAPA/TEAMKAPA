@@ -148,9 +148,19 @@ po tej kolejności w środowisku nie ma żadnego pakietu `nvidia-*` ani `triton`
 | Model | Rewizja | Licencja | Użycie |
 |---|---|---|---|
 | `intfloat/multilingual-e5-small` (Hugging Face) | `614241f622f53c4eeff9890bdc4f31cfecc418b3` | MIT (karta modelu) | wektory dokumentów bazy wiedzy (RAG, `docs/rag.md`) |
+| `docling-project/docling-layout-heron` (Hugging Face) | `8f39ad3c0b4c58e9c2d2c84a38465abf757272d8` | Apache-2.0 (karta modelu: `license: apache-2.0`) | Docling: układ strony PDF i obrazów (krok 02) |
+| `docling-project/docling-models` (Hugging Face) | `fc0f2d45e2218ea24bce5045f58a389aed16dc23` (tag `v2.3.0`) | CDLA-Permissive-2.0 (karta modelu: `license: cdla-permissive-2.0`) | Docling: TableFormer — struktura tabel w PDF i obrazach (krok 02) |
 
-- Pobierane przy budowaniu obrazu (`backend/worker/Dockerfile`): wyłącznie `model.safetensors`,
-  `config.json` i pliki tokenizera (~470 MB); w czasie działania `HF_HUB_OFFLINE=1`.
+- Pobierane przy budowaniu obrazu (`backend/worker/Dockerfile`), w czasie działania
+  `HF_HUB_OFFLINE=1` (worker nie ma internetu). e5: wyłącznie `model.safetensors`, `config.json`
+  i pliki tokenizera (~470 MB). Docling: dwa repozytoria (~510 MB) w katalogu
+  `DOCLING_ARTIFACTS_PATH=/opt/docling/models`, w układzie jak `docling-tools models download`;
+  rewizje to te, które `docling==2.151.1` pobiera domyślnie (layout z gałęzi `main` —
+  przypięty do commita, który była nią 2026-11-22). Bez nich ekstrakcja PDF/JPG/PNG w kontenerze kończyła się błędem
+  „Cannot find an appropriate cached snapshot folder”. Wariant ONNX układu strony pomijamy —
+  obraz nie ma `onnxruntime`, Docling używa silnika `transformers`.
+- CDLA-Permissive-2.0 (Linux Foundation) to licencja permisywna dla danych/modeli: pozwala
+  używać i rozpowszechniać wyniki bez warunku udostępniania zmian — brak copyleftu.
 - Uruchamiany przez `transformers` i `torch` (CPU), które obraz już zawiera dla Docling —
   bez nowych zależności Pythona.
 

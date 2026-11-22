@@ -47,6 +47,27 @@ które publikują koła wyłącznie dla glibc (manylinux) — na Alpine wymagał
 - klucz API Eden AI (`EDENAI_API_KEY`) i dostęp do internetu z hosta — albo `LLM_DEMO_MODE=true`
 - do pracy lokalnej bez Dockera: Python 3.14
 
+## Szybki start (jedno polecenie)
+
+| System | Start | Zatrzymanie | Nowy token | Logi |
+|---|---|---|---|---|
+| Windows | `.\start.cmd` (albo dwuklik) | `.\start.cmd -Stop` | `.\start.cmd -Token` | `.\start.cmd -Logs` |
+| Linux, macOS, Git Bash | `./start.sh` | `./start.sh --stop` | `./start.sh --token` | `./start.sh --logs` |
+
+Skrypt (`start.ps1` / `start.sh`):
+
+1. przy pierwszym uruchomieniu tworzy `.env` z `.env.example` z losowymi `JWT_SECRET_KEY`
+   i `POSTGRES_PASSWORD` i pyta o `EDENAI_API_KEY` (Enter = tryb demonstracyjny,
+   `LLM_DEMO_MODE=true`); istniejącego `.env` nie zmienia,
+2. buduje obrazy i uruchamia wszystkie usługi razem z panelem urzędnika
+   (`docker compose --profile frontend up -d --build --wait`),
+3. czeka, aż usługi będą zdrowe, wystawia token JWT (ważny 8 h, kopiuje go do schowka)
+   i otwiera panel `http://localhost:8080` — w panelu kliknij „Token API” i wklej token.
+
+Pierwsze budowanie trwa kilkanaście minut: obraz workera (~4,7 GB) zawiera PyTorch CPU, Tesseract
+i modele (Docling, e5), bo worker działa bez dostępu do internetu. Kolejne starty — sekundy.
+Na Windows `start.cmd` uruchamia `start.ps1` z pominięciem blokady skryptów PowerShell.
+
 ## Budowanie obrazów
 
 ```bash
@@ -54,7 +75,7 @@ docker compose build                        # api, worker
 docker compose --profile frontend build     # + frontend
 ```
 
-## Uruchomienie
+## Uruchomienie krok po kroku
 
 ```bash
 cp .env.example .env
