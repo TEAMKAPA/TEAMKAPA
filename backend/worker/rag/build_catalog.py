@@ -57,7 +57,9 @@ def main() -> None:
         path = _pick(folder)
         entry["signature"] = signature_of(path)
         print(f"{entry['doc_type']:34s} ← {path.name} ({len(entry['signature'])} znaków)")
-    TYPES_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    TYPES_PATH.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
 
 
 if __name__ == "__main__":
