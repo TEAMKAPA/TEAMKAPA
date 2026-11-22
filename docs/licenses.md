@@ -14,6 +14,8 @@ i `manylinux_2_17_x86_64` (obraz workera `python:3.14.10-slim-trixie`).
 | pypdfium2 | 5.15.2 | BSD-3-Clause OR Apache-2.0 | PDFium 159.0.8149 (BSD-3) + zależności, wszystkie permisywne | OK |
 | pillow | 13.0.0 | MIT-CMU | libjpeg-turbo, libpng, libtiff, libwebp, libavif, OpenJPEG, FreeType, HarfBuzz, lcms2, zlib, liblzma, libzstd, brotli, libxcb, libXau: permisywne | OK, z uwagą o FriBiDi |
 | opencv-python-headless | 5.1.0.95 | MIT (opakowanie), Apache-2.0 (OpenCV) | FFmpeg (LGPL-2.1-or-later, dynamicznie), **Intel IPP ICV (Intel Simplified Software License, statycznie)**, Intel ITT (GPL-2.0-only OR BSD-3-Clause), OpenSSL 1.1.1w (OpenSSL/SSLeay), libgfortran i libquadmath jak w numpy, reszta permisywna | **Wyjątek do potwierdzenia przez zespół** (patrz niżej) |
+| rapidfuzz | 3.14.6 | MIT | brak (Linux: tylko biblioteki systemowe C/C++; Windows: runtime MSVC `msvcp140`) | OK |
+| httpx | 0.28.1 | BSD-3-Clause | czysty Python; zależności: httpcore, h11, anyio, idna (BSD/MIT), certifi (MPL-2.0, patrz niżej) | OK |
 | numpy | 2.5.4 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 | OpenBLAS (BSD-3), LAPACK (BSD-3-Open-MPI), libgfortran (GPL-3.0-or-later WITH GCC-exception-3.1), libquadmath (LGPL-2.1-or-later, tylko Linux) | **Dozwolony** (patrz niżej) |
 
 ## Szczegóły
@@ -89,6 +91,35 @@ Uwagi:
   ścieżkę obliczeń zależnie od procesora, a wynik detekcji ma być identyczny na każdej maszynie.
 - OpenSSL 1.1.1w dotyczy wyłącznie obsługi protokołów sieciowych w FFmpeg (`cv2.VideoCapture` z adresem
   URL). Rozwiązanie nie używa wideo ani FFmpeg; nie wolno przekazywać do `cv2` adresów sieciowych.
+
+### rapidfuzz 3.14.6 i httpx 0.28.1 (#11)
+
+- **rapidfuzz** (porównanie etykiet w podwójnym odczycie): MIT. Koło `manylinux_2_28` zawiera wyłącznie
+  własne rozszerzenia C++ linkowane z bibliotekami systemowymi (`libc`, `libstdc++`, `libgcc_s`, `libm`),
+  bez dołączonych bibliotek i bez napisów GPL; koło Windows dodatkowo `msvcp140` (runtime Microsoft
+  Visual C++, rozpowszechnianie dozwolone przez licencję runtime).
+- **httpx** (klient VLM): BSD-3-Clause, czysty Python. Był już zależnością przechodnią (`huggingface_hub`
+  przez Docling), więc jawne przypięcie nie dodaje pakietów. Jego zależność **certifi** (pakiet CA,
+  MPL-2.0) również już była w obrazie (Docling, `requests`). MPL-2.0 to słaby copyleft na poziomie
+  pliku: używamy pliku bez zmian, więc nie powstają obowiązki dla naszego kodu; CI (`pip-licenses`)
+  blokuje wyłącznie GPL, AGPL i LGPL.
+
+### Model VLM: Qwen3-VL-30B-A3B-Instruct przez Eden AI (#11)
+
+| Pole | Wartość |
+|---|---|
+| Model (wagi) | `Qwen/Qwen3-VL-30B-A3B-Instruct`, open-weight |
+| Licencja wag | **Apache-2.0** (karta modelu i API Hugging Face: `license: apache-2.0`) |
+| Identyfikator w Eden AI | `deepinfra/Qwen/Qwen3-VL-30B-A3B-Instruct` (dostawca wykonujący: **DeepInfra**) |
+| Katalog Eden AI (`GET /v3/models`, 2026-11-22) | wejście tekst i obraz, `open_weights: true`, `supports_response_schema: true`, `zero_data_retention: true`, region `us`, kwantyzacja `fp8`, 0,15 USD / 1 mln tokenów wejścia, 0,60 USD / 1 mln tokenów wyjścia |
+
+- **Przepływ danych:** obrazy i tekst stron formularzy trafiają do Eden AI (`https://api.edenai.run/v3`),
+  a stamtąd do DeepInfra, który uruchamia model. Organizatorzy dopuścili wysyłanie stron COI do Eden AI
+  z modelami open-weight (decyzja z 2026-11-21, brief 7.4).
+- Lista dozwolonych modeli jest w kodzie (`backend/worker/vision/vlm/config.py`); identyfikator spoza
+  listy kończy start błędem walidacji konfiguracji. Dodanie modelu wymaga sprawdzenia licencji wag tutaj.
+- Wariant lokalny (awaryjny) to te same wagi uruchomione przez człowieka na vLLM lub llama.cpp; kod
+  niczego nie pobiera.
 
 ## Metoda (odtworzenie)
 
