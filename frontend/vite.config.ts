@@ -1,0 +1,34 @@
+import { defineConfig } from 'vitest/config';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+
+const apiTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:8000';
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: apiTarget,
+        changeOrigin: true,
+        timeout: 300_000,
+      },
+      '/health': {
+        target: apiTarget,
+        changeOrigin: true,
+      },
+      '/ready': {
+        target: apiTarget,
+        changeOrigin: true,
+      },
+    },
+  },
+  test: {
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.ts',
+    css: true,
+    testTimeout: 15000,
+  },
+});
+
