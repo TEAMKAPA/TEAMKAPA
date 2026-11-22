@@ -263,6 +263,7 @@ zatwierdzanie i pobieranie czystego JSON COI.
 ```bash
 python -m venv .venv
 .venv/Scripts/activate            # Linux/macOS: source .venv/bin/activate
+pip install -r backend/worker/requirements-torch-cpu.txt   # PyTorch CPU, bez ~4 GB CUDA
 pip install -r requirements-dev.txt
 
 ruff check . && ruff format --check .

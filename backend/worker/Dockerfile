@@ -21,6 +21,9 @@ RUN apt-get update \
 
 WORKDIR /app
 
+# Najpierw PyTorch w wersji CPU (bez ~4 GB bibliotek CUDA), potem pozostałe zależności.
+COPY backend/worker/requirements-torch-cpu.txt /tmp/requirements-torch-cpu.txt
+RUN pip install -r /tmp/requirements-torch-cpu.txt && rm /tmp/requirements-torch-cpu.txt
 COPY backend/worker/requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt && rm /tmp/requirements.txt
 

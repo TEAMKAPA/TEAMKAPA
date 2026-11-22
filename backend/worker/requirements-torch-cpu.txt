@@ -1,0 +1,7 @@
+# PyTorch w wersji CPU — zależność Docling (modele układu strony). Domyślne koła z PyPI dla
+# Linuksa to wersja CUDA: ~4 GB bibliotek NVIDIA (licencja własnościowa) i triton, zbędne,
+# bo rozwiązanie działa bez GPU (obrona na x86 bez karty graficznej).
+# Instalować PRZED requirements.txt — pip uzna torch za spełniony i nie pobierze wersji CUDA.
+--index-url https://download.pytorch.org/whl/cpu
+torch==2.15.0+cpu                  # BSD-3-Clause
+torchvision==0.29.2+cpu            # BSD-3-Clause
