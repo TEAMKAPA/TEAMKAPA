@@ -233,7 +233,7 @@ def _collect_form_fields(form: dict[str, Any]) -> list[dict[str, Any]]:
         if tab.get("type") != "MAIN":
             continue
         for q in tab.get("questions", []):
-            for child in q.get("field", {}).get("repetingSectionGrid", []):
+            for child in q.get("field", {}).get("repeatingSectionGrid", []):
                 collected.append(child["field"])
     return collected
 
@@ -277,10 +277,12 @@ def evaluate_model(
             schema_ok += 1
 
         extracted = _collect_form_fields(step08)
-        total_fields += len(extracted)
+        # Metadane źródła mają tylko pola odczytane z dokumentu (nie te z szablonu COI).
+        generated = [f for f in extracted if f.get("origin") != "standard"]
+        total_fields += len(generated)
         fields_with_meta += sum(
             1
-            for f in extracted
+            for f in generated
             if f.get("source_text") and isinstance(f.get("page"), int) and "element_id" in f
         )
 

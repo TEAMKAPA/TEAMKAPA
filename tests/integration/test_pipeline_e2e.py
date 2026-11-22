@@ -73,7 +73,16 @@ async def test_representative_form_through_whole_system(
                 assert report["fields"]
                 for assessment in report["fields"]:
                     assert assessment["level"] in {"HIGH", "MEDIUM", "LOW"}
-                    assert set(assessment["signals"]) >= {"rules", "source_found"}
+                    assert "rules" in assessment["signals"]
+                # Pole ma sygnał źródła w dokumencie albo pochodzi ze standardowego szablonu COI;
+                # wyjątek: standardowy tekst strony końcowej.
+                without_origin = [
+                    a
+                    for a in report["fields"]
+                    if not {"source_found", "standard_template"} & set(a["signals"])
+                ]
+                assert len(without_origin) == 1
+                assert any("standard_template" in a["signals"] for a in report["fields"])
                 with_source = [a for a in report["fields"] if a["sources"]]
                 assert with_source
                 assert {"page", "bbox", "text", "element_id"} <= set(with_source[0]["sources"][0])

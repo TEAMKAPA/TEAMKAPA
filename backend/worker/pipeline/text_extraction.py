@@ -36,6 +36,8 @@ from backend.worker.pipeline.extractors import (
 logger = logging.getLogger(__name__)
 
 STAGE = "odczyt treści dokumentu"
+#: Rozszerzenia JPEG są równoważne — zmiana nazwy nie jest korektą rodzaju pliku.
+_JPEG_NAMES = {"jpe": "jpeg", "jpg": "jpeg"}
 _UNREADABLE = (
     CorruptedFileError,
     EncryptedFileError,
@@ -135,4 +137,16 @@ class Step02TextExtractor:
         except ExtractionError as exc:
             logger.warning("Ekstrakcja %s: %s (%s)", document.ref.job_id, exc.code, exc.message)
             raise PipelineStageError(STAGE, f"błąd ekstrakcji treści ({exc.code})") from exc
-        return to_contract(result)
+        contract = to_contract(result)
+        declared = document.ref.filename.rpartition(".")[2].lower()
+        effective = document.ref.extension
+        if _JPEG_NAMES.get(declared, declared) == _JPEG_NAMES.get(effective, effective):
+            return contract
+        # API przyjęło plik pokrewnego rodzaju (np. .doc z treścią DOCX) — urzędnik ma to wiedzieć.
+        corrected = Issue(
+            code="FILE_TYPE_CORRECTED",
+            severity=Severity.WARNING,
+            message=f"Plik z rozszerzeniem .{declared} ma zawartość {effective.upper()} "
+            "— przetworzono według zawartości",
+        )
+        return contract.model_copy(update={"issues": [*contract.issues, corrected]})

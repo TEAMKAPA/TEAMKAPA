@@ -6,6 +6,8 @@ from copy import deepcopy
 from typing import Any
 
 from backend.worker.clients.llm_client import LLMClient
+from backend.worker.pipeline.prompts import SYSTEM_PROMPT, dependencies_prompt
+from backend.worker.pipeline.standard_sections import is_standard
 from backend.worker.pipeline.step06_structure import (
     COI_COMPONENT_TYPES,
     COI_SECTION_TYPES,
@@ -93,7 +95,7 @@ def _index_form_elements(
             if not sec_tech:
                 continue
             sections[sec_tech] = sec_field
-            for child in sec_field.get("repetingSectionGrid", []):
+            for child in sec_field.get("repeatingSectionGrid", []):
                 child_field = child.get("field", {})
                 child_tech = child_field.get("techName")
                 if child_tech:
@@ -219,7 +221,7 @@ def validate_form_definition(form: dict[str, Any]) -> list[str]:
                 if not st.get("query"):
                     errors.append(f"Section '{sec.get('techName')}' state is missing query.")
 
-            grid = sec.get("repetingSectionGrid", [])
+            grid = sec.get("repeatingSectionGrid", [])
             if not grid:
                 errors.append(f"Section '{sec.get('techName')}' must contain at least 1 field.")
             for child in grid:
@@ -234,6 +236,8 @@ def validate_form_definition(form: dict[str, Any]) -> list[str]:
                     errors.append(
                         f"CONSENT_SECTION '{f.get('techName')}' missing consentSectionConfig."
                     )
+                if is_standard(f):
+                    continue  # pole szablonu COI nie pochodzi z dokumentu — bez metadanych źródła
                 if not f.get("source_text") or not isinstance(f.get("page"), int):
                     errors.append(f"Field '{f.get('techName')}' missing source_text or page.")
                 if "element_id" not in f:
@@ -266,6 +270,7 @@ def run_step08(
     form_with_fields: dict[str, Any],
     *,
     llm_client: LLMClient | None = None,
+    document: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Attach JSONata conditional states and sequential flow.links to a form."""
     client = llm_client or LLMClient()
@@ -274,18 +279,16 @@ def run_step08(
     field_locations, sections = _index_form_elements(form)
     fields_by_tech: dict[str, dict[str, Any]] = {}
     for sec in sections.values():
-        for child in sec.get("repetingSectionGrid", []):
+        for child in sec.get("repeatingSectionGrid", []):
             cf = child.get("field", {})
             if cf.get("techName"):
                 fields_by_tech[cf["techName"]] = cf
 
-    prompt = (
-        "Wyekstrahuj zależności warunkowe (SHOW / READ_ONLY) między sekcjami "
-        f"i polami formularza '{form.get('title', '')}'."
-    )
+    prompt = dependencies_prompt(document, form, DEPENDENCIES_SCHEMA)
     llm_output = client.generate_structured(
         prompt,
         DEPENDENCIES_SCHEMA,
+        system_prompt=SYSTEM_PROMPT,
         mock_response_fn=lambda _model: _build_mock_dependencies(form),
     )
 
@@ -307,6 +310,12 @@ def run_step08(
         target_kind = dep["target_kind"]
         target_tech = dep["target_tech_name"]
         state_type = dep["state_type"]
+
+        # Szablon COI ma już kompletne warunki sekcji i pól standardowych.
+        target = sections.get(target_tech) if target_kind == "section" else None
+        target = target or (fields_by_tech.get(target_tech) if target_kind == "field" else None)
+        if target is not None and is_standard(target):
+            continue
 
         if target_kind == "section" and target_tech in sections:
             if state_type not in STATE_TYPES_SECTION:

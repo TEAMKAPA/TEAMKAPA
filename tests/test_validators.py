@@ -253,6 +253,9 @@ class TestStep09RulesAndDicts:
             "Miejscowość",
             "Kraje",
             "Numery kierunkowe",
+            # drzewa adresowe z konfiguracji wyeksportowanych z COI
+            "TERYT_4G_DOWODOWY",
+            "TERYT_DOWODOWY",
         }
         assert match_coi_dictionary("Województwo zamieszkania") == "Województwo"
         assert match_coi_dictionary("Powiat") == "Powiat"
@@ -401,7 +404,7 @@ class TestStep09RulesAndDicts:
                                 "type": "SECTION",
                                 "techName": "twoje_dane",
                                 "title": "Twoje dane",
-                                "repetingSectionGrid": [
+                                "repeatingSectionGrid": [
                                     {
                                         "x": 0,
                                         "y": 0,
@@ -513,10 +516,10 @@ class TestStep09RulesAndDicts:
         result = run_step09(coi_form)
 
         # Input must remain untouched.
-        orig_grid = coi_form["tabs"][0]["questions"][0]["field"]["repetingSectionGrid"]
+        orig_grid = coi_form["tabs"][0]["questions"][0]["field"]["repeatingSectionGrid"]
         assert orig_grid[0]["field"]["type"] == "NUMBER"
 
-        grid = result["tabs"][0]["questions"][0]["field"]["repetingSectionGrid"]
+        grid = result["tabs"][0]["questions"][0]["field"]["repeatingSectionGrid"]
         by_tech = {c["field"]["techName"]: c["field"] for c in grid}
 
         # PESEL overridden from NUMBER/NIP -> TEXT_FIELD/PESEL.

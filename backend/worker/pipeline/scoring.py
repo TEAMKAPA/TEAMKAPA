@@ -9,6 +9,10 @@ Sygnały pola (0..1, nazwane w raporcie — urzędnik i ewaluacja widzą, skąd 
 - ``domain_rules``   — reguła dziedzinowa nadpisała decyzję modelu (0.4),
 - ``visual_match``   — element źródłowy pokrywa się z elementem wykrytym na obrazie strony.
 
+Pola ze standardowego szablonu COI (strony „Dane”, „Kontakt i zgody”) i pola informacyjne
+bez źródła (np. tekst strony końcowej) nie pochodzą z dokumentu — nie mają sygnałów źródła ani
+ostrzeżenia ``SOURCE_NOT_FOUND``; pola szablonu mają sygnał ``standard_template``.
+
 Wynik = średnia dostępnych sygnałów, z ograniczeniami:
 - brak kanału wizualnego → najwyżej MEDIUM (pole przeczytane tylko jednym kanałem),
 - tryb demonstracyjny → LOW (wynik nie pochodzi z modelu).
@@ -21,6 +25,7 @@ from collections.abc import Iterable
 from statistics import fmean
 from uuid import UUID
 
+from backend.shared.schemas.coi_form import INFORMATIONAL_FIELD_TYPES
 from backend.shared.schemas.quality import (
     BoundingBox,
     FieldAssessment,
@@ -89,9 +94,14 @@ def assess_fields(
         field_issues = list(issues_by_field.get(leaf.id, []))
 
         signals: dict[str, float] = {"rules": _rules_signal(field_issues)}
+        standard = source is not None and source.origin == "standard"
+        template_text = standard or (source is None and leaf.type in INFORMATIONAL_FIELD_TYPES)
         found = bool(source and source.text and normalize_text(source.text) in document_text)
-        signals["source_found"] = 1.0 if found else 0.0
-        signals["source_element"] = 1.0 if element is not None else 0.0
+        if standard:
+            signals["standard_template"] = 1.0
+        if not template_text:
+            signals["source_found"] = 1.0 if found else 0.0
+            signals["source_element"] = 1.0 if element is not None else 0.0
         if element is not None and element.confidence is not None:
             signals["ocr"] = element.confidence
         for conflict in normalized.conflicts.get(leaf.id, []):
@@ -106,9 +116,9 @@ def assess_fields(
                     field_id=leaf.id,
                 )
             )
-        if visual is not None:
+        if visual is not None and not template_text:
             signals["visual_match"] = _visual_signal(element, visual)
-        if not found:
+        if not found and not template_text:
             field_issues.append(
                 Issue(
                     code="SOURCE_NOT_FOUND",
@@ -126,7 +136,7 @@ def assess_fields(
             score = min(score, max(low - _EPSILON, 0.0))
 
         sources = []
-        if source is not None:
+        if source is not None and not standard:
             sources.append(
                 FieldSource(
                     channel=element.channel if element else SourceChannel.TEXT,

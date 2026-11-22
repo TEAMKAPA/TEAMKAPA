@@ -21,9 +21,17 @@ _FIB_WORD97_IDENT = 0xA5EC
 _FIB_WORD6_IDENT = 0xA5DC
 _FIB_FLAG_ENCRYPTED = 0x0100
 _FIB_FLAG_WHICH_TBL_STM = 0x0200
-_FIB_FLAG_OBFUSCATED = 0x1000
-_FIB_CCP_TEXT_OFFSET = 0x004C
+# MS-DOC FibBase: 0x1000 to fExtChar (ustawiony w prawie każdym pliku Word 97+), a fObfuscated
+# (0x8000) ma znaczenie tylko razem z fEncrypted — wskazuje szyfrowanie XOR.
+_FIB_FLAG_OBFUSCATED = 0x8000
 _FIB_CLX_ENTRY_INDEX = 33
+# FibRgLw97: ccpText jest 4. wpisem (po cbMac, lProductCreated, lProductRevised).
+_FIB_LW_CCP_FIRST_INDEX = 3
+_STORY_NAMES = ("text", "footnotes", "headers", "macro", "comments", "endnotes",
+                "textboxes", "header_textboxes")  # fmt: skip
+_CONTENT_STORIES = frozenset(
+    {"text", "footnotes", "headers", "endnotes", "textboxes", "header_textboxes"}
+)
 _PIECE_COMPRESSED_FLAG = 0x40000000
 _PIECE_FC_MASK = 0x3FFFFFFF
 
@@ -144,11 +152,44 @@ def _read_fib_piece_text(ole: olefile.OleFileIO, word_stream: bytes) -> str | No
     if decoded is None:
         return None
 
-    if len(word_stream) >= _FIB_CCP_TEXT_OFFSET + 4:
-        ccp_text = struct.unpack_from("<I", word_stream, _FIB_CCP_TEXT_OFFSET)[0]
-        if 0 < ccp_text < len(decoded):
-            return decoded[:ccp_text]
-    return decoded
+    return _select_content_stories(decoded, _read_story_lengths(word_stream, csw, cslw))
+
+
+def _read_story_lengths(word_stream: bytes, csw: int, cslw: int) -> list[tuple[str, int]] | None:
+    """Długości kolejnych „historii” dokumentu (FibRgLw97: ccpText … ccpHdrTxbx).
+
+    Tekst w przestrzeni CP leży po kolei: treść główna, przypisy, nagłówki/stopki, (makra),
+    komentarze, przypisy końcowe, pola tekstowe, pola tekstowe nagłówków.
+    """
+    if cslw <= _FIB_LW_CCP_FIRST_INDEX + len(_STORY_NAMES) - 1:
+        return None
+    lw_start = 0x22 + 2 * csw + 2
+    first = lw_start + 4 * _FIB_LW_CCP_FIRST_INDEX
+    if first + 4 * len(_STORY_NAMES) > len(word_stream):
+        return None
+    lengths = struct.unpack_from(f"<{len(_STORY_NAMES)}I", word_stream, first)
+    return list(zip(_STORY_NAMES, lengths, strict=True))
+
+
+def _select_content_stories(decoded: str, stories: list[tuple[str, int]] | None) -> str:
+    """Treść formularza: historia główna + przypisy, nagłówki i pola tekstowe.
+
+    Wiele urzędowych formularzy (np. wnioski i deklaracje składane w ramkach) trzyma całą
+    treść w polach tekstowych — sama historia główna zawiera wtedy tylko znaki zakotwiczeń.
+    Komentarze recenzentów i makra są pomijane.
+    """
+    if not stories:
+        return decoded
+    if sum(length for _, length in stories) > len(decoded) + 1:
+        return decoded  # niespójny FIB — lepiej oddać całość niż uciąć treść
+    parts: list[str] = []
+    position = 0
+    for name, length in stories:
+        chunk = decoded[position : position + length]
+        position += length
+        if name in _CONTENT_STORIES and chunk.strip("\r\n\t\x07\x08 "):
+            parts.append(chunk)
+    return "\r".join(parts)
 
 
 def _is_readable_char(ch: str) -> bool:
@@ -289,9 +330,11 @@ def extract_doc(ctx: ExtractionContext) -> ExtractedDocument:
             w_ident = struct.unpack_from("<H", word_stream, 0)[0]
             if w_ident in {_FIB_WORD97_IDENT, _FIB_WORD6_IDENT}:
                 flags = struct.unpack_from("<H", word_stream, 0x0A)[0]
-                if flags & (_FIB_FLAG_ENCRYPTED | _FIB_FLAG_OBFUSCATED):
+                if flags & _FIB_FLAG_ENCRYPTED:
+                    method = "XOR" if flags & _FIB_FLAG_OBFUSCATED else "RC4"
                     raise EncryptedFileError(
-                        "Plik DOC jest chroniony hasłem (flaga FIB fEncrypted)."
+                        "Plik DOC jest chroniony hasłem "
+                        f"(flaga FIB fEncrypted, szyfrowanie {method})."
                     )
 
             raw_text = _read_fib_piece_text(ole, word_stream)

@@ -47,22 +47,87 @@ def test_leaf_on_tab_is_wrapped_in_section() -> None:
     (question,) = normalized.form.tabs[3].questions
     assert question.field.type is FieldType.SECTION
     assert question.field.title == "Podgląd"
-    assert question.field.repeting_section_grid[0].field.type is FieldType.INFO_SECTION
-    assert {"WRAPPED_IN_SECTION", "KEY_NOT_ALLOWED_REMOVED"} <= _codes(normalized.issues)
+    assert question.field.repeating_section_grid[0].field.type is FieldType.INFO_SECTION
+    assert _codes(normalized.issues) == {"WRAPPED_IN_SECTION"}
+    assert (question.x, question.y, question.rows, question.cols) == (0, 0, 2, 3)
 
 
 def test_keys_not_allowed_for_type_are_removed_and_reported() -> None:
     raw = sample()
     uploader = leaf(raw, 0, 4, 1)  # FILE_UPLOADER
-    uploader["readOnly"] = True
-    consent = leaf(raw, 2, 1, 0)  # CONSENT_SECTION
-    consent.update({"title": "Zgoda", "validation": ["REQUIRED"], "states": []})
+    uploader["multiLevelTree"] = True
+    telefon = leaf(raw, 2, 0, 0)  # TEXT_FIELD
+    telefon["options"] = [{"name": "Komórkowy"}]
     normalized = normalize_form(raw)
     notes = [i for i in normalized.issues if i.code == "KEY_NOT_ALLOWED_REMOVED"]
     assert len(notes) == 2
-    assert "readOnly" in notes[0].message
-    assert "title" in notes[1].message and "validation" in notes[1].message
+    assert "multiLevelTree" in notes[0].message
+    assert "opcje" in notes[1].message
     assert all(n.severity is Severity.INFO for n in notes)
+
+
+def test_validators_not_allowed_for_type_are_removed() -> None:
+    raw = sample()
+    leaf(raw, 2, 1, 0)["validation"] = ["REQUIRED"]  # CONSENT_SECTION — wymagalność w consents
+    leaf(raw, 0, 1, 0)["validation"] = ["REQUIRED", "PESEL"]  # RADIO — tylko REQUIRED
+    leaf(raw, 0, 2, 0)["validation"] = {}  # jak w eksporcie COI
+    normalized = normalize_form(raw)
+    dropped = [i for i in normalized.issues if i.code == "VALIDATOR_NOT_ALLOWED_REMOVED"]
+    assert [d.severity for d in dropped] == [Severity.WARNING, Severity.WARNING]
+    out = normalized.form.to_coi_json()
+    assert leaf(out, 2, 1, 0)["validation"] == []
+    assert leaf(out, 0, 1, 0)["validation"] == ["REQUIRED"]
+    assert leaf(out, 0, 2, 0)["validation"] == []
+
+
+def test_layout_follows_coi_single_column_grid() -> None:
+    """COI: x=0, cols=3; pole 1 wiersz, sekcja = pola + 1; y i questionOrder rosną od 0."""
+    raw = sample()
+    for question in raw["tabs"][0]["questions"]:
+        question.update(x=2, cols=1, rows=1)
+        for child in question["field"]["repeatingSectionGrid"]:
+            child.update(x=1, cols=12, rows=4)
+    grid = section(raw, 0, 2)["repeatingSectionGrid"]  # twoje_dane: odwrócona kolejność
+    for i, child in enumerate(reversed(grid)):
+        child["y"] = i
+    normalized = normalize_form(raw)
+    out = normalized.form.to_coi_json()
+    questions = out["tabs"][0]["questions"]
+    assert [(q["x"], q["y"], q["rows"], q["cols"]) for q in questions] == [
+        (0, 0, 2, 3), (0, 2, 3, 3), (0, 5, 4, 3), (0, 9, 4, 3), (0, 13, 3, 3)
+    ]  # fmt: skip
+    assert [q["field"]["questionOrder"] for q in questions] == [0, 2, 5, 9, 13]
+    children = questions[2]["field"]["repeatingSectionGrid"]
+    assert [c["field"]["techName"] for c in children] == ["pesel", "nazwisko", "imie"]
+    assert [(c["y"], c["rows"], c["cols"], c["field"]["questionOrder"]) for c in children] == [
+        (0, 1, 3, 0), (1, 1, 3, 1), (2, 1, 3, 2)
+    ]  # fmt: skip
+
+
+def test_descriptions_become_html_like_coi_editor() -> None:
+    raw = sample()
+    section(raw, 0, 0)["description"] = ""
+    leaf(raw, 1, 0, 5)["description"] = "Opisz <krótko>\n\nDrugi akapit"  # TEXTAREA
+    out = normalize_form(raw).form.to_coi_json()
+    assert section(out, 0, 0)["description"] == "<html><head></head><body></body></html>"
+    assert leaf(out, 1, 0, 5)["description"] == (
+        "<html><head></head><body><p>Opisz &lt;krótko&gt;</p><p>Drugi akapit</p></body></html>"
+    )
+
+
+def test_legacy_grid_key_and_option_conventions() -> None:
+    raw = sample()
+    radio = leaf(raw, 0, 1, 0)
+    radio["options"] = [{"id": "3f0c", "name": "Własnym imieniu"}]
+    select = leaf(raw, 1, 0, 0)  # SELECT „Kraje”
+    select["defaultValue"] = "Polska"
+    legacy = section(raw, 0, 1)
+    legacy["repetingSectionGrid"] = legacy.pop("repeatingSectionGrid")
+    out = normalize_form(raw).form.to_coi_json()
+    assert leaf(out, 0, 1, 0)["options"] == [
+        {"id": "Własnym imieniu", "name": "Własnym imieniu", "techName": "wlasnym_imieniu"}
+    ]
+    assert leaf(out, 1, 0, 0)["defaultValue"] == ["Polska"]
 
 
 def test_external_system_without_source_is_flagged() -> None:
@@ -72,7 +137,7 @@ def test_external_system_without_source_is_flagged() -> None:
     normalized = normalize_form(raw)
     (issue,) = [i for i in normalized.issues if i.code == "INITIAL_DATA_SOURCE_MISSING"]
     assert issue.severity is Severity.WARNING
-    imie = normalized.form.tabs[0].questions[2].field.repeting_section_grid[0].field
+    imie = normalized.form.tabs[0].questions[2].field.repeating_section_grid[0].field
     assert getattr(imie, "default_value_type", None) is None
 
 
@@ -128,3 +193,12 @@ def test_unfixable_result_is_stage_error() -> None:
     leaf(raw, 1, 0, 1)["type"] = "SIGNATURE"
     with pytest.raises(PipelineStageError, match="niezgodny ze schematem COI"):
         normalize_form(raw)
+
+
+def test_choice_without_options_becomes_text_field() -> None:
+    raw = sample()
+    radio = leaf(raw, 0, 1, 0)
+    radio["options"] = []
+    normalized = normalize_form(raw)
+    assert leaf(normalized.form.to_coi_json(), 0, 1, 0)["type"] == "TEXT_FIELD"
+    assert "CHOICE_WITHOUT_OPTIONS" in _codes(normalized.issues)

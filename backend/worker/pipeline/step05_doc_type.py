@@ -173,6 +173,10 @@ def _tokenize(text: str) -> set[str]:
     return {tok for tok in re.findall(r"[a-z0-9]+", _normalize(text)) if len(tok) >= 2}
 
 
+_TITLE_LINES = 20
+_TITLE_LINE_MATCH = 0.8
+
+
 def _score_template(text: str, template: dict[str, Any]) -> tuple[float, list[str]]:
     norm_text = _normalize(text)
     tokens = _tokenize(text)
@@ -202,7 +206,23 @@ def _score_template(text: str, template: dict[str, Any]) -> tuple[float, list[st
     text_sim = 0.6 * jaccard + 0.4 * title_sim
 
     total = min(1.0, 0.40 * code_score + 0.45 * kw_score + 0.15 * text_sim)
+
+    # 4. Tytuł wzorca w jednej z pierwszych linii (słowa kluczowe nie łapią odmiany:
+    #    „dowód osobisty” vs „wydanie dowodu osobistego”).
+    norm_title = _normalize(template["title"])
+    head = [_normalize(line) for line in text.splitlines() if line.strip()][:_TITLE_LINES]
+    title_line = max((SequenceMatcher(None, line, norm_title).ratio() for line in head), default=0)
+    if title_line >= _TITLE_LINE_MATCH:
+        signals.append("title")
+        total = min(1.0, total + 0.5 * title_line)
     return round(total, 4), signals
+
+
+#: Minimalny wynik dopasowania wzorca. Teksty zgodne ze wzorcem uzyskują ≥ 0,3, a wnioski
+#: spoza katalogu (wszystkie 9 formularzy konkursowych) ≤ 0,18 — poniżej progu wzorzec nie jest
+#: wybierany, bo cudzy wzorzec w zapytaniu prowadzi model do zmyślania pól (np. „liczba drzew”
+#: we wniosku o numer porządkowy).
+MIN_TEMPLATE_SCORE = 0.25
 
 
 def classify_document(
@@ -234,8 +254,9 @@ def classify_document(
         for score, tpl, signals in top_items
     ]
 
-    best_template = deepcopy(top_items[0][1]) if top_items else None
-    best_doc_type = candidates[0]["doc_type"] if candidates else "unknown"
+    confident = bool(top_items) and top_items[0][0] >= MIN_TEMPLATE_SCORE
+    best_template = deepcopy(top_items[0][1]) if confident else None
+    best_doc_type = candidates[0]["doc_type"] if confident else "unknown"
 
     return {
         "doc_type": best_doc_type,

@@ -15,10 +15,11 @@ from dataclasses import dataclass, field
 from uuid import UUID
 
 from backend.shared.schemas.coi_form import (
+    GRID_KEY,
+    INFORMATIONAL_FIELD_TYPES,
     INPUT_FIELD_TYPES,
     CheckboxField,
     DefaultValueType,
-    FieldType,
     FormDefinition,
     LeafField,
     RadioField,
@@ -35,7 +36,7 @@ from backend.shared.schemas.quality import Issue, Severity
 #          .field.repeatingSectionGrid['pole' in field.techName].field.__userAnswer
 #   "X" in tabs['Strona' in title].questions['sekcja' in field.techName]
 #          .field.__userAnswer[$repeatingSectionIndex]['pole' in fieldTechName].answers
-# Akceptujemy obie pisownie klucza sekcji (schemat: repeting…, przykłady: repeating…).
+# Akceptujemy obie pisownie klucza sekcji (schemat: repeting…, pliki COI: repeating…).
 _REF_RE = re.compile(
     r"""(?:"(?P<value>[^"]*)"\s*in\s*)?
         tabs\[\s*'(?P<tab>[^']*)'\s*in\s*title\s*\]
@@ -121,7 +122,7 @@ def _section_path(t: int, s: int) -> str:
 
 
 def _field_path(t: int, s: int, f: int) -> str:
-    return f"{_section_path(t, s)}/repetingSectionGrid/{f}/field"
+    return f"{_section_path(t, s)}/{GRID_KEY}/{f}/field"
 
 
 # ------------------------------------------------------------------ strony
@@ -160,7 +161,7 @@ def _check_tabs(form: FormDefinition) -> list[Issue]:
             )
 
     for t, tab in enumerate(form.tabs):
-        leaves = [fq.field for q in tab.questions for fq in q.field.repeting_section_grid]
+        leaves = [fq.field for q in tab.questions for fq in q.field.repeating_section_grid]
         if not leaves:
             issues.append(
                 _err(
@@ -170,7 +171,7 @@ def _check_tabs(form: FormDefinition) -> list[Issue]:
                 )
             )
         for s, q in enumerate(tab.questions):
-            if not q.field.repeting_section_grid:
+            if not q.field.repeating_section_grid:
                 issues.append(
                     _warn(
                         "SECTION_EMPTY",
@@ -180,13 +181,15 @@ def _check_tabs(form: FormDefinition) -> list[Issue]:
                     )
                 )
             if tab.type is TabType.FINISH:
-                for f, fq in enumerate(q.field.repeting_section_grid):
-                    if fq.field.type is not FieldType.INFO_SECTION:
+                # W plikach COI strona końcowa zawiera sekcję z blokiem tekstu (TEXT_BLOCK).
+                for f, fq in enumerate(q.field.repeating_section_grid):
+                    if fq.field.type not in INFORMATIONAL_FIELD_TYPES:
                         issues.append(
                             _err(
-                                "FINISH_ONLY_INFO_SECTION",
-                                "Na stronie FINISH dozwolone są wyłącznie pola INFO_SECTION, "
-                                f"a „{fq.field.tech_name}” ma typ {fq.field.type}",
+                                "FINISH_ONLY_INFORMATIONAL",
+                                "Na stronie FINISH dozwolone są wyłącznie pola informacyjne "
+                                f"(TEXT_BLOCK, INFO_SECTION), a „{fq.field.tech_name}” ma typ "
+                                f"{fq.field.type}",
                                 _field_path(t, s, f),
                                 fq.field.id,
                             )
@@ -199,9 +202,9 @@ def _check_tabs(form: FormDefinition) -> list[Issue]:
             issues += _check_grid(
                 [
                     (fq.x, fq.y, fq.rows, fq.cols, fq.field.question_order)
-                    for fq in q.field.repeting_section_grid
+                    for fq in q.field.repeating_section_grid
                 ],
-                f"{_section_path(t, s)}/repetingSectionGrid",
+                f"{_section_path(t, s)}/{GRID_KEY}",
             )
     return issues
 
@@ -235,13 +238,13 @@ def _check_grid(cells: list[tuple[int, int, int, int, int | None]], path: str) -
 
 
 def _check_ids(form: FormDefinition) -> list[Issue]:
-    ids: list[tuple[UUID, str]] = [(t.id, f"/tabs/{i}/id") for i, t in enumerate(form.tabs)]
+    ids: list[tuple[UUID | str, str]] = [(t.id, f"/tabs/{i}/id") for i, t in enumerate(form.tabs)]
     for t, tab in enumerate(form.tabs):
         for s, q in enumerate(tab.questions):
             ids.append((q.field.id, f"{_section_path(t, s)}/id"))
             ids += [
                 (fq.field.id, f"{_field_path(t, s, f)}/id")
-                for f, fq in enumerate(q.field.repeting_section_grid)
+                for f, fq in enumerate(q.field.repeating_section_grid)
             ]
     ids += [(link.id, f"/flow/links/{i}/id") for i, link in enumerate(form.flow.links)]
     counts = Counter(i for i, _ in ids)
@@ -270,8 +273,8 @@ def _check_tech_names_and_options(form: FormDefinition) -> list[Issue]:
                         section.id,
                     )
                 )
-            field_names = Counter(fq.field.tech_name for fq in section.repeting_section_grid)
-            for f, fq in enumerate(section.repeting_section_grid):
+            field_names = Counter(fq.field.tech_name for fq in section.repeating_section_grid)
+            for f, fq in enumerate(section.repeating_section_grid):
                 leaf = fq.field
                 global_names[leaf.tech_name] += 1
                 path = _field_path(t, s, f)
@@ -286,12 +289,23 @@ def _check_tech_names_and_options(form: FormDefinition) -> list[Issue]:
                         )
                     )
                 if isinstance(leaf, _CHOICE_TYPES):
+                    if any(o.tech_name is None for o in leaf.options):
+                        issues.append(
+                            _warn(
+                                "OPTION_TECHNAME_MISSING",
+                                "Opcja bez techName — uzupełnij nazwę techniczną",
+                                f"{path}/options",
+                                leaf.id,
+                            )
+                        )
                     for attr, code in (
                         ("name", "OPTION_NAME_DUPLICATE"),
                         ("tech_name", "OPTION_TECHNAME_DUPLICATE"),
                         ("id", "OPTION_ID_DUPLICATE"),
                     ):
-                        counts = Counter(getattr(o, attr) for o in leaf.options)
+                        counts = Counter(
+                            getattr(o, attr) for o in leaf.options if getattr(o, attr) is not None
+                        )
                         issues += [
                             _err(
                                 code,
@@ -387,7 +401,7 @@ def _check_fields(form: FormDefinition) -> list[Issue]:
     issues: list[Issue] = []
     for t, tab in enumerate(form.tabs):
         for s, q in enumerate(tab.questions):
-            for f, fq in enumerate(q.field.repeting_section_grid):
+            for f, fq in enumerate(q.field.repeating_section_grid):
                 leaf = fq.field
                 path = _field_path(t, s, f)
                 if leaf.type in INPUT_FIELD_TYPES and not getattr(leaf, "title", None):
@@ -440,11 +454,11 @@ def _check_initial_data(leaf: LeafField, path: str) -> list[Issue]:
                 leaf.id,
             )
         )
-    if getattr(leaf, "read_only", None) is not True:
+    if getattr(leaf, "read_only", None) is not True and not (entry and entry.editable):
         issues.append(
             _err(
                 "INITIAL_DATA_NOT_READONLY",
-                "Pole zasilane danymi inicjalnymi musi mieć readOnly: true",
+                "Pole zasilane danymi tożsamości lub z rejestru musi mieć readOnly: true",
                 f"{path}/readOnly",
                 leaf.id,
             )
@@ -472,7 +486,7 @@ def _index_elements(form: FormDefinition) -> dict[_ElementKey, _Element]:
                     section=section,
                 ),
             )
-            for f, fq in enumerate(section.repeting_section_grid):
+            for f, fq in enumerate(section.repeating_section_grid):
                 leaf = fq.field
                 fkey: _ElementKey = (tab.title, section.tech_name, leaf.tech_name)
                 index.setdefault(
