@@ -17,11 +17,8 @@ export const ALLOWED_EXTENSIONS = [
   'png',
 ] as const;
 
-export type AllowedExtension = (typeof ALLOWED_EXTENSIONS)[number];
-
 const ALLOWED_EXTENSION_SET: ReadonlySet<string> = new Set(ALLOWED_EXTENSIONS);
 
-/** Znaki niedozwolone w nazwie pliku według regulaminu COI. */
 export const FORBIDDEN_FILENAME_CHARS = new Set([
   ';',
   ':',
@@ -73,14 +70,10 @@ export interface ValidationOptions {
 
 export function extractExtension(filename: string): { stem: string; extension: string } | null {
   const lastDot = filename.lastIndexOf('.');
-  if (lastDot <= 0 || lastDot === filename.length - 1) {
-    return null;
-  }
+  if (lastDot <= 0 || lastDot === filename.length - 1) return null;
   const stem = filename.slice(0, lastDot);
   const extension = filename.slice(lastDot + 1).toLowerCase();
-  if (!stem.trim()) {
-    return null;
-  }
+  if (!stem.trim()) return null;
   return { stem, extension };
 }
 
@@ -94,7 +87,6 @@ export function validateFilename(filename: string): { extension: string } | File
       message: `Nazwa pliku ma ${filename.length} znaków (maksymalnie ${MAX_FILENAME_LENGTH})`,
     };
   }
-
   const badChars = new Set<string>();
   for (const ch of filename) {
     const code = ch.charCodeAt(0);
@@ -112,7 +104,6 @@ export function validateFilename(filename: string): { extension: string } | File
       message: `Nazwa pliku zawiera niedozwolone znaki: ${shown}`,
     };
   }
-
   const parsed = extractExtension(filename);
   if (!parsed || !ALLOWED_EXTENSION_SET.has(parsed.extension)) {
     return {
@@ -120,7 +111,6 @@ export function validateFilename(filename: string): { extension: string } | File
       message: `Niedozwolony typ pliku. Dozwolone rozszerzenia: ${ALLOWED_EXTENSIONS.join(', ')}`,
     };
   }
-
   return { extension: parsed.extension };
 }
 
@@ -132,7 +122,6 @@ export function validateFile(file: File, options: ValidationOptions = {}): FileV
   if ('code' in nameCheck) {
     return { file, valid: false, extension: null, error: nameCheck };
   }
-
   if (file.size === 0) {
     return {
       file,
@@ -141,7 +130,6 @@ export function validateFile(file: File, options: ValidationOptions = {}): FileV
       error: { code: 'FILE_EMPTY', message: 'Plik jest pusty' },
     };
   }
-
   if (file.size > maxBytes) {
     return {
       file,
@@ -153,7 +141,6 @@ export function validateFile(file: File, options: ValidationOptions = {}): FileV
       },
     };
   }
-
   return { file, valid: true, extension: nameCheck.extension };
 }
 
@@ -175,11 +162,8 @@ export function validateBatchFiles(
 
   for (const file of files) {
     const result = validateFile(file, options);
-    if (result.valid) {
-      validFiles.push(file);
-    } else if (result.error) {
-      invalidFiles.push({ file, error: result.error });
-    }
+    if (result.valid) validFiles.push(file);
+    else if (result.error) invalidFiles.push({ file, error: result.error });
   }
 
   return { validFiles, invalidFiles, batchError };
@@ -189,14 +173,4 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
-
-export function isImageExtension(ext: string | null | undefined): boolean {
-  if (!ext) return false;
-  const normalized = ext.toLowerCase();
-  return normalized === 'jpg' || normalized === 'jpeg' || normalized === 'png';
-}
-
-export function isPdfExtension(ext: string | null | undefined): boolean {
-  return (ext ?? '').toLowerCase() === 'pdf';
 }

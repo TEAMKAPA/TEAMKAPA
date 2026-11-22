@@ -1,12 +1,3 @@
-/**
- * Realistyczne dane demonstracyjne oparte na wzorcowym formularzu COI
- * (`tests/fixtures/sample_form.json`) oraz pełnym raporcie jakości `QualityReport`.
- *
- * Pozwala testować cały przepływ urzędnika (upload, batch, przegląd pól, filtrowanie,
- * podświetlanie bbox na 2-stronicowym blankiecie, edycję, walidację, eksport JSON)
- * również bez uruchomionego backendu / Dockera.
- */
-
 import type { FormDefinition } from '../types/coiForm';
 import type { AnalysisResult, BatchView, JobView } from '../types/auditReport';
 
@@ -67,21 +58,9 @@ export const SAMPLE_FORM: FormDefinition = {
                   id: 'b7b9efa0-7d90-5791-9586-26bb1cbf6ac7',
                   techName: 'w_czyim_imieniu',
                   options: [
-                    {
-                      id: '5483c2af-4371-5ba5-913a-0e401deb7317',
-                      name: 'Swoim',
-                      techName: 'swoim',
-                    },
-                    {
-                      id: 'efb36815-8754-51e9-88d4-a6c13130cd94',
-                      name: 'Innej osoby',
-                      techName: 'innej_osoby',
-                    },
-                    {
-                      id: 'e1f9898f-7a7b-5550-9050-1d8d70bebaf3',
-                      name: 'Osoby prawnej lub jednostki organizacyjnej',
-                      techName: 'osoby_prawnej',
-                    },
+                    { id: '5483c2af-4371-5ba5-913a-0e401deb7317', name: 'Swoim', techName: 'swoim' },
+                    { id: 'efb36815-8754-51e9-88d4-a6c13130cd94', name: 'Innej osoby', techName: 'innej_osoby' },
+                    { id: 'e1f9898f-7a7b-5550-9050-1d8d70bebaf3', name: 'Osoby prawnej lub jednostki organizacyjnej', techName: 'osoby_prawnej' },
                   ],
                   type: 'RADIO',
                   title: 'Wybierz, w czyim imieniu wnioskujesz',
@@ -97,16 +76,8 @@ export const SAMPLE_FORM: FormDefinition = {
                   id: '83eda16d-a03c-550a-a58a-b312699fae08',
                   techName: 'jako_kto',
                   options: [
-                    {
-                      id: '3c6ad7ff-47e3-58df-a287-693a4f9ba147',
-                      name: 'Pełnomocnik',
-                      techName: 'pelnomocnik',
-                    },
-                    {
-                      id: 'a6584ee0-ce2b-5778-9c1c-f86873207945',
-                      name: 'Reprezentant',
-                      techName: 'reprezentant',
-                    },
+                    { id: '3c6ad7ff-47e3-58df-a287-693a4f9ba147', name: 'Pełnomocnik', techName: 'pelnomocnik' },
+                    { id: 'a6584ee0-ce2b-5778-9c1c-f86873207945', name: 'Reprezentant', techName: 'reprezentant' },
                   ],
                   type: 'RADIO',
                   title: 'Wybierz, jako kto wnioskujesz',
@@ -208,39 +179,21 @@ export const SAMPLE_FORM: FormDefinition = {
                 y: 0,
                 rows: 1,
                 cols: 1,
-                field: {
-                  id: '769a3011-fa5d-559c-87cc-f521098ce593',
-                  techName: 'inna_imie',
-                  type: 'TEXT_FIELD',
-                  title: 'Imię',
-                  validation: ['REQUIRED'],
-                },
+                field: { id: '769a3011-fa5d-559c-87cc-f521098ce593', techName: 'inna_imie', type: 'TEXT_FIELD', title: 'Imię', validation: ['REQUIRED'] },
               },
               {
                 x: 0,
                 y: 1,
                 rows: 1,
                 cols: 1,
-                field: {
-                  id: 'ec48043d-bea1-52ce-93c2-641aad9460e3',
-                  techName: 'inna_nazwisko',
-                  type: 'TEXT_FIELD',
-                  title: 'Nazwisko',
-                  validation: ['REQUIRED'],
-                },
+                field: { id: 'ec48043d-bea1-52ce-93c2-641aad9460e3', techName: 'inna_nazwisko', type: 'TEXT_FIELD', title: 'Nazwisko', validation: ['REQUIRED'] },
               },
               {
                 x: 0,
                 y: 2,
                 rows: 1,
                 cols: 1,
-                field: {
-                  id: '5a97afcf-887d-5cf6-998a-27a54eb000c9',
-                  techName: 'inna_pesel',
-                  type: 'TEXT_FIELD',
-                  title: 'Numer PESEL',
-                  validation: ['REQUIRED', 'PESEL'],
-                },
+                field: { id: '5a97afcf-887d-5cf6-998a-27a54eb000c9', techName: 'inna_pesel', type: 'TEXT_FIELD', title: 'Numer PESEL', validation: ['REQUIRED', 'PESEL'] },
               },
             ],
           },
@@ -272,16 +225,8 @@ export const SAMPLE_FORM: FormDefinition = {
                   id: 'c59303b8-d2bc-5628-97f6-3771d259ad7f',
                   techName: 'czy_oplata',
                   options: [
-                    {
-                      id: '854741de-5352-5fd3-ad4a-5457b1edfbd0',
-                      name: 'Tak',
-                      techName: 'tak',
-                    },
-                    {
-                      id: '177c956f-3701-58e2-9444-7e6f845df201',
-                      name: 'Nie',
-                      techName: 'nie',
-                    },
+                    { id: '854741de-5352-5fd3-ad4a-5457b1edfbd0', name: 'Tak', techName: 'tak' },
+                    { id: '177c956f-3701-58e2-9444-7e6f845df201', name: 'Nie', techName: 'nie' },
                   ],
                   type: 'RADIO',
                   title: 'Czy złożenie pełnomocnictwa wymaga opłaty skarbowej?',
@@ -351,65 +296,35 @@ export const SAMPLE_FORM: FormDefinition = {
                 y: 1,
                 rows: 1,
                 cols: 1,
-                field: {
-                  id: '69767949-0de8-5e96-96df-08a9e6e4486c',
-                  techName: 'miejscowosc',
-                  type: 'TEXT_FIELD',
-                  title: 'Miejscowość',
-                  validation: ['REQUIRED'],
-                },
+                field: { id: '69767949-0de8-5e96-96df-08a9e6e4486c', techName: 'miejscowosc', type: 'TEXT_FIELD', title: 'Miejscowość', validation: ['REQUIRED'] },
               },
               {
                 x: 0,
                 y: 2,
                 rows: 1,
                 cols: 1,
-                field: {
-                  id: '4b7075cb-aed6-59d0-ada9-28eadcfdeff0',
-                  techName: 'kod_pocztowy',
-                  type: 'TEXT_FIELD',
-                  title: 'Kod pocztowy',
-                  validation: ['REQUIRED', 'ZIP_CODE'],
-                },
+                field: { id: '4b7075cb-aed6-59d0-ada9-28eadcfdeff0', techName: 'kod_pocztowy', type: 'TEXT_FIELD', title: 'Kod pocztowy', validation: ['REQUIRED', 'ZIP_CODE'] },
               },
               {
                 x: 0,
                 y: 3,
                 rows: 1,
                 cols: 1,
-                field: {
-                  id: '3d88666d-99fa-5d83-bd93-49215e2eb9f9',
-                  techName: 'numer_dzialki',
-                  type: 'TEXT_FIELD',
-                  title: 'Numer działki ewidencyjnej',
-                  validation: ['REQUIRED'],
-                },
+                field: { id: '3d88666d-99fa-5d83-bd93-49215e2eb9f9', techName: 'numer_dzialki', type: 'TEXT_FIELD', title: 'Numer działki ewidencyjnej', validation: ['REQUIRED'] },
               },
               {
                 x: 0,
                 y: 4,
                 rows: 1,
                 cols: 1,
-                field: {
-                  id: 'b9def389-50b4-5f0a-9948-f36480c2e6fa',
-                  techName: 'data_zakonczenia',
-                  type: 'DATEPICKER',
-                  title: 'Data zakończenia budowy',
-                  validation: [],
-                },
+                field: { id: 'b9def389-50b4-5f0a-9948-f36480c2e6fa', techName: 'data_zakonczenia', type: 'DATEPICKER', title: 'Data zakończenia budowy', validation: [] },
               },
               {
                 x: 0,
                 y: 5,
                 rows: 1,
                 cols: 1,
-                field: {
-                  id: '7b7560d3-d24d-5577-a486-0e1a83fd217b',
-                  techName: 'uwagi',
-                  type: 'TEXTAREA',
-                  title: 'Dodatkowe informacje',
-                  validation: [],
-                },
+                field: { id: '7b7560d3-d24d-5577-a486-0e1a83fd217b', techName: 'uwagi', type: 'TEXTAREA', title: 'Dodatkowe informacje', validation: [] },
               },
             ],
           },
@@ -437,26 +352,14 @@ export const SAMPLE_FORM: FormDefinition = {
                 y: 0,
                 rows: 1,
                 cols: 1,
-                field: {
-                  id: '26123ea7-8231-5950-aa89-8850711a7936',
-                  techName: 'telefon',
-                  type: 'TEXT_FIELD',
-                  title: 'Numer telefonu',
-                  validation: [],
-                },
+                field: { id: '26123ea7-8231-5950-aa89-8850711a7936', techName: 'telefon', type: 'TEXT_FIELD', title: 'Numer telefonu', validation: [] },
               },
               {
                 x: 0,
                 y: 1,
                 rows: 1,
                 cols: 1,
-                field: {
-                  id: 'd75272b9-8abd-5ed2-beb0-65038caccba2',
-                  techName: 'email',
-                  type: 'TEXT_FIELD',
-                  title: 'Adres e-mail',
-                  validation: ['EMAIL'],
-                },
+                field: { id: 'd75272b9-8abd-5ed2-beb0-65038caccba2', techName: 'email', type: 'TEXT_FIELD', title: 'Adres e-mail', validation: ['EMAIL'] },
               },
             ],
           },
@@ -536,21 +439,9 @@ export const SAMPLE_FORM: FormDefinition = {
   ],
   flow: {
     links: [
-      {
-        id: 'c67480df-b42d-58d3-b3fe-1475a17e5d34',
-        source: 'dceba362-ba07-5434-b894-8196fe3001ca',
-        target: 'fc9d7301-c0be-5548-a246-90af9ba0e8ff',
-      },
-      {
-        id: '204a5505-ba40-50c4-bbe8-e167cb8f22e5',
-        source: 'fc9d7301-c0be-5548-a246-90af9ba0e8ff',
-        target: 'eeda649d-fc92-56be-a7db-d4a15138293c',
-      },
-      {
-        id: 'd76fe718-d2c1-5261-a311-f45ef0c7247e',
-        source: 'eeda649d-fc92-56be-a7db-d4a15138293c',
-        target: '16a20ef6-689c-5f97-8ac2-958b15661cc4',
-      },
+      { id: 'c67480df-b42d-58d3-b3fe-1475a17e5d34', source: 'dceba362-ba07-5434-b894-8196fe3001ca', target: 'fc9d7301-c0be-5548-a246-90af9ba0e8ff' },
+      { id: '204a5505-ba40-50c4-bbe8-e167cb8f22e5', source: 'fc9d7301-c0be-5548-a246-90af9ba0e8ff', target: 'eeda649d-fc92-56be-a7db-d4a15138293c' },
+      { id: 'd76fe718-d2c1-5261-a311-f45ef0c7247e', source: 'eeda649d-fc92-56be-a7db-d4a15138293c', target: '16a20ef6-689c-5f97-8ac2-958b15661cc4' },
     ],
   },
 };
@@ -570,12 +461,7 @@ export const MOCK_ANALYSIS_RESULT: AnalysisResult = {
       text_extractor: 'docling+tesseract',
       visual: 'opencv+vlm',
     },
-    usage: {
-      llm_calls: 4,
-      prompt_tokens: 14820,
-      completion_tokens: 3410,
-      cost_usd: 0.0142,
-    },
+    usage: { llm_calls: 4, prompt_tokens: 14820, completion_tokens: 3410, cost_usd: 0.0142 },
     stages: [
       { name: 'text_extraction', status: 'OK', duration_seconds: 1.42, detail: 'docling+tesseract' },
       { name: 'visual_analysis', status: 'OK', duration_seconds: 2.18, detail: 'opencv+vlm' },
@@ -596,7 +482,7 @@ export const MOCK_ANALYSIS_RESULT: AnalysisResult = {
     ],
     skipped_elements: [
       {
-        reason: 'Sekcja „Adnotacje urzędowe (wypełnia urząd)” — zgodnie ze standardem COI pomijana w e-formularzu obywatela.',
+        reason: 'Sekcja „Adnotacje urzędowe (wypełnia urząd)” — pomijana w e-formularzu obywatela.',
         source: {
           channel: 'VISUAL',
           page: 1,
@@ -606,7 +492,7 @@ export const MOCK_ANALYSIS_RESULT: AnalysisResult = {
         },
       },
       {
-        reason: 'Pole podpisu odręcznego — w e-formularzu COI zastępowane domyślnym podpisem elektronicznym.',
+        reason: 'Pole podpisu odręcznego — zastępowane domyślnym podpisem elektronicznym COI.',
         source: {
           channel: 'TEXT',
           page: 2,
@@ -620,7 +506,7 @@ export const MOCK_ANALYSIS_RESULT: AnalysisResult = {
       {
         tech_name: 'miejscowosc',
         name: 'Miejscowość',
-        usage: 'Oficjalny słownik TERYT COI dla pola lokalizacji — zamiana pola tekstowego na listę SELECT ze słownikiem.',
+        usage: 'Oficjalny słownik TERYT COI — zamiana pola tekstowego na listę SELECT ze słownikiem.',
         entries: [
           { code: '0918123', label: 'Warszawa' },
           { code: '0950463', label: 'Kraków' },
@@ -635,15 +521,7 @@ export const MOCK_ANALYSIS_RESULT: AnalysisResult = {
         tech_name: 'nazwa_urzedu',
         confidence: 0.96,
         level: 'HIGH',
-        sources: [
-          {
-            channel: 'TEXT',
-            page: 1,
-            bbox: { x0: 0.07, y0: 0.12, x1: 0.51, y1: 0.18 },
-            text: 'Wójt / Burmistrz / Prezydent Miasta (Urząd Miasta XXX, Wydział Geodezji)',
-            element_id: 'txt-p1-01',
-          },
-        ],
+        sources: [{ channel: 'TEXT', page: 1, bbox: { x0: 0.07, y0: 0.12, x1: 0.51, y1: 0.18 }, text: 'Urząd Miasta XXX, Wydział Geodezji', element_id: 'txt-p1-01' }],
         signals: { source_found: 1.0, source_element: 1.0, rules: 1.0, visual_match: 0.85 },
         issues: [],
       },
@@ -652,15 +530,7 @@ export const MOCK_ANALYSIS_RESULT: AnalysisResult = {
         tech_name: 'w_czyim_imieniu',
         confidence: 0.91,
         level: 'HIGH',
-        sources: [
-          {
-            channel: 'VISUAL',
-            page: 1,
-            bbox: { x0: 0.07, y0: 0.22, x1: 0.93, y1: 0.30 },
-            text: 'Wniosek składam w imieniu: [ ] swoim [ ] innej osoby [ ] osoby prawnej',
-            element_id: 'cv-radio-01',
-          },
-        ],
+        sources: [{ channel: 'VISUAL', page: 1, bbox: { x0: 0.07, y0: 0.22, x1: 0.93, y1: 0.30 }, text: 'Wniosek składam w imieniu: swoim / innej osoby / osoby prawnej', element_id: 'cv-radio-01' }],
         signals: { source_found: 1.0, source_element: 1.0, rules: 1.0, visual_match: 0.95 },
         issues: [],
       },
@@ -669,39 +539,16 @@ export const MOCK_ANALYSIS_RESULT: AnalysisResult = {
         tech_name: 'jako_kto',
         confidence: 0.72,
         level: 'MEDIUM',
-        sources: [
-          {
-            channel: 'RULE',
-            page: 1,
-            bbox: { x0: 0.07, y0: 0.31, x1: 0.93, y1: 0.36 },
-            text: 'Działając jako: pełnomocnik / reprezentant',
-            element_id: 'txt-p1-03',
-          },
-        ],
+        sources: [{ channel: 'RULE', page: 1, bbox: { x0: 0.07, y0: 0.31, x1: 0.93, y1: 0.36 }, text: 'Działając jako: pełnomocnik / reprezentant', element_id: 'txt-p1-03' }],
         signals: { source_found: 0.8, source_element: 1.0, rules: 0.8, visual_match: 0.4 },
-        issues: [
-          {
-            code: 'CONDITIONAL_VISIBILITY_INFERRED',
-            severity: 'INFO',
-            message: 'Warunek SHOW wywnioskowany z opcji „Osoby prawnej lub jednostki organizacyjnej” — zweryfikuj.',
-            field_id: '83eda16d-a03c-550a-a58a-b312699fae08',
-          },
-        ],
+        issues: [{ code: 'CONDITIONAL_VISIBILITY_INFERRED', severity: 'INFO', message: 'Warunek SHOW wywnioskowany z opcji podmiotu. Sprawdź poprawność.', field_id: '83eda16d-a03c-550a-a58a-b312699fae08' }],
       },
       {
         field_id: 'ee870a56-82fd-5cd4-bf3f-169d3f869127',
         tech_name: 'imie',
         confidence: 0.97,
         level: 'HIGH',
-        sources: [
-          {
-            channel: 'TEXT',
-            page: 1,
-            bbox: { x0: 0.07, y0: 0.41, x1: 0.48, y1: 0.47 },
-            text: '1. Imię wnioskodawcy',
-            element_id: 'txt-p1-04',
-          },
-        ],
+        sources: [{ channel: 'TEXT', page: 1, bbox: { x0: 0.07, y0: 0.41, x1: 0.48, y1: 0.47 }, text: '1. Imię wnioskodawcy', element_id: 'txt-p1-04' }],
         signals: { source_found: 1.0, source_element: 1.0, rules: 1.0, visual_match: 1.0 },
         issues: [],
       },
@@ -710,15 +557,7 @@ export const MOCK_ANALYSIS_RESULT: AnalysisResult = {
         tech_name: 'nazwisko',
         confidence: 0.97,
         level: 'HIGH',
-        sources: [
-          {
-            channel: 'TEXT',
-            page: 1,
-            bbox: { x0: 0.51, y0: 0.41, x1: 0.93, y1: 0.47 },
-            text: '2. Nazwisko wnioskodawcy',
-            element_id: 'txt-p1-05',
-          },
-        ],
+        sources: [{ channel: 'TEXT', page: 1, bbox: { x0: 0.51, y0: 0.41, x1: 0.93, y1: 0.47 }, text: '2. Nazwisko wnioskodawcy', element_id: 'txt-p1-05' }],
         signals: { source_found: 1.0, source_element: 1.0, rules: 1.0, visual_match: 1.0 },
         issues: [],
       },
@@ -727,15 +566,7 @@ export const MOCK_ANALYSIS_RESULT: AnalysisResult = {
         tech_name: 'pesel',
         confidence: 0.94,
         level: 'HIGH',
-        sources: [
-          {
-            channel: 'VISUAL',
-            page: 1,
-            bbox: { x0: 0.07, y0: 0.49, x1: 0.56, y1: 0.55 },
-            text: '3. Numer PESEL [11 kratek]',
-            element_id: 'cv-boxes-11',
-          },
-        ],
+        sources: [{ channel: 'VISUAL', page: 1, bbox: { x0: 0.07, y0: 0.49, x1: 0.56, y1: 0.55 }, text: '3. Numer PESEL [11 kratek]', element_id: 'cv-boxes-11' }],
         signals: { source_found: 1.0, source_element: 1.0, rules: 1.0, visual_match: 1.0 },
         issues: [],
       },
@@ -744,15 +575,7 @@ export const MOCK_ANALYSIS_RESULT: AnalysisResult = {
         tech_name: 'inna_imie',
         confidence: 0.89,
         level: 'HIGH',
-        sources: [
-          {
-            channel: 'TEXT',
-            page: 1,
-            bbox: { x0: 0.07, y0: 0.61, x1: 0.48, y1: 0.67 },
-            text: 'Imię mocodawcy (wypełnić w przypadku pełnomocnictwa)',
-            element_id: 'txt-p1-07',
-          },
-        ],
+        sources: [{ channel: 'TEXT', page: 1, bbox: { x0: 0.07, y0: 0.61, x1: 0.48, y1: 0.67 }, text: 'Imię mocodawcy', element_id: 'txt-p1-07' }],
         signals: { source_found: 1.0, source_element: 1.0, rules: 1.0, visual_match: 0.85 },
         issues: [],
       },
@@ -761,15 +584,7 @@ export const MOCK_ANALYSIS_RESULT: AnalysisResult = {
         tech_name: 'inna_nazwisko',
         confidence: 0.88,
         level: 'HIGH',
-        sources: [
-          {
-            channel: 'TEXT',
-            page: 1,
-            bbox: { x0: 0.51, y0: 0.61, x1: 0.93, y1: 0.67 },
-            text: 'Nazwisko mocodawcy',
-            element_id: 'txt-p1-08',
-          },
-        ],
+        sources: [{ channel: 'TEXT', page: 1, bbox: { x0: 0.51, y0: 0.61, x1: 0.93, y1: 0.67 }, text: 'Nazwisko mocodawcy', element_id: 'txt-p1-08' }],
         signals: { source_found: 1.0, source_element: 1.0, rules: 1.0, visual_match: 0.85 },
         issues: [],
       },
@@ -778,40 +593,16 @@ export const MOCK_ANALYSIS_RESULT: AnalysisResult = {
         tech_name: 'inna_pesel',
         confidence: 0.68,
         level: 'MEDIUM',
-        sources: [
-          {
-            channel: 'OCR',
-            page: 1,
-            bbox: { x0: 0.07, y0: 0.69, x1: 0.56, y1: 0.75 },
-            text: 'PESEL lub NIP mocodawcy',
-            element_id: 'ocr-p1-09',
-          },
-        ],
+        sources: [{ channel: 'OCR', page: 1, bbox: { x0: 0.07, y0: 0.69, x1: 0.56, y1: 0.75 }, text: 'PESEL lub NIP mocodawcy', element_id: 'ocr-p1-09' }],
         signals: { source_found: 1.0, source_element: 1.0, ocr: 0.74, rules: 0.6, domain_rules: 0.4 },
-        issues: [
-          {
-            code: 'DOMAIN_RULE_OVERRIDE',
-            severity: 'WARNING',
-            message:
-              'Reguła dziedzinowa zmieniła walidator: brak → PESEL (wykryto etykietę „PESEL lub NIP” — potwierdź czy dopuszczać także NIP).',
-            field_id: '5a97afcf-887d-5cf6-998a-27a54eb000c9',
-          },
-        ],
+        issues: [{ code: 'DOMAIN_RULE_OVERRIDE', severity: 'WARNING', message: 'Reguła dziedzinowa przypisała walidator PESEL (etykieta wskazuje „PESEL lub NIP”).', field_id: '5a97afcf-887d-5cf6-998a-27a54eb000c9' }],
       },
       {
         field_id: 'c59303b8-d2bc-5628-97f6-3771d259ad7f',
         tech_name: 'czy_oplata',
         confidence: 0.74,
         level: 'MEDIUM',
-        sources: [
-          {
-            channel: 'TEXT',
-            page: 1,
-            bbox: { x0: 0.07, y0: 0.80, x1: 0.93, y1: 0.86 },
-            text: 'Opłata skarbowa za pełnomocnictwo (17 zł): [ ] Tak [ ] Nie (zwolnienie)',
-            element_id: 'txt-p1-10',
-          },
-        ],
+        sources: [{ channel: 'TEXT', page: 1, bbox: { x0: 0.07, y0: 0.80, x1: 0.93, y1: 0.86 }, text: 'Opłata skarbowa za pełnomocnictwo (17 zł)', element_id: 'txt-p1-10' }],
         signals: { source_found: 1.0, source_element: 1.0, rules: 1.0, visual_match: 0.3 },
         issues: [],
       },
@@ -820,40 +611,16 @@ export const MOCK_ANALYSIS_RESULT: AnalysisResult = {
         tech_name: 'potwierdzenie_przelewu',
         confidence: 0.42,
         level: 'LOW',
-        sources: [
-          {
-            channel: 'OCR',
-            page: 1,
-            bbox: { x0: 0.07, y0: 0.87, x1: 0.93, y1: 0.93 },
-            text: 'Załącznik: dowód uiszczenia opłaty skarbowej',
-            element_id: 'ocr-p1-11',
-          },
-        ],
+        sources: [{ channel: 'OCR', page: 1, bbox: { x0: 0.07, y0: 0.87, x1: 0.93, y1: 0.93 }, text: 'Załącznik: dowód uiszczenia opłaty skarbowej', element_id: 'ocr-p1-11' }],
         signals: { source_found: 0.0, source_element: 1.0, ocr: 0.56, rules: 0.6, visual_match: 0.3 },
-        issues: [
-          {
-            code: 'SOURCE_NOT_FOUND',
-            severity: 'WARNING',
-            message:
-              'Niska zgodność tekstu OCR dla załącznika opłaty skarbowej — zweryfikuj wymagane formaty i warunek widoczności.',
-            field_id: '366f8be0-79b2-579f-aa8d-4b028e263d62',
-          },
-        ],
+        issues: [{ code: 'SOURCE_NOT_FOUND', severity: 'WARNING', message: 'Niska zgodność OCR dla załącznika opłaty skarbowej. Sprawdź wymagania.', field_id: '366f8be0-79b2-579f-aa8d-4b028e263d62' }],
       },
       {
         field_id: '06e0cfc5-20a9-5cc6-921f-20fb79122b20',
         tech_name: 'kraj',
         confidence: 0.92,
         level: 'HIGH',
-        sources: [
-          {
-            channel: 'TEXT',
-            page: 2,
-            bbox: { x0: 0.07, y0: 0.12, x1: 0.48, y1: 0.18 },
-            text: 'Kraj położenia nieruchomości (domyślnie Polska)',
-            element_id: 'txt-p2-01',
-          },
-        ],
+        sources: [{ channel: 'TEXT', page: 2, bbox: { x0: 0.07, y0: 0.12, x1: 0.48, y1: 0.18 }, text: 'Kraj położenia nieruchomości', element_id: 'txt-p2-01' }],
         signals: { source_found: 1.0, source_element: 1.0, rules: 1.0, visual_match: 0.9 },
         issues: [],
       },
@@ -862,39 +629,16 @@ export const MOCK_ANALYSIS_RESULT: AnalysisResult = {
         tech_name: 'miejscowosc',
         confidence: 0.64,
         level: 'MEDIUM',
-        sources: [
-          {
-            channel: 'TEXT',
-            page: 2,
-            bbox: { x0: 0.51, y0: 0.12, x1: 0.93, y1: 0.18 },
-            text: 'Miejscowość / dzielnica',
-            element_id: 'txt-p2-02',
-          },
-        ],
+        sources: [{ channel: 'TEXT', page: 2, bbox: { x0: 0.51, y0: 0.12, x1: 0.93, y1: 0.18 }, text: 'Miejscowość / dzielnica', element_id: 'txt-p2-02' }],
         signals: { source_found: 1.0, source_element: 1.0, rules: 0.6, domain_rules: 0.4 },
-        issues: [
-          {
-            code: 'DICTIONARY_CANDIDATE',
-            severity: 'INFO',
-            message: 'Dostępna propozycja zamiany na słownik COI „Miejscowość” (zakładka Raport jakości).',
-            field_id: '69767949-0de8-5e96-96df-08a9e6e4486c',
-          },
-        ],
+        issues: [{ code: 'DICTIONARY_CANDIDATE', severity: 'INFO', message: 'Dostępna propozycja słownika COI „Miejscowość” w zakładce Raport jakości.', field_id: '69767949-0de8-5e96-96df-08a9e6e4486c' }],
       },
       {
         field_id: '4b7075cb-aed6-59d0-ada9-28eadcfdeff0',
         tech_name: 'kod_pocztowy',
         confidence: 0.95,
         level: 'HIGH',
-        sources: [
-          {
-            channel: 'VISUAL',
-            page: 2,
-            bbox: { x0: 0.07, y0: 0.21, x1: 0.42, y1: 0.27 },
-            text: 'Kod pocztowy [__-___]',
-            element_id: 'cv-zip-01',
-          },
-        ],
+        sources: [{ channel: 'VISUAL', page: 2, bbox: { x0: 0.07, y0: 0.21, x1: 0.42, y1: 0.27 }, text: 'Kod pocztowy [__-___]', element_id: 'cv-zip-01' }],
         signals: { source_found: 1.0, source_element: 1.0, rules: 1.0, visual_match: 1.0 },
         issues: [],
       },
@@ -903,15 +647,7 @@ export const MOCK_ANALYSIS_RESULT: AnalysisResult = {
         tech_name: 'numer_dzialki',
         confidence: 0.89,
         level: 'HIGH',
-        sources: [
-          {
-            channel: 'TEXT',
-            page: 2,
-            bbox: { x0: 0.46, y0: 0.21, x1: 0.93, y1: 0.27 },
-            text: 'Numer działki ewidencyjnej i obręb',
-            element_id: 'txt-p2-04',
-          },
-        ],
+        sources: [{ channel: 'TEXT', page: 2, bbox: { x0: 0.46, y0: 0.21, x1: 0.93, y1: 0.27 }, text: 'Numer działki ewidencyjnej i obręb', element_id: 'txt-p2-04' }],
         signals: { source_found: 1.0, source_element: 1.0, rules: 1.0, visual_match: 0.85 },
         issues: [],
       },
@@ -920,39 +656,16 @@ export const MOCK_ANALYSIS_RESULT: AnalysisResult = {
         tech_name: 'data_zakonczenia',
         confidence: 0.46,
         level: 'LOW',
-        sources: [
-          {
-            channel: 'OCR',
-            page: 2,
-            bbox: { x0: 0.07, y0: 0.30, x1: 0.52, y1: 0.36 },
-            text: 'Przewidywany termin / data zakończenia budowy (opcjonalnie)',
-            element_id: 'ocr-p2-05',
-          },
-        ],
+        sources: [{ channel: 'OCR', page: 2, bbox: { x0: 0.07, y0: 0.30, x1: 0.52, y1: 0.36 }, text: 'Data zakończenia budowy (opcjonalnie)', element_id: 'ocr-p2-05' }],
         signals: { source_found: 0.5, source_element: 1.0, ocr: 0.58, rules: 0.6, visual_match: 0.3 },
-        issues: [
-          {
-            code: 'OPTIONALITY_UNCERTAIN',
-            severity: 'WARNING',
-            message: 'Niejednoznaczna obligatoryjność pola na blankiecie — sprawdź czy data powinna być opcjonalna.',
-            field_id: 'b9def389-50b4-5f0a-9948-f36480c2e6fa',
-          },
-        ],
+        issues: [{ code: 'OPTIONALITY_UNCERTAIN', severity: 'WARNING', message: 'Niejednoznaczna wymagalność pola na blankiecie. Sprawdź ustawienie.', field_id: 'b9def389-50b4-5f0a-9948-f36480c2e6fa' }],
       },
       {
         field_id: '7b7560d3-d24d-5577-a486-0e1a83fd217b',
         tech_name: 'uwagi',
         confidence: 0.87,
         level: 'HIGH',
-        sources: [
-          {
-            channel: 'TEXT',
-            page: 2,
-            bbox: { x0: 0.07, y0: 0.39, x1: 0.93, y1: 0.51 },
-            text: 'Dodatkowe informacje / uzasadnienie wniosku',
-            element_id: 'txt-p2-06',
-          },
-        ],
+        sources: [{ channel: 'TEXT', page: 2, bbox: { x0: 0.07, y0: 0.39, x1: 0.93, y1: 0.51 }, text: 'Dodatkowe informacje / uzasadnienie', element_id: 'txt-p2-06' }],
         signals: { source_found: 1.0, source_element: 1.0, rules: 1.0, visual_match: 0.9 },
         issues: [],
       },
@@ -961,15 +674,7 @@ export const MOCK_ANALYSIS_RESULT: AnalysisResult = {
         tech_name: 'telefon',
         confidence: 0.90,
         level: 'HIGH',
-        sources: [
-          {
-            channel: 'TEXT',
-            page: 2,
-            bbox: { x0: 0.07, y0: 0.57, x1: 0.48, y1: 0.63 },
-            text: 'Telefon kontaktowy (nieobowiązkowo)',
-            element_id: 'txt-p2-07',
-          },
-        ],
+        sources: [{ channel: 'TEXT', page: 2, bbox: { x0: 0.07, y0: 0.57, x1: 0.48, y1: 0.63 }, text: 'Telefon kontaktowy', element_id: 'txt-p2-07' }],
         signals: { source_found: 1.0, source_element: 1.0, rules: 1.0, visual_match: 0.9 },
         issues: [],
       },
@@ -978,15 +683,7 @@ export const MOCK_ANALYSIS_RESULT: AnalysisResult = {
         tech_name: 'email',
         confidence: 0.93,
         level: 'HIGH',
-        sources: [
-          {
-            channel: 'TEXT',
-            page: 2,
-            bbox: { x0: 0.51, y0: 0.57, x1: 0.93, y1: 0.63 },
-            text: 'Adres poczty elektronicznej (e-mail)',
-            element_id: 'txt-p2-08',
-          },
-        ],
+        sources: [{ channel: 'TEXT', page: 2, bbox: { x0: 0.51, y0: 0.57, x1: 0.93, y1: 0.63 }, text: 'Adres poczty elektronicznej (e-mail)', element_id: 'txt-p2-08' }],
         signals: { source_found: 1.0, source_element: 1.0, rules: 1.0, visual_match: 0.95 },
         issues: [],
       },
@@ -995,15 +692,7 @@ export const MOCK_ANALYSIS_RESULT: AnalysisResult = {
         tech_name: 'zgody',
         confidence: 0.88,
         level: 'HIGH',
-        sources: [
-          {
-            channel: 'TEXT',
-            page: 2,
-            bbox: { x0: 0.07, y0: 0.68, x1: 0.93, y1: 0.80 },
-            text: 'Klauzula RODO — Wyrażam zgodę na przetwarzanie danych osobowych...',
-            element_id: 'txt-p2-09',
-          },
-        ],
+        sources: [{ channel: 'TEXT', page: 2, bbox: { x0: 0.07, y0: 0.68, x1: 0.93, y1: 0.80 }, text: 'Klauzula RODO — Wyrażam zgodę…', element_id: 'txt-p2-09' }],
         signals: { source_found: 1.0, source_element: 1.0, rules: 1.0, visual_match: 0.85 },
         issues: [],
       },
@@ -1012,13 +701,7 @@ export const MOCK_ANALYSIS_RESULT: AnalysisResult = {
         tech_name: 'podglad',
         confidence: 0.98,
         level: 'HIGH',
-        sources: [
-          {
-            channel: 'RULE',
-            page: 2,
-            text: 'Standardowa strona FINISH zgodna ze specyfikacją COI',
-          },
-        ],
+        sources: [{ channel: 'RULE', page: 2, text: 'Standardowa strona FINISH zgodna ze specyfikacją COI' }],
         signals: { source_found: 1.0, rules: 1.0 },
         issues: [],
       },
@@ -1045,12 +728,7 @@ export const MOCK_BATCH_VIEW: BatchView = {
   created_at: '2026-11-21T21:14:40Z',
   total_files: 3,
   finished: true,
-  counts: {
-    QUEUED: 0,
-    IN_PROGRESS: 0,
-    SUCCEEDED: 2,
-    FAILED: 0,
-  },
+  counts: { QUEUED: 0, IN_PROGRESS: 0, SUCCEEDED: 2, FAILED: 0 },
   jobs: [
     {
       job_id: MOCK_DEMO_JOB_ID,

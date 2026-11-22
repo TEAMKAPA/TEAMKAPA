@@ -1,18 +1,13 @@
 /**
  * Raport jakości oraz kontrakty REST API (1:1 z backend/shared/schemas/quality.py,
  * backend/shared/jobs.py oraz backend/api/schemas.py).
- *
- * Klucze są w snake_case zgodnie z serializacją backendu.
  */
 
 import type { FormDefinition } from './coiForm';
 
 export type Severity = 'ERROR' | 'WARNING' | 'INFO';
-
 export type ConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW';
-
 export type SourceChannel = 'TEXT' | 'ACROFORM' | 'OCR' | 'VISUAL' | 'RULE';
-
 export type StageStatus = 'OK' | 'SKIPPED' | 'DEGRADED';
 
 export interface Issue {
@@ -92,8 +87,6 @@ export interface AnalysisResult {
   form: FormDefinition;
   report: QualityReport;
 }
-
-// ---------------------------------------------------------------- REST API: zadania i paczki
 
 export type JobStatus = 'QUEUED' | 'IN_PROGRESS' | 'SUCCEEDED' | 'FAILED';
 

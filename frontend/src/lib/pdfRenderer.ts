@@ -1,12 +1,4 @@
-/**
- * Renderowanie stron lokalnego pliku (PDF / PNG / JPG) po stronie przeglądarki.
- *
- * Backend COI celowo nie utrwala przesłanych plików — renderowanie w przeglądarce
- * pozwala wyświetlać dokładny podgląd strony wraz z nakładką bbox bez przechowywania
- * dokumentów na serwerze.
- */
-
-import { extractExtension, isImageExtension, isPdfExtension } from './fileValidation';
+import { extractExtension } from './fileValidation';
 
 export interface RenderedPage {
   pageNumber: number;
@@ -17,7 +9,6 @@ export interface RenderedPage {
 }
 
 const pageCache = new WeakMap<File, Map<number, RenderedPage>>();
-
 let pdfWorkerConfigured = false;
 
 async function loadPdfJs() {
@@ -37,8 +28,7 @@ export async function renderLocalFilePage(
   pageNumber: number,
   scale = 1.6,
 ): Promise<RenderedPage | null> {
-  const parsed = extractExtension(file.name);
-  const ext = parsed?.extension ?? null;
+  const ext = extractExtension(file.name)?.extension ?? null;
 
   let cacheForFile = pageCache.get(file);
   if (!cacheForFile) {
@@ -47,11 +37,9 @@ export async function renderLocalFilePage(
   }
 
   const cached = cacheForFile.get(pageNumber);
-  if (cached) {
-    return cached;
-  }
+  if (cached) return cached;
 
-  if (isImageExtension(ext) || file.type.startsWith('image/')) {
+  if (ext === 'jpg' || ext === 'jpeg' || ext === 'png' || file.type.startsWith('image/')) {
     const dataUrl = await fileToDataUrl(file);
     const dims = await readImageDimensions(dataUrl);
     const rendered: RenderedPage = {
@@ -65,11 +53,10 @@ export async function renderLocalFilePage(
     return rendered;
   }
 
-  if (isPdfExtension(ext) || file.type === 'application/pdf') {
+  if (ext === 'pdf' || file.type === 'application/pdf') {
     const pdfjs = await loadPdfJs();
     const buffer = await file.arrayBuffer();
-    const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer) });
-    const pdfDoc = await loadingTask.promise;
+    const pdfDoc = await pdfjs.getDocument({ data: new Uint8Array(buffer) }).promise;
     const totalPages = pdfDoc.numPages;
     const clampedPage = Math.min(Math.max(1, pageNumber), totalPages);
     const page = await pdfDoc.getPage(clampedPage);

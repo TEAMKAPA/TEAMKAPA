@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success' | 'navy';
 export type ButtonSize = 'xs' | 'sm' | 'md';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -10,27 +10,30 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
+  /** Główny przycisk CTA: wyłącznie #CA0049 z tekstem #FCE6EE */
   primary:
-    'bg-blue-700 text-white hover:bg-blue-800 active:bg-blue-900 border-transparent shadow-xs focus-visible:ring-blue-600',
+    'bg-[var(--accent-crimson)] text-[var(--text-on-crimson)] hover:bg-[#A8003D] active:bg-[#8F0034] border-transparent focus-visible:outline-[var(--accent-crimson)]',
   secondary:
-    'bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 border-slate-300 shadow-2xs focus-visible:ring-slate-400',
+    'bg-[var(--bg-surface)] text-[var(--text-main)] hover:bg-[var(--bg-light)] border-[var(--border-subtle)] focus-visible:outline-[var(--bg-navy-section)]',
   ghost:
-    'bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 border-transparent focus-visible:ring-slate-400',
+    'bg-transparent text-[var(--text-main)] hover:bg-[var(--bg-light)] border-transparent focus-visible:outline-[var(--bg-navy-section)]',
+  navy:
+    'bg-[var(--bg-navy-dark)] text-white hover:bg-[var(--bg-navy-section)] border-transparent focus-visible:outline-[var(--bg-navy-dark)]',
   danger:
-    'bg-rose-600 text-white hover:bg-rose-700 border-transparent shadow-xs focus-visible:ring-rose-500',
+    'bg-[var(--bg-surface)] text-[#9F1239] hover:bg-[#FFF1F2] border-[#FECDD3] focus-visible:outline-[#9F1239]',
   success:
-    'bg-emerald-700 text-white hover:bg-emerald-800 active:bg-emerald-900 border-transparent shadow-xs focus-visible:ring-emerald-600',
+    'bg-[var(--bg-navy-section)] text-white hover:bg-[var(--bg-navy-dark)] border-transparent focus-visible:outline-[var(--bg-navy-section)]',
 };
 
 const SIZE_CLASSES: Record<ButtonSize, string> = {
-  xs: 'h-8 px-3 text-xs gap-1.5 rounded-lg',
-  sm: 'h-9 px-3.5 text-sm gap-2 rounded-lg',
-  md: 'h-10 px-4 text-sm gap-2 rounded-xl',
+  xs: 'py-1.5 px-3 text-sm gap-1.5 rounded-lg',
+  sm: 'py-2 px-4 text-sm gap-2 rounded-lg',
+  md: 'py-3 px-6 text-[15px] gap-2 rounded-lg',
 };
 
 export function Button({
   variant = 'secondary',
-  size = 'sm',
+  size = 'md',
   className = '',
   type = 'button',
   disabled,
@@ -41,7 +44,7 @@ export function Button({
     <button
       type={type}
       disabled={disabled}
-      className={`inline-flex items-center justify-center border font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap ${VARIANT_CLASSES[variant]} ${SIZE_CLASSES[size]} ${className}`}
+      className={`inline-flex items-center justify-center border font-normal leading-tight shadow-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap ${VARIANT_CLASSES[variant]} ${SIZE_CLASSES[size]} ${className}`}
       {...rest}
     >
       {children}

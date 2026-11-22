@@ -1,20 +1,6 @@
 import { useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import {
-  AlertCircle,
-  CheckCircle2,
-  File,
-  FileSpreadsheet,
-  FileText,
-  Image as ImageIcon,
-  Loader2,
-  Sparkles,
-  Trash2,
-  Upload,
-  X,
-} from 'lucide-react';
-import {
   ACCEPT_ATTRIBUTE,
-  ALLOWED_EXTENSIONS,
   DEFAULT_MAX_BATCH_FILES,
   DEFAULT_MAX_FILE_SIZE_MB,
   formatBytes,
@@ -22,45 +8,25 @@ import {
   validateFile,
   type FileValidationResult,
 } from '../../lib/fileValidation';
-import { Badge } from '../ui/Badge';
-import { Button } from '../ui/Button';
-import { Card, CardHeader } from '../ui/Card';
 
 interface FileDropzoneProps {
   onSubmitSingle: (file: File) => Promise<void>;
   onSubmitBatch: (files: File[]) => Promise<void>;
   onLoadDemo: () => void;
   isSubmitting: boolean;
-  demoMode: boolean;
   apiError?: string | null;
   onDismissError?: () => void;
 }
 
-function fileIcon(ext: string | null) {
-  switch (ext) {
-    case 'pdf':
-      return <FileText className="h-5 w-5 shrink-0 text-rose-600" />;
-    case 'doc':
-    case 'docx':
-      return <FileText className="h-5 w-5 shrink-0 text-blue-600" />;
-    case 'xlsx':
-    case 'ods':
-      return <FileSpreadsheet className="h-5 w-5 shrink-0 text-emerald-600" />;
-    case 'jpg':
-    case 'jpeg':
-    case 'png':
-      return <ImageIcon className="h-5 w-5 shrink-0 text-indigo-600" />;
-    default:
-      return <File className="h-5 w-5 shrink-0 text-slate-400" />;
-  }
-}
-
+/**
+ * Strefa wgrywania plików — pojedynczy płaski biały panel (#FFFFFF, 1px solid #E5E7EB, rounded-lg)
+ * bez zagnieżdżonych boksów w środku.
+ */
 export function FileDropzone({
   onSubmitSingle,
   onSubmitBatch,
   onLoadDemo,
   isSubmitting,
-  demoMode,
   apiError,
   onDismissError,
 }: FileDropzoneProps) {
@@ -95,7 +61,7 @@ export function FileDropzone({
     }
   };
 
-  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+  const handleDrop = (e: DragEvent<HTMLElement>) => {
     e.preventDefault();
     setIsDragActive(false);
     if (e.dataTransfer.files) {
@@ -128,193 +94,158 @@ export function FileDropzone({
   };
 
   return (
-    <Card>
-      <CardHeader
-        title="Prześlij blankiet urzędowy"
-        subtitle={`Pojedynczy dokument lub paczka do ${DEFAULT_MAX_BATCH_FILES} plików (maks. ${DEFAULT_MAX_FILE_SIZE_MB} MB / plik)`}
-        action={
-          <Button variant="secondary" size="sm" onClick={onLoadDemo}>
-            <Sparkles className="h-4 w-4 text-amber-500" />
-            Załaduj przykład demo
-          </Button>
-        }
-      />
-
-      <div className="space-y-5 p-6">
-        {apiError && (
-          <div
-            role="alert"
-            className="flex items-start justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
-          >
-            <div className="flex items-start gap-2.5">
-              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
-              <div>
-                <div className="font-semibold">Nie udało się wysłać dokumentu</div>
-                <div className="mt-0.5 text-rose-800">{apiError}</div>
-              </div>
-            </div>
-            {onDismissError && (
-              <button
-                type="button"
-                onClick={onDismissError}
-                aria-label="Ukryj komunikat błędu"
-                className="rounded-lg p-1 text-rose-500 hover:bg-rose-100"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-        )}
-
-        <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            setIsDragActive(true);
-          }}
-          onDragLeave={() => setIsDragActive(false)}
-          onDrop={handleDrop}
-          onClick={() => inputRef.current?.click()}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              inputRef.current?.click();
-            }
-          }}
-          aria-label="Obszar przeciągania i wyboru plików formularzy"
-          className={`flex flex-col items-center justify-center rounded-2xl border-2 border-dashed px-8 py-12 text-center transition-all ${
-            isDragActive
-              ? 'border-blue-600 bg-blue-50/80 ring-4 ring-blue-100'
-              : 'border-slate-300 bg-slate-50/70 hover:border-blue-500 hover:bg-blue-50/30'
-          }`}
+    <section
+      id="przesylanie"
+      onDragOver={(e) => {
+        e.preventDefault();
+        setIsDragActive(true);
+      }}
+      onDragLeave={() => setIsDragActive(false)}
+      onDrop={handleDrop}
+      className={`rounded-lg border bg-[#FFFFFF] shadow-none transition-colors ${
+        isDragActive ? 'border-[#08255E]' : 'border-[#E5E7EB]'
+      }`}
+    >
+      {/* Górna belka panelu */}
+      <div className="flex flex-col gap-3 border-b border-[#E5E7EB] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <h2 className="text-[22px] font-normal leading-7 text-[#0D0E0E]">
+          Wgrywanie plików
+        </h2>
+        <button
+          type="button"
+          onClick={onLoadDemo}
+          className="w-full rounded-lg border border-[#E5E7EB] bg-[#FFFFFF] px-4 py-2 text-[15px] font-normal text-[#0D0E0E] hover:bg-[#F3F3F4] sm:w-auto"
         >
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-100 text-blue-700 shadow-2xs">
-            <Upload className="h-7 w-7" />
-          </div>
-          <p className="mt-4 text-base font-semibold text-slate-900">
-            Przeciągnij i upuść pliki tutaj albo kliknij, aby wybrać z dysku
-          </p>
-          <p className="mt-1.5 max-w-lg text-sm text-slate-500">
-            Obsługiwane formaty: {ALLOWED_EXTENSIONS.map((e) => e.toUpperCase()).join(', ')}. Pliki
-            nie są utrwalane na serwerze — podgląd stron działa lokalnie w przeglądarce.
-          </p>
-          <input
-            ref={inputRef}
-            type="file"
-            multiple
-            accept={ACCEPT_ATTRIBUTE}
-            onChange={handleFileInputChange}
-            className="hidden"
-            data-testid="file-upload-input"
-          />
-        </div>
-
-        {batchCheck.batchError && (
-          <div
-            role="alert"
-            className="flex items-center gap-2.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
-          >
-            <AlertCircle className="h-5 w-5 shrink-0 text-rose-600" />
-            <span>{batchCheck.batchError.message}</span>
-          </div>
-        )}
-
-        {selected.length > 0 && (
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="font-semibold text-slate-900">
-                  Wybrane pliki ({selected.length})
-                </span>
-                <Badge variant="success">{validFiles.length} poprawnych</Badge>
-                {invalidCount > 0 && <Badge variant="danger">{invalidCount} odrzuconych</Badge>}
-              </div>
-              <Button variant="ghost" size="xs" onClick={clearAll} disabled={isSubmitting}>
-                <Trash2 className="h-3.5 w-3.5" />
-                Wyczyść listę
-              </Button>
-            </div>
-
-            <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
-              {selected.map((item, idx) => (
-                <li
-                  key={`${item.file.name}-${item.file.size}-${idx}`}
-                  className="flex items-center justify-between gap-4 px-4 py-3 text-sm"
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    {fileIcon(item.extension)}
-                    <div className="min-w-0">
-                      <div className="truncate font-medium text-slate-900">{item.file.name}</div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-2.5 text-xs">
-                        <span className="text-slate-500 tabular-nums">
-                          {formatBytes(item.file.size)}
-                        </span>
-                        {item.valid ? (
-                          <span className="inline-flex items-center gap-1 font-medium text-emerald-700">
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                            Gotowy do analizy
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 font-medium text-rose-700">
-                            <AlertCircle className="h-3.5 w-3.5" />
-                            {item.error?.message}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removeFile(idx)}
-                    disabled={isSubmitting}
-                    aria-label={`Usuń plik ${item.file.name}`}
-                    className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-
-            <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5">
-              <div className="text-sm text-slate-600">
-                {demoMode ? (
-                  <span>
-                    Aktywny <strong>Tryb Demo</strong> — analiza zostanie zasymulowana lokalnie.
-                  </span>
-                ) : (
-                  <span>Gotowe do wysłania do kolejki analizy COI.</span>
-                )}
-              </div>
-              <Button
-                variant="primary"
-                size="md"
-                onClick={handleSubmit}
-                disabled={validFiles.length === 0 || hasBatchLimitError || isSubmitting}
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Wysyłanie…
-                  </>
-                ) : validFiles.length === 1 && selected.length === 1 ? (
-                  <>
-                    <Upload className="h-4 w-4" />
-                    Rozpocznij analizę
-                  </>
-                ) : (
-                  <>
-                    <Upload className="h-4 w-4" />
-                    Uruchom paczkę ({validFiles.length}{' '}
-                    {validFiles.length === 1 ? 'plik' : validFiles.length < 5 ? 'pliki' : 'plików'})
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-        )}
+          Załaduj przykład
+        </button>
       </div>
-    </Card>
+
+      {apiError && (
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-3 border-b border-[#E5E7EB] px-6 py-3 text-[15px] font-normal text-[#CA0049]"
+        >
+          <span>Nie udało się wysłać pliku: {apiError}</span>
+          {onDismissError && (
+            <button
+              type="button"
+              onClick={onDismissError}
+              className="text-[15px] font-normal text-[#CA0049] underline"
+            >
+              Zamknij
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Obszar kliknięcia i upuszczania bez wewnętrznej ramki */}
+      <div
+        onClick={() => inputRef.current?.click()}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        aria-label="Obszar przeciągania i wyboru plików formularzy"
+        className="cursor-pointer px-6 py-10 text-center transition-colors hover:bg-[#F3F3F4]/40"
+      >
+        <p className="text-[17px] font-normal text-[#0D0E0E]">
+          Przeciągnij pliki tutaj lub kliknij, aby wybrać z dysku
+        </p>
+        <p className="mt-2 text-[15px] font-normal text-[#374151]">
+          Obsługiwane formaty: PDF, DOC, DOCX, ODS, XLSX, JPG, PNG (maksymalnie{' '}
+          {DEFAULT_MAX_FILE_SIZE_MB} MB na plik, do {DEFAULT_MAX_BATCH_FILES} plików)
+        </p>
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          accept={ACCEPT_ATTRIBUTE}
+          onChange={handleFileInputChange}
+          className="hidden"
+          data-testid="file-upload-input"
+        />
+      </div>
+
+      {batchCheck.batchError && (
+        <div
+          role="alert"
+          className="border-t border-[#E5E7EB] px-6 py-3 text-sm font-normal text-[#CA0049]"
+        >
+          {batchCheck.batchError.message}
+        </div>
+      )}
+
+      {/* Wybrane pliki oddzielone tylko cienkimi liniami */}
+      {selected.length > 0 && (
+        <div className="border-t border-[#E5E7EB]">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E5E7EB] px-6 py-2.5 text-sm font-normal text-[#52555A]">
+            <span>
+              Wybrane pliki: {selected.length} (poprawnych: {validFiles.length}
+              {invalidCount > 0 ? `, odrzuconych: ${invalidCount}` : ''})
+            </span>
+            <button
+              type="button"
+              onClick={clearAll}
+              disabled={isSubmitting}
+              className="text-sm font-normal text-[#08255E] hover:underline disabled:opacity-40"
+            >
+              Wyczyść listę
+            </button>
+          </div>
+
+          <ul className="divide-y divide-[#E5E7EB]">
+            {selected.map((item, idx) => (
+              <li
+                key={`${item.file.name}-${item.file.size}-${idx}`}
+                className="flex items-center justify-between gap-4 px-6 py-3 text-sm font-normal"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-[#0D0E0E]">{item.file.name}</div>
+                  <div className="mt-0.5 text-xs font-normal text-[#52555A]">
+                    <span>{formatBytes(item.file.size)}</span>
+                    {' · '}
+                    {item.valid ? (
+                      <span className="text-[#065F46]">Gotowy do wysłania</span>
+                    ) : (
+                      <span className="text-[#CA0049]">{item.error?.message}</span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeFile(idx)}
+                  disabled={isSubmitting}
+                  className="shrink-0 text-sm font-normal text-[#52555A] hover:text-[#0D0E0E] disabled:opacity-40"
+                >
+                  Usuń
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Dolny pasek z głównym przyciskiem */}
+      <div className="flex flex-col gap-3 border-t border-[#E5E7EB] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <span className="text-[15px] font-normal text-[#374151]">
+          {validFiles.length > 0
+            ? `Gotowych do wysłania: ${validFiles.length}`
+            : 'Wybierz co najmniej jeden plik, aby rozpocząć analizę.'}
+        </span>
+
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={validFiles.length === 0 || hasBatchLimitError || isSubmitting}
+          className="w-full rounded-lg bg-[#CA0049] px-6 py-3 text-[16px] font-normal text-[#FCE6EE] shadow-none transition-colors hover:bg-[#A8003D] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+        >
+          {isSubmitting ? 'Wysyłanie...' : 'Prześlij pliki'}
+        </button>
+      </div>
+    </section>
   );
 }

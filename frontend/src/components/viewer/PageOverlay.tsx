@@ -1,6 +1,11 @@
 import { useEffect, useRef } from 'react';
-import type { FieldAssessment, FieldSource } from '../../types/auditReport';
-import { CONFIDENCE_STYLES } from '../audit/ConfidenceBadge';
+import type { ConfidenceLevel, FieldAssessment, FieldSource } from '../../types/auditReport';
+
+const CONFIDENCE_STYLES: Record<ConfidenceLevel, { hex: string }> = {
+  HIGH: { hex: '#059669' },
+  MEDIUM: { hex: '#D97706' },
+  LOW: { hex: '#CA0049' },
+};
 
 interface PageOverlayProps {
   fields: FieldAssessment[];
@@ -71,14 +76,14 @@ export function PageOverlay({
                 width: `${Math.max((b.x1 - b.x0) * 100, 1)}%`,
                 height: `${Math.max((b.y1 - b.y0) * 100, 1)}%`,
               }}
-              className={`absolute rounded-sm border-2 border-dashed transition-all ${
+              className={`absolute border-2 border-dashed shadow-none transition-colors ${
                 isFocused
-                  ? 'z-30 border-slate-900 bg-slate-500/20 ring-4 ring-slate-700/25'
-                  : 'z-10 border-slate-400/60 bg-slate-300/10'
+                  ? 'z-30 border-[#04122F] bg-[#04122F]/15'
+                  : 'z-10 border-[#9FA1A5] bg-[#F3F3F4]/25'
               }`}
             >
               {isFocused && (
-                <span className="absolute -top-7 left-0 max-w-[260px] truncate rounded-md bg-slate-900 px-2 py-0.5 text-xs font-medium text-white shadow-md">
+                <span className="absolute -top-6 left-0 max-w-[260px] truncate bg-[#04122F] px-2 py-0.5 text-xs font-normal text-white">
                   Pominięto: {item.source.text ?? item.reason}
                 </span>
               )}
@@ -92,19 +97,18 @@ export function PageOverlay({
         const label = fieldLabels.get(assessment.field_id) ?? assessment.tech_name;
         const pct = Math.round(assessment.confidence * 100);
 
-        // Niewybrane ramki są dyskretne, żeby nie zasłaniać tekstu dokumentu; wybrana ma mocny fokus.
         const boxTone =
           assessment.level === 'HIGH'
             ? isSelected
-              ? 'bg-emerald-500/25 border-emerald-600'
-              : 'bg-emerald-500/5 border-emerald-500/55 hover:bg-emerald-500/15'
+              ? 'bg-[#059669]/15 border-[#059669] border-2'
+              : 'bg-transparent border-[#9FA1A5]/60 border hover:border-[#08255E]'
             : assessment.level === 'MEDIUM'
               ? isSelected
-                ? 'bg-amber-500/30 border-amber-600'
-                : 'bg-amber-500/10 border-amber-500/75 hover:bg-amber-500/20'
+                ? 'bg-[#D97706]/18 border-[#D97706] border-2'
+                : 'bg-transparent border-[#D97706]/55 border hover:border-[#D97706]'
               : isSelected
-                ? 'bg-rose-500/30 border-rose-600'
-                : 'bg-rose-500/12 border-rose-500/80 hover:bg-rose-500/22';
+                ? 'bg-[#CA0049]/15 border-[#CA0049] border-2'
+                : 'bg-[#CA0049]/5 border-[#CA0049]/70 border hover:border-[#CA0049]';
 
         return (
           <button
@@ -121,13 +125,13 @@ export function PageOverlay({
               width: `${Math.max((bbox.x1 - bbox.x0) * 100, 1.5)}%`,
               height: `${Math.max((bbox.y1 - bbox.y0) * 100, 1.5)}%`,
             }}
-            className={`pointer-events-auto absolute rounded-sm border-2 transition-all focus-visible:outline-none ${boxTone} ${
-              isSelected ? `z-30 ring-4 ${style.ring} shadow-md` : 'z-20'
+            className={`pointer-events-auto absolute shadow-none transition-colors focus-visible:outline-none ${boxTone} ${
+              isSelected ? 'z-30 outline-2 outline-offset-1 outline-[#04122F]' : 'z-20'
             }`}
           >
             {isSelected && (
               <span
-                className="pointer-events-none absolute -top-7 left-0 z-40 inline-flex max-w-[260px] items-center gap-1.5 truncate rounded-md px-2 py-0.5 text-xs font-semibold text-white shadow-md"
+                className="pointer-events-none absolute -top-6 left-0 z-40 inline-flex max-w-[260px] items-center gap-1.5 truncate px-2 py-0.5 text-xs font-normal text-white"
                 style={{ backgroundColor: style.hex }}
               >
                 <span className="truncate">{label}</span>

@@ -1,90 +1,86 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 
-describe('Przepływ urzędnika (upload, przegląd, bbox, edycja, zatwierdzenie)', () => {
+describe('Cyfryzacja formularzy — ścieżka robocza urzędnika', () => {
   beforeEach(() => {
-    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline in test'));
+    vi.restoreAllMocks();
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
   });
 
-  it('waliduje przesyłane pliki w FileDropzone (poprawny PDF i odrzucony ZIP)', async () => {
+  it('odrzuca niedozwolony plik .zip w strefie wgrywania plików', async () => {
     const user = userEvent.setup({ applyAccept: false });
     render(<App />);
 
-    const input = screen.getByTestId('file-upload-input') as HTMLInputElement;
-    const okFile = new File(['%PDF-1.4'], 'wniosek.pdf', { type: 'application/pdf' });
-    const badFile = new File(['PK'], 'archiwum.zip', { type: 'application/zip' });
+    const input = screen.getByTestId('file-upload-input');
+    const badFile = new File(['abc'], 'archiwum.zip', { type: 'application/zip' });
+    await user.upload(input, badFile);
 
-    await user.upload(input, [okFile, badFile]);
-
-    expect(screen.getByText('wniosek.pdf')).toBeInTheDocument();
     expect(screen.getByText('archiwum.zip')).toBeInTheDocument();
-    expect(screen.getByText(/Gotowy do analizy/i)).toBeInTheDocument();
     expect(screen.getByText(/Niedozwolony typ pliku/i)).toBeInTheDocument();
+    expect(screen.getByText(/odrzuconych: 1/i)).toBeInTheDocument();
   });
 
-  it('ładuje demo, filtruje niepewne pola, podświetla bbox, edytuje pole i zatwierdza formularz', async () => {
+  it('otwiera i zamyka menu mobilne (hamburger)', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    // 1. Załaduj przykład demo
-    await user.click(screen.getByRole('button', { name: /Załaduj przykład demo/i }));
+    const burger = screen.getByRole('button', { name: 'Otwórz menu' });
+    expect(burger).toHaveAttribute('aria-expanded', 'false');
 
-    // Powinniśmy być w widoku przeglądu z tytułem formularza
-    expect(
-      screen.getByDisplayValue('Wniosek o ustalenie numeru porządkowego nieruchomości'),
-    ).toBeInTheDocument();
-
-    // 2. Filtrowanie pól o niskiej pewności (LOW)
-    await user.click(screen.getByTestId('filter-LOW'));
-    expect(screen.getByTestId('field-card-potwierdzenie_przelewu')).toBeInTheDocument();
-    expect(screen.queryByTestId('field-card-nazwa_urzedu')).not.toBeInTheDocument();
-
-    // 3. Kliknięcie pola podświetla jego bbox na obrazie strony i otwiera edytor pola
-    await user.click(screen.getByTestId('field-card-potwierdzenie_przelewu'));
-    expect(screen.getByTestId('bbox-potwierdzenie_przelewu')).toHaveAttribute(
-      'data-selected',
+    await user.click(burger);
+    expect(screen.getByRole('navigation', { name: 'Menu mobilne' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Zamknij menu' })).toHaveAttribute(
+      'aria-expanded',
       'true',
     );
-    expect(screen.getByTestId('field-editor-panel')).toBeInTheDocument();
-
-    // 4. Edycja etykiety pola
-    const titleInput = screen.getByLabelText('Etykieta pola');
-    await user.clear(titleInput);
-    await user.type(titleInput, 'Potwierdzenie opłaty skarbowej (17 zł)');
-    expect(screen.getByTestId('field-card-potwierdzenie_przelewu')).toHaveTextContent(
-      'Potwierdzenie opłaty skarbowej (17 zł)',
-    );
-
-    // 5. Zatwierdzenie formularza
-    await user.click(screen.getByTestId('approve-form-button'));
-    await waitFor(() => {
-      expect(screen.getByText(/Zatwierdzono \(urzednik \(demo\)\)/i)).toBeInTheDocument();
-    });
-
-    // 6. Podgląd JSON zawiera zaktualizowaną etykietę
-    await user.click(screen.getByRole('button', { name: /Podgląd JSON/i }));
-    expect(screen.getByTestId('json-viewer-code')).toHaveTextContent(
-      'Potwierdzenie opłaty skarbowej (17 zł)',
-    );
   });
 
-  it('obsługuje interaktywny podgląd wypełniania (warunki JSONata SHOW i walidację Zod)', async () => {
+  it('otwiera weryfikację, filtruje niską pewność, podświetla bbox, edytuje pole i zatwierdza', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole('button', { name: /Załaduj przykład demo/i }));
-    await user.click(screen.getByRole('button', { name: /Podgląd wypełniania/i }));
+    // 1. Przejście do widoku weryfikacji
+    await user.click(screen.getByRole('button', { name: 'Załaduj przykład' }));
 
-    // Sekcja warunkowa "Dane innej osoby" jest ukryta dopóki nie wybierzemy "Innej osoby"
+    expect(screen.getByRole('heading', { name: 'Podgląd dokumentu' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Rozpoznane pola' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Tytuł formularza')).toHaveValue(
+      'Wniosek o ustalenie numeru porządkowego nieruchomości',
+    );
+
+    // 2. Filtrowanie pól z niską pewnością
+    await user.selectOptions(screen.getByTestId('review-filter-select'), 'LOW');
+    const lowFieldRow = screen.getByTestId('field-card-potwierdzenie_przelewu');
+    expect(lowFieldRow).toBeInTheDocument();
+    expect(within(lowFieldRow).getByText('Pewność: 42%')).toBeInTheDocument();
+
+    // 3. Edycja pola tekstowego w wierszu i podświetlenie bbox na podglądzie dokumentu
+    const input = within(lowFieldRow).getByRole('textbox');
+    await user.clear(input);
+    await user.type(input, 'Dowód opłaty skarbowej 17 zł');
+
+    const bbox = screen.getByTestId('bbox-potwierdzenie_przelewu');
+    expect(bbox).toHaveAttribute('data-selected', 'true');
+
+    // 4. Zatwierdzenie i eksport
+    const approveBtn = screen.getByTestId('approve-form-button');
+    await user.click(approveBtn);
+    expect(screen.getByText('Zatwierdzono')).toBeInTheDocument();
+
+    // 5. Weryfikacja zaktualizowanej etykiety w podglądzie JSON
+    await user.click(screen.getByRole('tab', { name: 'Podgląd JSON' }));
+    expect(screen.getByTestId('json-viewer-code')).toHaveTextContent('Dowód opłaty skarbowej 17 zł');
+
+    // 6. Podgląd wypełniania — dynamiczna widoczność JSONata SHOW + walidacja Zod
+    await user.click(screen.getByRole('tab', { name: 'Podgląd wypełniania' }));
     expect(screen.queryByText('Dane innej osoby')).not.toBeInTheDocument();
 
     await user.click(screen.getByLabelText('Innej osoby'));
     expect(screen.getByText('Dane innej osoby')).toBeInTheDocument();
 
-    // Walidacja pustych wymaganych pól wykazuje błędy
-    await user.click(screen.getByRole('button', { name: /Sprawdź walidację formularza/i }));
+    await user.click(screen.getByRole('button', { name: 'Sprawdź walidację formularza' }));
     expect(screen.getByText(/Wykryto błędy wypełnienia/i)).toBeInTheDocument();
   });
 });

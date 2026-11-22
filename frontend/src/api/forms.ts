@@ -1,7 +1,3 @@
-/**
- * Funkcje integracji z endpointami REST API analizy, kolejki, batch i zatwierdzania.
- */
-
 import type { FormDefinition } from '../types/coiForm';
 import type {
   AnalysisResult,
@@ -21,11 +17,6 @@ export type AnalyzeResponse =
   | { kind: 'accepted'; data: JobAccepted }
   | { kind: 'completed'; data: AnalysisResult };
 
-/**
- * Wysyła pojedynczy plik do `POST /api/v1/forms/analyze`.
- * Domyślnie używa `?wait=0`, aby natychmiast otrzymać `202` z `job_id`
- * (umożliwia podgląd 7-etapowego postępu oraz późniejsze `PUT /jobs/{id}/approval`).
- */
 export async function analyzeForm(
   file: File,
   options: { wait?: number; signal?: AbortSignal } = {},
@@ -49,9 +40,6 @@ export async function analyzeForm(
   return { kind: 'completed', data };
 }
 
-/**
- * Wysyła wiele plików do `POST /api/v1/forms/batch`.
- */
 export async function analyzeBatch(
   files: File[],
   options: { signal?: AbortSignal } = {},
@@ -119,7 +107,7 @@ export async function checkHealth(signal?: AbortSignal): Promise<HealthResponse>
       return (await res.json()) as HealthResponse;
     }
   } catch {
-    // Za nginxem w Dockerze proxy obejmuje wyłącznie /api/ — weryfikujemy przez /api/openapi.json.
+    // Za nginxem w Dockerze proxy obejmuje wyłącznie /api/ — sprawdzamy przez /api/openapi.json.
   }
 
   const openapi = await apiJson<{ info?: { version?: string } }>('/api/openapi.json', { signal });
@@ -129,13 +117,6 @@ export async function checkHealth(signal?: AbortSignal): Promise<HealthResponse>
   };
 }
 
-export async function checkReady(signal?: AbortSignal): Promise<HealthResponse> {
-  return apiJson<HealthResponse>('/ready', { signal });
-}
-
-/**
- * Pobiera czysty plik importu COI JSON (po sanityzacji) jako plik `.json`.
- */
 export function downloadFormJson(form: FormDefinition, baseFilename?: string): void {
   const sanitized = sanitizeFormForExport(form);
   const content = JSON.stringify(sanitized, null, 2);
