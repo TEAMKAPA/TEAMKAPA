@@ -42,6 +42,13 @@ def test_image_and_rectangle_labels() -> None:
     assert hotkeys == [str(i) for i in range(1, len(ElementKind) + 1)]
 
 
+def test_label_colors_cover_all_kinds() -> None:
+    colors = ls.label_colors()
+    assert set(colors) == {k.value for k in ElementKind}
+    assert all(re.fullmatch(r"#[0-9A-Fa-f]{6}", c) for c in colors.values())
+    assert len(set(colors.values())) == len(colors)
+
+
 def test_region_attributes() -> None:
     root = _config()
     cells = _one(root, "Number", ls.CELLS_CONTROL)

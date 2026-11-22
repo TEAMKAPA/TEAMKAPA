@@ -12,6 +12,10 @@ więc trafiają do niego tylko kod, manifest bez ścieżek i liczby zbiorcze.
 | `prepare.py` | render stron do oznaczania, zadania Label Studio, manifest |
 | `geometry.py` | hash pikseli strony, zgodność geometrii wariantów formatu |
 | `ls.py`, `labelstudio/config.xml`, `labelstudio/ls.env` | przypięta wersja Label Studio, konfiguracja oznaczania, ustawienia serwera |
+| `convert_ls.py`, `preview.py` | eksport Label Studio → etykiety stron, kontrola zgodności z `LABELING.md`, nakładki |
+| `match.py`, `metrics.py`, `report.py`, `run.py` | dopasowanie, metryki, raport, ewaluacja z bazą i ochroną `holdout` |
+| `selfcheck.py` | kontrola miernika na oznaczonych stronach `dev` (etykiety jako predykcje z zaburzeniami) |
+| `predict.py` | predykcje detektora (OpenCV) dla stron zbioru: render z `dane/`, pliki `PagePredictions` |
 | `LABELING.md` | konwencje oznaczania (kategorie, ramki, role, przypadki graniczne) |
 
 ## Pochodzenie zbioru
@@ -159,14 +163,43 @@ kanał pozostał włączony).
 6. **Settings → Annotation**: kolejność zadań **Sequential**.
 
 Jeżeli kreator magazynu wymusza synchronizację, wybierz tryb, w którym każdy plik PNG jest zadaniem,
-i **nie importuj** wtedy `tasks.json`, żeby zadania się nie podwoiły. Konwerter odczyta `label_id`
-z nazwy pliku, ale kolejność będzie alfabetyczna, więc zadania wybieraj ręcznie według `tasks.json`.
+i **nie importuj** wtedy `tasks.json`, żeby zadania się nie podwoiły. Zadania utworzone w ten sposób
+nie mają pól `label_id`, `doc_id`, `split` i `page`, a konwerter ich wymaga, więc taki projekt trzeba
+założyć od nowa z importem `tasks.json`.
 
 ### Eksport
 
 **Export → JSON** (nie JSON-MIN). Plik zapisz w `dane/robocze/labelstudio/exports/`, a kopię z folderu
 Pobrane usuń. Eksport zawiera też czas pracy nad zadaniem (`lead_time`), więc nie trzeba mierzyć go ręcznie.
-Konwersję eksportu do formatu etykiet wykonuje `eval/visual/convert_ls.py` (Etap B.3).
+Label Studio zapisuje własną kopię w `dane/robocze/labelstudio/export/`; konwertujemy plik z `exports/`.
+
+## Konwersja i kontrola nakładek
+
+```powershell
+.venv\Scripts\python.exe -m eval.visual.convert_ls dane\robocze\labelstudio\exports\<plik>.json
+```
+
+Wynik w `dane/robocze/labels/` (poza repozytorium):
+
+| Plik | Zawartość |
+|---|---|
+| `<label_id>.json` | etykiety strony (`teamkapa.vision.labels/1`), tylko strony bez błędów |
+| `preview/<label_id>.png` | nakładka: ramki w kolorach kategorii z Label Studio, numer elementu, atrybuty, legenda |
+| `convert_report.md`, `convert_report.json` | błędy, ostrzeżenia, role wywnioskowane, czas na element, ciasność ramek |
+
+- **Błąd** (strona nie dostaje pliku etykiet, poprzedni zostaje bez zmian, kod wyjścia 1): niezgodność
+  z `LABELING.md` albo z manifestem, opisana w raporcie z identyfikatorem i położeniem regionu
+  w pikselach. Na nakładce region z błędem ma czerwoną ramkę `ERR`. Poprawka: w Label Studio,
+  potem **Update**, nowy eksport i ponowna konwersja.
+- **Ostrzeżenie** (strona jest konwertowana): krawędź ramki komórki, kratek, sekcji lub checkboxa dalej
+  niż 2 px od linii w obrazie, niezapisany szkic, nieprawdopodobne `cells` przy fladze `uncertain`.
+- **Automatycznie, z wpisem w raporcie:** przycięcie ramki wystającej poza stronę o ≤ 0,5 px, rola
+  `skip` dla komórki z innym elementem do wypełnienia, role domyślne.
+- ID elementów (`gt-p{strona}-{nnn}`) nadaje kolejność czytania (od góry, potem od lewej). Ten sam
+  eksport daje identyczne pliki. Oznaczający jest zapisany jako `human-<id użytkownika LS>`,
+  bez adresu e-mail.
+- Konwerter odrzuca regiony z pre-anotacji (`origin` inny niż `manual`, `predictions`).
+- Nakładki stron `holdout` ogląda tylko oznaczający. Przy strojeniu (Etap C i dalej) ich się nie ogląda.
 
 ## Pilot
 
@@ -174,8 +207,23 @@ Konwersję eksportu do formatu etykiet wykonuje `eval/visual/convert_ls.py` (Eta
    obejmują prawie wszystkie kategorie.
 2. Każdą stronę zakończ statusem strony (`complete` albo `empty`) i **Submit**.
 3. Wyeksportuj JSON do `dane/robocze/labelstudio/exports/`.
-4. Na podstawie eksportu przygotuję konwersję, nakładki do kontroli (`dane/robocze/labels/preview/`)
-   i czas na element. Potem razem poprawimy konwencje, a po pilocie przeliczę szacunek czasu.
+4. Konwersja, nakładki i przegląd konwencji (wykonane 2026-11-22). Wynik pilota: 65 regionów, średnio
+   72 s na element, 95% krawędzi ramek najwyżej 1 px od linii. Konwerter wykrył status `empty`
+   na oznaczonej stronie, literówkę w `cells` i przypadkowe kliknięcie; reguły dodane do `LABELING.md`.
+
+## Stan oznaczania (decyzja z 2026-11-22)
+
+**Oznaczone są tylko 2 strony `dev` z pilota (`f02-p01`, `f07-p01`; 65 elementów, 8 stron oceny
+z wariantami formatu). Dalsze oznaczanie jest odłożone.** Wrócimy do niego, prawdopodobnie z
+pre-etykietami z warstwy wektorowej PDF (do poprawy przez człowieka), co zmieni zasadę „bez
+pre-anotacji” i wymaga osobnej decyzji. Do tego czasu:
+
+- podział nie jest zamrożony, a manifest (`dane/robocze/b/`) pozostaje roboczy (B.6 odłożony),
+- nie powstaje baza (`baseline.json`): `run.py --write-baseline` wymaga pełnego pokrycia części,
+- `holdout` jest nietknięty: nie ma etykiet, podglądów ani obliczeń,
+- każdy wynik na tym zbiorze jest **wyłącznie wstępnym pomiarem** (raport oznacza niepełne pokrycie).
+
+Kolejność i szacunek poniżej dotyczą wznowienia oznaczania.
 
 ## Kolejność oznaczania i szacunek czasu
 
@@ -184,11 +232,55 @@ liczbą stron), potem reszta `dev` z f09 (16 stron) na końcu. Po `holdout`, a p
 dochodzą własne skany i zdjęcia wydruków stron `holdout` (pomiar jakości skanów na `holdout`).
 Po kilku dniach ponowne oznaczenie 3 stron mierzy zgodność oznaczającego z samym sobą.
 
-Szacunek: około 7,3 h oznaczania, 30 min pilotu i 1 h kontroli nakładek. Najlepiej w sesjach po
-≤ 90 min, bo zmęczenie pogarsza dokładność ramek.
+Szacunek przed pilotem: około 7,3 h oznaczania (38 s na element). Pilot zmierzył 72 s na element
+(`lead_time` liczy cały czas otwarcia zadania, razem z przerwami i nauką narzędzia), a f07-p01 ma
+46 elementów wobec szacowanych ~20. Po pilocie: **pozostałe 34 zestawy to około 10–15 h** oznaczania
+(~650–750 elementów po 50–72 s), czyli 7–10 sesji po ≤ 90 min, plus ~1 h kontroli nakładek.
+Szacunek przeliczam po `holdout`. Zmęczenie pogarsza dokładność ramek, więc sesje krótkie.
+
+## Metryki i ewaluacja
+
+```powershell
+.venv\Scripts\python.exe -m eval.visual.predict --system opencv
+.venv\Scripts\python.exe -m eval.visual.run --system opencv --predictions dane\robocze\predictions\opencv-dev
+.venv\Scripts\python.exe -m eval.visual.selfcheck
+```
+
+`predict` renderuje pliki wariantów z `dane/` (ścieżki z `manifest.full.json`), sprawdza zgodność
+obrazu strony oznaczanej z manifestem i zapisuje predykcje oznaczonych stron `dev` (`--all-pages`:
+wszystkich stron części; `holdout` tylko z `--split holdout --final`, z wpisem w `holdout_runs.log`).
+
+- **Predykcje:** plik `<file_id>-p<NN>.json` (`teamkapa.vision.predictions/1`: system, strona,
+  rozmiar, lista `VisualElement` z kontraktu 7.5) dla każdej ocenianej strony pliku, czyli każdego
+  włączonego wariantu oznaczonego zestawu. Brak pliku, plik strony spoza manifestu, inny system albo
+  rozmiar to błąd (kod 2), a nie pominięcie. Pliki stron nieocenianych są pomijane i liczone w raporcie.
+- **Dopasowanie** w obrębie kategorii: zachłanne po malejącym IoU, IoU ≥ 0,5 (raport także dla 0,3
+  i 0,7), remis rozstrzygają ID. Cienkie linie (`text_line`, `dotted_line`, poziome `signature`
+  i `office_only`) rozszerzane pionowo do 1% wysokości strony. `checkbox_group` po składzie
+  (Jaccard członków ≥ 0,5), a bez członków po IoU. Etykiety `uncertain` są „trudne”.
+- **Metryki:** P, R, F1 per kategoria, mikro i makro, 95% przedziały Wilsona; przekroje per format
+  (PDF, obraz będący wariantem strony PDF, obraz z własnymi etykietami, czyli skany) i per dokument,
+  makro-F1 po dokumentach; macierz pomyłek kategorii (dopasowanie bez względu na kategorię);
+  liczba kratek (zgodność, MAE), role (trafność, macierz pomyłek), `multi` grup.
+- **Pola i ablacja** (`metrics.ablation`): P/R miejsc pól z wyniku pipeline'u z kanałem wizualnym
+  i bez niego. Polem jest element z rolą `input`, `choice` albo `e_signature`, a grupa wyboru to jedno
+  pole. W Etapie B tylko mechanizm i testy; liczby w Etapach D i E.
+- **Ochrona `holdout`:** domyślnie `--split dev`. `holdout` wymaga `--split holdout --final`, a każde
+  uruchomienie trafia do `dane/robocze/eval/holdout_runs.log` (data, commit, system, katalog). Przy
+  `dev` skrypt nie otwiera etykiet ani predykcji `holdout`.
+- **Baza:** `--write-baseline <plik>` (tylko przy pełnym pokryciu części), `--baseline <plik>` porównuje
+  mikro-P/R/F1 i F1 per kategoria z tolerancją (domyślnie 0,02) i zwraca kod 1 przy regresji.
+- **Raport:** `dane/robocze/eval/<split>-<system>.{json,md}` z sekcją „Znane ograniczenia”.
+- **Testy CI** działają na danych syntetycznych: `tests/vision/test_eval_*.py` (konwerter, dopasowanie,
+  metryki, `run.py` z ochroną `holdout`) i `tests/vision/synth_forms.py` (strony formularza z etykietami
+  i degradacjami: obrót, rozmycie, szum, JPEG, kontrast, niższe DPI).
+- **Kontrola miernika** (`selfcheck`, tylko `dev`) na 2 stronach pilota (8 stron oceny): etykiety
+  bez zmian i przesunięte o 1 lub 2 px w obu osiach dają P = R = F1 = 1; przesunięte o pół szerokości
+  elementu: 0; bez co 10. elementu: P = 1, R = 0,92.
 
 ## Znane ograniczenia zbioru
 
+- **Oznaczone są 2 strony `dev` (pilot)**, z dwóch dokumentów i bez skanów; wyniki to wstępny pomiar.
 - Jeden oznaczający: brak zgodności między oznaczającymi; szum etykiet szacuje powtórne oznaczenie 3 stron.
 - Warianty formatu jednej strony nie są niezależnymi próbkami. Wyniki raportuje się per dokument i per
   format (PDF, obraz cyfrowy, skan).

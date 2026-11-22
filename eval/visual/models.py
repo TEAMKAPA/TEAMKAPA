@@ -32,6 +32,7 @@ from backend.worker.vision.models import (
     ElementRole,
     PageSource,
     ReasonCode,
+    VisualElement,
     check_kind_attributes,
     has_area,
 )
@@ -39,6 +40,7 @@ from backend.worker.vision.models import (
 SPLIT_SCHEMA = "teamkapa.vision.split/1"
 LABELS_SCHEMA = "teamkapa.vision.labels/1"
 MANIFEST_SCHEMA = "teamkapa.vision.manifest/1"
+PREDICTIONS_SCHEMA = "teamkapa.vision.predictions/1"
 
 DOC_ID_PATTERN = r"^[a-z]+[0-9]{2,}$"
 LABEL_ID_PATTERN = r"^([a-z]+[0-9]{2,})(?:-[a-z0-9]+)*-p([0-9]{2,})$"
@@ -152,6 +154,24 @@ DEFAULT_ROLES: Mapping[ElementKind, ElementRole] = MappingProxyType(
 )
 """Rola przyjmowana, gdy oznaczający jej nie wybrał (``role_origin=default``)."""
 
+_FILL = (ElementRole.INPUT, ElementRole.SKIP)
+_CHOOSE = (ElementRole.CHOICE, ElementRole.SKIP)
+ALLOWED_ROLES: Mapping[ElementKind, frozenset[ElementRole]] = MappingProxyType(
+    {
+        ElementKind.CHAR_BOXES: frozenset(_FILL),
+        ElementKind.CHECKBOX: frozenset(_CHOOSE),
+        ElementKind.CHECKBOX_GROUP: frozenset(_CHOOSE),
+        ElementKind.TEXT_LINE: frozenset(_FILL),
+        ElementKind.DOTTED_LINE: frozenset(_FILL),
+        ElementKind.TABLE_CELL: frozenset(_FILL),
+        ElementKind.SECTION_FRAME: frozenset({ElementRole.SECTION}),
+        ElementKind.SIGNATURE: frozenset({ElementRole.E_SIGNATURE, ElementRole.SKIP}),
+        ElementKind.OFFICE_ONLY: frozenset({ElementRole.SKIP}),
+    }
+)
+"""Role zgodne z kategorią (LABELING.md). Np. kropki pod „podpis” to kategoria ``signature``,
+a nie ``dotted_line`` z rolą ``e_signature``; miejsce urzędu to ``office_only``."""
+
 
 class LabelElement(EvalModel):
     """Element oznaczony ręcznie; ``options`` grupy to ID jej checkboxów (jak w kroku 3)."""
@@ -175,6 +195,8 @@ class LabelElement(EvalModel):
     def _consistent(self) -> LabelElement:
         if self.role is ElementRole.UNKNOWN:
             raise ValueError("etykieta musi mieć ustaloną rolę (unknown jest niedozwolone)")
+        if self.role not in ALLOWED_ROLES[self.kind]:
+            raise ValueError(f"rola {self.role.value} niedozwolona dla kategorii {self.kind.value}")
         if not has_area(self.bbox):
             raise ValueError("bbox musi mieć dodatnią szerokość i wysokość")
         check_kind_attributes(self.kind, self.cells, self.options, self.multi, self.id)
@@ -237,6 +259,47 @@ class PageLabels(EvalModel):
             if count > 1:
                 raise ValueError("checkbox należy do więcej niż jednej grupy")
         return self
+
+
+# --- Predykcje ---
+
+
+class System(StrEnum):
+    """Oceniany system detekcji (osobne wyniki w raporcie, brief 7.2)."""
+
+    OPENCV = "opencv"
+    VLM = "vlm"
+    FUSION = "fusion"
+    REFERENCE = "reference"  # etykiety podane jako predykcje (kontrola miernika)
+
+
+class PagePredictions(EvalModel):
+    """Wynik detekcji dla jednej strony pliku: ``<katalog>/<file_id>-p<NN>.json``."""
+
+    schema_version: Literal["teamkapa.vision.predictions/1"]
+    system: System
+    file_id: FileId
+    page: PageNo
+    width_px: PositiveInt
+    height_px: PositiveInt
+    elements: tuple[VisualElement, ...] = ()
+
+    @model_validator(mode="after")
+    def _consistent(self) -> PagePredictions:
+        ids = [e.id for e in self.elements]
+        if len(set(ids)) != len(ids):
+            raise ValueError("powtórzone id elementów")
+        if any(e.page != self.page for e in self.elements):
+            raise ValueError("element z innej strony niż page")
+        kinds = {e.id: e.kind for e in self.elements}
+        for element in self.elements:
+            if any(kinds.get(o) is not ElementKind.CHECKBOX for o in element.options):
+                raise ValueError("options grupy muszą wskazywać checkboxy tej strony")
+        return self
+
+
+def predictions_file_name(file_id: str, page: int) -> str:
+    return f"{file_id}-p{page:02d}.json"
 
 
 # --- Manifest ---

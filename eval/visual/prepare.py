@@ -302,7 +302,7 @@ def _prepare_document(
     return doc
 
 
-def _git_state(repo: Path) -> tuple[str, bool]:
+def git_state(repo: Path) -> tuple[str, bool]:
     git = shutil.which("git")
     if git is None:
         raise PrepareError("git niedostępny: wersja renderera musi być zapisana w manifeście")
@@ -396,7 +396,7 @@ def prepare(
     if unassigned:
         raise PrepareError(f"dokumenty z podziału nie istnieją: {', '.join(sorted(unassigned))}")
 
-    commit, dirty = _git_state(repo)
+    commit, dirty = git_state(repo)
     manifest = Manifest(
         schema_version=MANIFEST_SCHEMA,
         created=date.today(),

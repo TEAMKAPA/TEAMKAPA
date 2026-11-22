@@ -1,9 +1,13 @@
-# Kanał wizualny: renderowanie stron i układ współrzędnych (#10, część 1)
+# Kanał wizualny: renderowanie stron, współrzędne i detektory OpenCV (#10)
 
 Moduł `backend/worker/vision/render` zamienia dokument wejściowy (PDF, JPEG, PNG) na obrazy stron
 z metadanymi. Dokumenty biurowe (DOC, DOCX, ODS, XLSX) są rozpoznawane, ale nie są renderowane
 ([Formaty biurowe poza kanałem wizualnym](#formaty-biurowe-poza-kanałem-wizualnym)). Wszystkie dalsze elementy kanału wizualnego (detektory OpenCV,
 VLM, oznaczenia, fuzja z tekstem) opisują położenie w jednym, wspólnym układzie współrzędnych.
+
+Detektory OpenCV (`backend/worker/vision/detect`, Etap C) wykrywają na obrazach stron elementy
+formularza (kratki, checkboxy i ich grupy, linie, kropki, komórki, ramki sekcji); opis w
+[Detektory OpenCV (Etap C)](#detektory-opencv-etap-c).
 
 Dokument nie zawiera treści formularzy COI. Liczby dotyczące materiałów są wyłącznie zbiorcze.
 
@@ -21,7 +25,9 @@ Dokument nie zawiera treści formularzy COI. Liczby dotyczące materiałów są 
 10. [Konfiguracja i limity](#konfiguracja-i-limity)
 11. [Bezpieczeństwo](#bezpieczeństwo)
 12. [Testy](#testy)
-13. [Znane ograniczenia](#znane-ograniczenia)
+13. [Zbiór oznaczeń i ewaluacja (#12)](#zbiór-oznaczeń-i-ewaluacja-12)
+14. [Detektory OpenCV (Etap C)](#detektory-opencv-etap-c)
+15. [Znane ograniczenia](#znane-ograniczenia)
 
 ## Punkt wejścia
 
@@ -238,20 +244,145 @@ w raporcie przebiegu etap 3 ma `StageReport(status=SKIPPED, detail="OFFICE_FORMA
 
 ## Analiza stron przez Eden AI (Etap D)
 
-Od 2026-11-21 VLM (#11) działa przez **Eden AI**: organizatorzy przekazali zespołowi token i dopuścili
-jego użycie z modelami open-weight. Implementacja powstanie w Etapie D; poniżej zasady.
+Pakiet `backend/worker/vision/vlm` (#11): role i etykiety elementów (tryb 1), podwójny odczyt pól
+(tryb 2), raport przeglądu z kodami powodów. Od 2026-11-21 VLM działa przez **Eden AI**
+(organizatorzy przekazali token i dopuścili modele open-weight).
 
-- **Obrazy stron formularzy, także materiałów COI, są wysyłane do Eden AI** i dalej do dostawcy
-  wybranego modelu. W trybie przypisywania ról razem z obrazem wysyłana jest lista elementów
-  wykrytych przez OpenCV i bloki tekstu strony.
-- Dozwolone są **tylko modele open-weight z licencją permisywną**; model, dostawca w Eden AI i licencja
-  wag trafiają do `docs/licenses.md`.
-- Token tylko w zmiennej środowiskowej `EDENAI_API_KEY` (konfiguracja wspólna z LLM tekstowym,
-  `backend/shared/config.py`). Nie trafia do repozytorium, logów, raportów ani nagranych odpowiedzi.
-- Odpowiedzi są cache'owane w `dane/robocze/` po hashu (obraz strony, model, wersja promptu, schemat,
-  parametry), więc ta sama strona z tym samym promptem nie jest wysyłana ponownie.
-- Implementacja lokalna (Qwen3-VL na vLLM lub llama.cpp) zostaje jako awaryjna za tym samym interfejsem.
-- Testy w CI nie łączą się z siecią: używają fake'a z nagranymi odpowiedziami bez treści COI.
+### Model i przepływ danych
+
+| | |
+|---|---|
+| Model | **Qwen3-VL-30B-A3B-Instruct** (open-weight), wagi `Qwen/Qwen3-VL-30B-A3B-Instruct` |
+| Licencja wag | **Apache-2.0** (`docs/licenses.md`) |
+| Identyfikator w Eden AI | `deepinfra/Qwen/Qwen3-VL-30B-A3B-Instruct` |
+| Dostawca wykonujący | **DeepInfra** (katalog Eden AI: `zero_data_retention: true`, region `us`) |
+
+- **Strony formularzy, także materiałów COI, trafiają do Eden AI i dalej do DeepInfra.** Tryb 1 wysyła
+  obraz strony z naniesionymi numerami elementów OpenCV, listę elementów (ID, kategoria, bbox)
+  i bloki tekstu strony; tryb 2 wysyła sam obraz.
+- Kod przyjmuje tylko modele z listy dozwolonych (`vlm/config.py`); inny identyfikator kończy start
+  błędem walidacji. Jedynym celem połączeń jest skonfigurowany adres Eden AI (tylko `https`,
+  bez wykonywania przekierowań).
+- Token: `EDENAI_API_KEY` jako `SecretStr`, wczytywany przez pydantic-settings ze zmiennej
+  środowiskowej albo z pliku `.env` w katalogu repozytorium (zmienna ma pierwszeństwo). Nie trafia do
+  repozytorium, logów, komunikatów błędów, raportów, cache ani nagranych odpowiedzi.
+- Backend awaryjny `VLM_BACKEND=local`: te same wagi na vLLM lub llama.cpp (API zgodne z OpenAI,
+  `VLM_BASE_URL`, wagi pobiera człowiek); `fake` do testów.
+
+### Wywołanie
+
+- `POST {EDENAI_BASE_URL}/chat/completions`, jedna wiadomość `user` z tekstem i obrazem (`image_url`,
+  adres `data:image/png;base64`). Model w Eden AI nie obsługuje komunikatów systemowych, więc
+  instrukcje są w tej samej wiadomości. **Bez narzędzi.**
+- `temperature` 0; `seed` nie jest wysyłany, bo nie ma go w `supported_parameters` modelu w Eden AI
+  (`VLM_SEND_SEED=true` go włącza). `max_tokens` 4096, obraz zmniejszany do 1600 px dłuższego boku.
+- **Odpowiedź wymuszona schematem JSON** (`response_format: json_schema`, `strict`; model ma
+  `supports_response_schema: true`), a mimo to walidowana Pydantic; przy niezgodności jedna ponowna
+  próba, potem `VLM_INVALID_RESPONSE`. `VLM_RESPONSE_FORMAT=json_object` zostawia samą walidację.
+- Limit czasu 120 s na wywołanie; 429, 5xx i błędy sieci: jedno ponowienie, potem `VLM_UNAVAILABLE`.
+  **Błąd VLM nie zatrzymuje pipeline'u**: elementy zostają z detekcji OpenCV, z kodem powodu.
+- **Cache** w `dane/robocze/vlm_cache/` po SHA-256 z: zadania, hasha obrazu, modelu, wersji promptu,
+  hasha treści promptu, schematu i parametrów. Ta sama strona z tym samym promptem nie jest wysyłana
+  ponownie. **Logi** zawierają tylko zadanie, skrót klucza, model, liczby tokenów, czas i kody błędów;
+  liczniki (`VlmStats`): wywołania, trafienia cache, tokeny, czas, błędy według kodu.
+- **Prompt injection:** prompty są plikami w repozytorium (`backend/worker/vision/prompts/`,
+  wersja = nazwa + skrót treści, więc zmiana promptu unieważnia cache). Tekst dokumentu trafia
+  wyłącznie do bloku `<<<DATA_BEGIN>>>` … `<<<DATA_END>>>` z instrukcją ignorowania poleceń w nim;
+  wartości są kodowane jako JSON, a znaczniki bloku w danych neutralizowane. Model nie ma narzędzi,
+  a każdy wynik przechodzi walidację deterministyczną.
+
+### Tryb 1: role i etykiety
+
+- VLM nadaje każdemu elementowi `cv-*` rolę (`input`, `choice`, `skip`, `e_signature`, `section`,
+  `unknown`) i wskazuje **ID bloku tekstu** będącego etykietą. **VLM nie zmienia bbox ani kategorii
+  elementów OpenCV**, a tekst etykiety pochodzi ze źródła (bloki tekstu), nie z VLM.
+- Walidacja: ID spoza listy i bloki spoza listy są odrzucane; rola niezgodna z kategorią (np. `choice`
+  dla komórki) zamienia się na `unknown`; element z rolą ma `source=both`, bez roli `NO_ROLE`.
+- **Dodawanie `vlm-*`:** tylko miejsca do wypełnienia (rola `input`, `choice`, `e_signature`) pominięte
+  przez OpenCV (IoU ramek rozszerzonych pionowo do 1% strony < 0,3 i środek poza elementem OpenCV),
+  najwyżej `VLM_MAX_ADDED_PER_PAGE` (10) na stronę, pewność 0,3, kod `VLM_ONLY_ELEMENT`.
+- Komórka zawierająca inny element do wypełnienia dostaje rolę `skip` (kontener, jak w konwencji
+  oznaczania `eval/visual/LABELING.md`).
+- Kratki: element `char_boxes`, którego etykieta wskazuje inną liczbę kratek (PESEL 11, NIP 10,
+  REGON 9 lub 14, KRS 10, kod pocztowy 2 + 3), dostaje `CELLS_LABEL_CONFLICT`.
+
+### Tryb 2: podwójny odczyt
+
+- VLM niezależnie, **tylko z obrazu** (bez tekstu dokumentu w prompcie), wypisuje pola strony:
+  etykieta, rodzaj (`text`, `number`, `date`, `choice`, `signature`, `char_boxes`), bbox, liczba kratek.
+- Porównanie z polami z kanału tekstowego: docelowo LLM tekstowy (krok 7, #8), do tego czasu pola
+  z oczekiwanego JSON-a COI (materiał referencyjny, `ReferenceJsonFieldSource`). Etykiety po
+  normalizacji porównuje rapidfuzz (średnia `token_set_ratio` i `token_sort_ratio`, próg 80, a z
+  potwierdzeniem bbox, IoU ≥ 0,3, próg 50); dopasowanie zachłanne.
+
+### `ACCURACY_MODE`
+
+- `max` (domyślny): podwójny odczyt każdej strony.
+- `balanced`: podwójny odczyt tylko strony z niską pewnością: tryb 1 bez powodzenia, kod strony
+  `LOW_CONTRAST` lub `SKEW_CORRECTED`, brak bloków tekstu (skan), > 20% elementów bez roli, element
+  dodany przez VLM lub etykieta o niskiej pewności OCR, średnia pewność elementów < 0,7. Gdy pola
+  z tekstu nie mają numeru strony, a nie wszystkie strony były czytane, `MISSING_IN_VLM` jest pomijany.
+
+### Kody raportu przeglądu
+
+| Kod | Znaczenie |
+|---|---|
+| `MISSING_IN_VLM` | pole z kanału tekstowego bez pary w odczycie z obrazu |
+| `MISSING_IN_TEXT` | pole odczytane z obrazu bez pary w polach z tekstu |
+| `TYPE_MISMATCH` | para o rodzajach z różnych grup (wpis / wybór / podpis) |
+| `CELLS_LABEL_CONFLICT` | liczba kratek sprzeczna z etykietą |
+| `VLM_ONLY_ELEMENT` | element dodany przez VLM, niewykryty przez OpenCV |
+| `NO_ROLE` | element OpenCV bez roli od VLM |
+| `LOW_OCR_CONFIDENCE` | etykieta z bloku tekstu o niskiej pewności OCR (< 0,6) |
+| `VLM_INVALID_RESPONSE` | odpowiedź niezgodna ze schematem po ponowieniu albo odrzucona część odpowiedzi |
+| `VLM_UNAVAILABLE` | błąd API, limit czasu, brak tokenu |
+
+### Testy i ewaluacja
+
+- Testy (`tests/vision/test_vlm_*.py`, `test_eval_vlm.py`) działają bez sieci i bez tokenu
+  (`httpx.MockTransport`, `FakeVlmClient`). Nagrane odpowiedzi (`tests/vision/recordings/vlm/`) są
+  syntetyczne, wygenerowane ze strony syntetycznej; odpowiedzi z materiałów COI zostają w
+  `dane/robocze/vlm_cache/`. Oba tryby `ACCURACY_MODE` są przetestowane.
+- `python -m eval.visual.vlm_eval --dry-run` buduje te same żądania co przebieg właściwy i szacuje
+  tokeny i koszt bez sieci; bez `--dry-run` uruchamia etap na oznaczonych stronach `dev` (strona
+  bazowa PDF) i liczy metryki OpenCV i fuzji (role). Narzędzie nie ma opcji `holdout`.
+- Bloki tekstu w ewaluacji pochodzą tymczasowo z warstwy tekstowej PDF (`eval/visual/text_blocks.py`);
+  w pipeline dostarczy je krok 02 (#7). Podpięcie etapu w pipeline należy do #16.
+
+### Wstępny pomiar na pilocie (`dev`, 2026-11-22)
+
+**Tylko wstępny pomiar:** 2 oznaczone strony `dev` (f02-p01, f07-p01, render PDF) oraz f05-p01
+(`dev`, bez etykiet) wyłącznie do porównania pól z oczekiwanym JSON-em. `holdout` nie był używany.
+
+- **Wywołania (tryb `max`, 3 strony):** 6 wywołań, każda odpowiedź zgodna ze schematem za
+  pierwszym razem (0 ponowień, 0 błędów); 25 765 tokenów wejścia i 7 105 wyjścia (ok. 0,008 USD);
+  15–38 s na wywołanie, łącznie 143 s (ok. 48 s na stronę). Obraz jako adres `data:` i wymuszony
+  `json_schema` działają w Eden AI dla tego modelu. Ponowne przeliczenie: 0 wywołań (cache).
+- **Tryb `balanced`:** 5 wywołań zamiast 6 (podwójny odczyt pominięty na stronie „pewnej”), ok.
+  128 s zamiast 143 s; role i elementy bez zmian, bo tryb 2 ich nie modyfikuje.
+
+| Na 2 oznaczonych stronach | OpenCV | OpenCV + VLM (tryb 1) |
+|---|---|---|
+| mikro-P / R / F1 elementów | 0,940 / 0,969 / 0,955 | 0,900 / 0,969 / 0,933 |
+| trafność ról (63 dopasowane elementy) | 0 (rola `unknown`) | **0,873** |
+
+- Role: `choice` 7/7, `section` 2/2, `input` 34/36, `skip` 12/18. Błędy: komórki z samą etykietą
+  oznaczone jako `input` (6) i komórki z podpisem u góry i miejscem na wpis oznaczone jako `skip` (2).
+- Elementy dodane przez VLM (pewność 0,3, `VLM_ONLY_ELEMENT`): 3 na f07, wszystkie fałszywe (linie
+  kropek „zobaczone” w wierszach tekstu), stąd niższa precyzja.
+- Walidacja deterministyczna odrzuciła 13 identyfikatorów zmyślonych przez VLM na f05 (ID spoza listy).
+- Pomiar wprowadził dwie reguły deterministyczne zgodne z konwencją oznaczania (nie strojenie
+  promptu): komórka zawierająca element do wypełnienia → `skip`; dodane elementy tylko z rolą do
+  wypełnienia i bez duplikatów cienkich linii. Trafność ról przed regułami: 0,778, F1 fuzji: 0,900.
+- **Prompt trybu 1, porównanie wersji** (3 dodatkowe wywołania, tryb 2 z cache): `roles_v2`
+  doprecyzowuje komórki z samą etykietą (`skip`) i ogranicza dodawanie elementów. Trafność ról
+  spadła z 0,873 (`roles_v1`) do 0,794: v2 oznacza jako `skip` 8 komórek z podpisem i miejscem na wpis
+  (v1: 2), a poprawia tylko 1 komórkę z etykietą; F1 elementów 0,940 wobec 0,933 (mniej dodanych).
+  **Domyślny pozostaje `roles_v1`** (`VLM_ROLES_PROMPT`); `roles_v2` zostaje jako przetestowany wariant.
+- **Podwójny odczyt f05 względem JSON-a referencyjnego:** 3 z 46 pól dopasowane, 14 pól odczytanych
+  z obrazu. Tytuły pól formularza cyfrowego są krótkie i inaczej sformułowane niż podpisy na papierze,
+  a formularz cyfrowy ma więcej pól, więc JSON referencyjny jest słabym zastępstwem pól z LLM
+  tekstowego (#8); wynik nie mierzy jakości odczytu VLM.
 
 ## Konfiguracja i limity
 
@@ -300,6 +431,17 @@ uruchamiają się w CI bez dostępu do `dane/`:
 - `test_render_consistency.py`: **spójność bbox z rendererem (wymaganie #12)**: 4 DPI (72, 150, 200,
   300) × 4 obroty × 4 układy MediaBox/CropBox. Bbox zmierzony z pikseli zgadza się z
   `pdf_rect_to_norm` w tolerancji 1,5 px (zmierzony maksymalny błąd krawędzi: 1,0 px na 192 prostokątach),
+- `synth_forms.py` (#12, B.5): syntetyczne strony formularza A4 z elementami wszystkich 9 kategorii
+  i etykietami w formacie `teamkapa.vision.labels/1` (bez czcionek; tekst to szare paski) oraz
+  deterministyczne degradacje: obrót (z przeliczeniem etykiet), rozmycie, szum ze stałym ziarnem,
+  JPEG, słabszy kontrast, niższe DPI. Testy (`test_synth_forms.py`) sprawdzają determinizm, ciasność
+  ramek (krawędź na linii), to, że każdy piksel tuszu należy do elementu albo „tekstu”, oraz zgodność
+  etykiet z tuszem po obrocie (±1,5 px). Detektory z Etapu C używają tego generatora,
+- `test_detect_*.py` (Etap C): preprocessing (kąt prostowania ±0,05°, przeliczenie ramek), linie,
+  prostokąty (m.in. checkbox-glif z cieniem, kratki z przerwą, linie 1 px z brakującym pikselem
+  w narożniku), kropki (także wielokropki; szum i kropki w tekście odrzucane), grupy, ID i pewność,
+  determinizm między procesami, wyłączanie IPP, wejście kroku 3 na PNG i PDF;
+  `test_detect_quality.py`: jakość na stronach syntetycznych o różnej jakości (tabela wyżej),
 - `test_coords.py`: przeliczenia z wartościami wyliczonymi ręcznie,
 - `test_render_pdf.py`, `test_render_image.py`, `test_render_document.py`,
   `test_isolation.py`, `test_detect.py`: determinizm (identyczny hash pikseli), błędy, limity,
@@ -353,6 +495,114 @@ a kreski tekstu mają 1–3 px), nie z różnic geometrii.
 | PNG | 9 | 33 | 7,8 s | 2,1 s |
 | JPEG | 18 | 66 | 15,8 s | 2,2 s |
 
+## Zbiór oznaczeń i ewaluacja (#12)
+
+Narzędzia i zasady: `eval/visual/README.md` (pochodzenie zbioru, podział, metryki, ochrona
+`holdout`) i `eval/visual/LABELING.md` (konwencje oznaczania). Materiały COI, obrazy stron, etykiety
+i pełne raporty są wyłącznie w `dane/`.
+
+**Stan na 2026-11-22:**
+
+- Podział po dokumentach zarejestrowany przed Etapem C: `dev` = f02, f05, f07, f09; `holdout` = f01,
+  f03, f04, f06, f08. Nie jest zamrożony; manifest pozostaje roboczy.
+- **Oznaczone są 2 strony `dev` z pilota** (`f02-p01`, `f07-p01`): 65 elementów, 8 stron oceny
+  razem z wariantami PNG, JPG i JPEG. Pozostałe 34 zestawy etykiet są odłożone (prawdopodobny powrót
+  z pre-etykietami z warstwy wektorowej PDF). `holdout` jest nietknięty.
+- Bazy (`baseline.json`) nie ma, bo wymaga pełnego pokrycia części. **Wyniki na tym zbiorze są
+  wyłącznie wstępnym pomiarem**, bez skanów i z dwóch rodzajów wniosku.
+- Kontrola miernika na stronach pilota: etykiety podane jako predykcje dają P = R = 1, także po
+  przesunięciu o 1–2 px; przesunięcie o pół szerokości elementu daje 0, a usunięcie co 10. elementu
+  R = 0,92. Ciasność ramek pilota: 95% krawędzi ramek najwyżej 1 px od linii w obrazie.
+
+## Detektory OpenCV (Etap C)
+
+Pakiet `backend/worker/vision/detect`, wejście `detect_page(RenderedPage)` i `detect_document`,
+cienkie wejście kroku 3: `backend/worker/pipeline/step03_visual_analyze.analyze_visual` (render +
+detekcja, wynik w kontrakcie 7.5). Podpięcie w pipeline (`stages.default_stages`, odwzorowanie na
+`contracts.VisualAnalysis`) należy do #16.
+
+**Zasada: detektory pracują wyłącznie na obrazie strony.** Nigdy nie korzystają z warstwy
+wektorowej ani tekstowej PDF. Ten sam kod działa więc dla PDF, obrazów cyfrowych i skanów, a ocena
+na etykietach nie jest cykliczna także wtedy, gdy etykiety powstaną z pre-etykiet z warstwy
+wektorowej (decyzja z 2026-11-22).
+
+### Kroki
+
+| Krok | Moduł | Opis |
+|---|---|---|
+| Preprocessing | `preprocess.py` | szarość jako minimum kanałów RGB (kolorowe linie są ciemne), rozmycie σ = 0,1 mm, tusz: ciemniejszy od progu Otsu (w granicach 120–245 i ≤ poziom papieru − 20) **i** od średniej lokalnej (okno 7 mm) − 10; czulsza maska do kropek: papier − max(30, 5 × szum tła); prostowanie z profilu rzutu wierszy (±5°, krok 0,25°, potem 0,02°; obrót od 0,1°) |
+| Linie | `lines.py` | otwarcie morfologiczne jądrem 8 mm (poziomo i pionowo), domykanie przerw do 0,8 mm; `text_line`: odcinek poziomy ≥ 15 mm, ≤ 0,6 mm grubości, w ≥ 50% długości nieleżący na krawędziach prostokątów |
+| Prostokąty | `rects.py` | wnętrza z zamkniętych obszarów tła (struktura pogrubiona o 0,15 mm, bo linie 1 px mają przerwy na złączach), rozszerzane do zewnętrznej krawędzi obramowania; checkbox 2–6,5 mm (proporcja ≤ 1,35); kratki: ≥ 2 sąsiadujące komórki ≤ 10 mm tej samej wysokości (`cells` = liczba komórek); komórka ≥ 5 × 3 mm; ramka sekcji: obrys składowej zawierający ≥ 2 elementy (bez ramek wewnętrznych o tych samych elementach) |
+| Kropki | `dots.py` | łańcuchy składowych ≤ 0,8 mm w wierszu, przerwy ≤ 2,5 mm, ≥ 8 kropek, ≥ 10 mm, odstępy regularne (także okresowe co 3: wielokropki) |
+| Grupy | `groups.py` | kandydaci: checkboxy w wierszu (przerwa ≤ 70 mm), potem w kolumnie (≤ 12 mm); ramka z tekstem opcji; pewność 0,3, `GROUP_CANDIDATE`, `multi` nieznane |
+| ID i pewność | `page.py` | ramki przeliczane z obrazu wyprostowanego do układu strony; ID i kody poniżej |
+
+Wszystkie progi są w `DetectConfig` (`backend/worker/vision/config.py`, zmienne `VISION_DETECT_*`)
+w milimetrach strony albo jako proporcje i są przeliczane na piksele według efektywnego DPI strony
+(DPI renderu lub metadanych, oszacowanie z Etapu A, szerokość strony A4, domyślnie 200).
+Wartości wynikają z typowych wymiarów pól formularzy A4, a nie z dopasowania do zbioru #12.
+
+### ID, rola i pewność
+
+- **ID** `cv-p{strona}-{nnn}`: elementy sortowane po (wiersz, x0, y1, x1, kategoria), gdzie
+  wiersz = `floor(y0 / 2 mm)`. Elementy jednego wiersza są numerowane od lewej mimo różnic
+  1–2 px w y0.
+- **Rola** jest zawsze `unknown`, a `signature` i `office_only` nie są nadawane: wymagają tekstu
+  (rozstrzyga VLM i fuzja, Etapy D i E). Miejsce na podpis z kropek to dla OpenCV `dotted_line`,
+  a ramka urzędu to `table_cell`.
+- **Pewność:** komórka i kratki 0,9 (kratki o nieregularnej szerokości 0,6 z `CELLS_IRREGULAR`),
+  checkbox 0,85, ramka sekcji i kropki 0,8, linia 0,7, kandydat na grupę 0,3 (`GROUP_CANDIDATE`).
+  Kody strony mnożą pewność: `LOW_CONTRAST` (różnica papier–tusz < 110) × 0,8,
+  `SKEW_CORRECTED` × 0,95.
+
+### Determinizm
+
+Ten sam obraz i ta sama konfiguracja dają te same elementy, kolejność i ID: detekcja nie używa
+losowości, a test porównuje wynik w dwóch osobnych procesach. Intel IPP jest na czas detekcji
+wyłączany (`cv2.ipp.setUseIPP(False)`, stan sprzed wywołania jest przywracany), bo IPP wybiera
+ścieżkę obliczeń zależnie od procesora. Licencja IPP: wyjątek do potwierdzenia przez zespół
+(`docs/licenses.md`).
+
+### Wyniki na stronach syntetycznych
+
+Generator `tests/vision/synth_forms.py` (A4, 200 DPI, wszystkie kategorie). Kategorie zależne od
+tekstu porównywane z postacią wizualną (podpis jako kropki, pole urzędu jako komórka).
+
+| Warunki | Mikro-F1 | Uwagi |
+|---|---|---|
+| czyste strony; obrót 1° i −2°; rozmycie 1 px; szum σ = 20; JPEG q = 30; kontrast 0,4; 100 DPI | 1,000 | także liczba kratek 100% |
+| skan (obrót 1,2°, rozmycie, szum, JPEG); obrót 3° z szumem σ = 25 i JPEG q = 30; obrót −4,5°; 100 DPI z rozmyciem i JPEG; rozmycie 2 px | 1,000 | |
+| wyblakły i rozmyty druk (kontrast 0,35, rozmycie 1,5 px) | 0,89 | kropki znikają (F1 kropek 0) |
+| 75 DPI | 0,97 | ramki sekcji i część linii (linie 1 px łączą się z sąsiednim tuszem) |
+| szum σ = 40 | 0,96 | szum przerywa łańcuchy kropek (F1 kropek 0,82) |
+
+Czas detekcji: ok. 0,2 s na stronę A4 przy 200 DPI (z prostowaniem ok. 0,3 s).
+
+### Wstępny pomiar na pilocie (`dev`)
+
+**Tylko wstępny pomiar:** 2 oznaczone strony `dev` (z dwóch rodzajów wniosku), 8 stron oceny razem
+z wariantami PNG, JPG i JPEG, bez skanów, 260 elementów etykiet; `holdout` nie był używany.
+
+| Kategoria | P | R | F1 |
+|---|---|---|---|
+| char_boxes (liczba kratek zgodna w 20/20) | 1,000 | 1,000 | 1,000 |
+| checkbox | 1,000 | 1,000 | 1,000 |
+| checkbox_group (kandydaci) | 1,000 | 1,000 | 1,000 |
+| dotted_line | 0,923 | 1,000 | 0,960 |
+| table_cell | 0,974 | 1,000 | 0,987 |
+| section_frame | 1,000 | 1,000 | 1,000 |
+| text_line (brak w etykietach) | 0,000 | – | – |
+| office_only (wymaga tekstu) | – | 0,000 | – |
+| **mikro** | **0,940** | **0,969** | **0,955** |
+
+- PDF i warianty obrazowe: mikro-F1 0,955 w obu przekrojach. Wynik jest taki sam przy IoU 0,3,
+  0,5 i 0,7 (ramki są ciasne).
+- Wszystkie pozostałe błędy wynikają z braku tekstu: linie nad przypisami jako `text_line`
+  (8 fałszywych alarmów) oraz pola urzędu wykryte jako `dotted_line` albo `table_cell` (8).
+- Pomiar wykrył dwa błędy, poprawione na podstawie zasad, a nie strojenia progów: zbyt duży
+  minimalny bok wnętrza (checkbox-glif 2,5 mm ma wnętrze 1,7 mm) i przerwy w liniach 1 px
+  w obrazach PNG.
+
 ## Znane ograniczenia
 
 - **Skany obrócone bez `/Rotate` lub bez orientacji EXIF** (np. kartka zeskanowana bokiem) nie są
@@ -364,6 +614,11 @@ a kreski tekstu mają 1–3 px), nie z różnic geometrii.
 - **Profile kolorów ICC** nie są stosowane przy konwersji do RGB.
 - **DPI z metadanych bywa fikcyjne** (np. domyślne 72 lub 96 w zrzutach ekranu); przyjmujemy je, gdy jest
   spójne, a jego wiarygodność oceniają dalsze kroki.
+- **Detektory OpenCV nie rozróżniają `signature` ani `office_only` i nie nadają ról** (wymagają
+  tekstu: VLM i fuzja). Separatory przypisów są wykrywane jako `text_line`.
+- **Granice odporności detektorów** (strony syntetyczne): kropki znikają przy wyblakłym
+  i jednocześnie rozmytym druku oraz przy szumie σ ≥ 40; przy 75 DPI giną ramki sekcji i część linii.
+- **Pomiar detektorów na COI jest wstępny** (2 strony `dev`); progi nie były strojone na tym zbiorze.
 - **`/UserUnit`** (rzadki parametr PDF zmieniający rozmiar jednostki) nie jest uwzględniany w DPI.
 - **Narzut izolacji** to ok. 0,5 s na dokument (start procesu), a przy dużych obrazach dochodzi
   przesyłanie pikseli między procesami.

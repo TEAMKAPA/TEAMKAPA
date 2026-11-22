@@ -54,3 +54,106 @@ def load_render_config(
     shared = settings if settings is not None else get_settings()
     own = vision if vision is not None else VisionSettings()
     return RenderConfig(dpi=shared.render_dpi, **own.model_dump())
+
+
+# --- Detektory OpenCV (Etap C) ---
+
+Mm = Annotated[float, Field(gt=0, le=1000)]
+Ratio = Annotated[float, Field(gt=0, le=100)]
+
+
+class DetectConfig(BaseModel):
+    """Progi detektorów OpenCV (``backend/worker/vision/detect``).
+
+    Wszystkie wielkości geometryczne są w milimetrach strony (``*_mm``) albo są proporcjami; na
+    piksele przelicza je ``detect.scale.Scale`` według efektywnego DPI strony. Wartości domyślne
+    są uzasadnione fizycznie (typowe wymiary pól formularzy A4), a nie dopasowane do zbioru #12.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    # Binaryzacja (C.2)
+    blur_sigma_mm: Mm = 0.1  # odszumianie przed progowaniem (~0,8 px przy 200 DPI)
+    otsu_min: int = Field(default=120, ge=1, le=254)  # granice progu globalnego (Otsu)
+    otsu_max: int = Field(default=245, ge=1, le=254)
+    ink_min_delta: int = Field(default=20, ge=1, le=200)  # próg ≤ poziom papieru minus delta
+    adaptive_block_mm: Mm = 7.0  # okno średniej lokalnej (cienie i nierówne tło skanów)
+    adaptive_offset: int = Field(default=10, ge=0, le=100)
+    light_ink_delta: int = Field(default=30, ge=5, le=200)  # maska kropek: papier minus delta
+    light_noise_k: float = Field(default=5.0, ge=0, le=50)  # delta ≥ k × szum papieru (MAD)
+    low_contrast: int = Field(
+        default=110, ge=1, le=255
+    )  # różnica papier–tusz poniżej: LOW_CONTRAST
+
+    # Prostowanie (C.2)
+    deskew_max_deg: float = Field(default=5.0, ge=0, le=15)
+    deskew_coarse_step_deg: float = Field(default=0.25, gt=0, le=2)
+    deskew_fine_step_deg: float = Field(default=0.02, gt=0, le=0.5)
+    deskew_min_deg: float = Field(default=0.1, ge=0, le=5)  # mniejszy kąt: bez obrotu
+    deskew_dpi: float = Field(default=75.0, ge=30, le=300)  # rozdzielczość pomocnicza estymacji
+
+    # Linie (C.3)
+    line_min_mm: Mm = 8.0  # jądro morfologii: najkrótszy odcinek linii
+    line_bridge_mm: Mm = 0.8  # domykanie przerw w liniach (skany, kreski przerywane)
+    gap_close_mm: Mm = (
+        0.15  # pogrubienie struktury przy szukaniu wnętrz (przerwy na złączach linii)
+    )
+    text_line_min_mm: Mm = 15.0
+    # Grubsze poziome paski to separatory sekcji, a nie linie do pisania.
+    text_line_max_thickness_mm: Mm = 0.6
+
+    # Prostokąty (C.4)
+    rect_min_mm: Mm = 1.3  # najmniejszy bok wnętrza (checkbox 2,5 mm z grubą krawędzią: ok. 1,7 mm)
+    rect_fill: Ratio = 0.85  # wypełnienie ramki wnętrza przez obszar tła (prostokątność)
+    rect_open: Ratio = 0.5  # wnętrze wolne od zawartości (pierścień wokół tabeli: mniej)
+    border_max_mm: Mm = 1.2  # najgrubsza krawędź ramki (z cieniem znaku ❑)
+    border_coverage: Ratio = 0.9  # część długości boku pokryta tuszem
+    checkbox_min_mm: Mm = 2.0
+    checkbox_max_mm: Mm = 6.5
+    square_aspect: Ratio = 1.35  # dopuszczalna proporcja boków „kwadratu”
+    char_cell_max_mm: Mm = 10.0
+    char_cell_aspect: Ratio = 1.6
+    char_gap_mm: Mm = 0.6  # przerwa między wnętrzami sąsiednich kratek ponad grubość linii
+    char_height_tolerance: Ratio = 0.15
+    cell_min_w_mm: Mm = 5.0
+    cell_min_h_mm: Mm = 3.0
+    section_min_children: int = Field(default=2, ge=1, le=100)
+    frame_band_mm: Mm = 0.5  # pas przy boku ramki sekcji, w którym szukamy linii
+
+    # Kropki (C.5)
+    dot_max_mm: Mm = 0.8
+    dot_row_tolerance_mm: Mm = 0.4
+    dot_max_gap_mm: Mm = 2.5
+    dot_min_count: int = Field(default=8, ge=3, le=1000)
+    dot_min_span_mm: Mm = 10.0
+    dot_spacing_cv: Ratio = 0.5  # zmienność odstępów (odchylenie / średnia)
+
+    # Grupy wyboru (C.6)
+    group_row_tolerance_mm: Mm = 1.0
+    group_row_max_gap_mm: Mm = 70.0
+    group_column_max_gap_mm: Mm = 12.0
+    group_text_gap_mm: Mm = 3.0  # przerwa kończąca tekst opcji na prawo od checkboxa
+    group_text_max_mm: Mm = 60.0
+
+    # Identyfikatory (C.7)
+    id_row_mm: Mm = 2.0  # zaokrąglenie y przy sortowaniu (wiersz), potem x
+
+    default_dpi: float = Field(default=200.0, ge=50, le=1200)  # gdy DPI strony nieznane
+
+
+class DetectSettings(DetectConfig, BaseSettings):
+    """Zmienne środowiskowe ``VISION_DETECT_*`` (np. ``VISION_DETECT_LINE_MIN_MM``)."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="VISION_DETECT_",
+        env_file=None,
+        case_sensitive=False,
+        extra="ignore",
+        frozen=True,
+    )
+
+
+def load_detect_config(settings: DetectSettings | None = None) -> DetectConfig:
+    """``DetectConfig`` z konfiguracji runtime (domyślnie z bieżącego środowiska)."""
+    own = settings if settings is not None else DetectSettings()
+    return DetectConfig(**own.model_dump())
